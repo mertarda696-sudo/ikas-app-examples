@@ -53,6 +53,16 @@ type SyncPayloadResponse = {
   error?: string;
 };
 
+type QueueWriteResponse = {
+  ok: boolean;
+  fetchedAt?: string;
+  runId?: string | null;
+  sourceName?: string | null;
+  queuedCount?: number;
+  queuedExternalProductIds?: string[];
+  error?: string;
+};
+
 function Card({
   title,
   children,
@@ -105,6 +115,8 @@ export default function DashboardPage() {
   const [merchant, setMerchant] = useState<MerchantResponse | null>(null);
   const [products, setProducts] = useState<ProductsResponse | null>(null);
   const [syncPayload, setSyncPayload] = useState<SyncPayloadResponse | null>(null);
+  const [queueWrite, setQueueWrite] = useState<QueueWriteResponse | null>(null);
+  const [queueLoading, setQueueLoading] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -256,6 +268,59 @@ export default function DashboardPage() {
     run();
   }, []);
 
+  const handleQueueWrite = async () => {
+    try {
+      setQueueLoading(true);
+
+      const iframeToken = await TokenHelpers.getTokenForIframeApp();
+
+      if (!iframeToken) {
+        setQueueWrite({
+          ok: false,
+          runId: null,
+          sourceName: null,
+          queuedCount: 0,
+          queuedExternalProductIds: [],
+          error: "iFrame JWT token alınamadı.",
+        });
+        return;
+      }
+
+      const response = await fetch("/api/ikas/sync-products-to-queue", {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          Authorization: "JWT " + iframeToken,
+        },
+      });
+
+      const raw = await response.json();
+
+      setQueueWrite({
+        ok: !!raw?.ok && response.ok,
+        fetchedAt: raw?.fetchedAt,
+        runId: raw?.runId ?? null,
+        sourceName: raw?.sourceName ?? null,
+        queuedCount: raw?.queuedCount ?? 0,
+        queuedExternalProductIds: Array.isArray(raw?.queuedExternalProductIds)
+          ? raw.queuedExternalProductIds
+          : [],
+        error: raw?.error,
+      });
+    } catch (error) {
+      setQueueWrite({
+        ok: false,
+        runId: null,
+        sourceName: null,
+        queuedCount: 0,
+        queuedExternalProductIds: [],
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    } finally {
+      setQueueLoading(false);
+    }
+  };
+
   return (
     <main
       style={{
@@ -391,6 +456,45 @@ export default function DashboardPage() {
               ) : (
                 <div>Henüz sync payload verisi gelmedi.</div>
               )}
+            </div>
+          </Card>
+
+          <Card title="Queue Write Test">
+            <div style={{ marginBottom: 12, color: "#6b7280" }}>
+              Bu butona test için yalnızca bir kez bas. Bu işlem yeni bir sync run açar ve
+              ilk 5 ürünü raw queue'ya yazar.
+            </div>
+
+            <button
+              onClick={handleQueueWrite}
+              disabled={queueLoading}
+              style={{
+                padding: "10px 16px",
+                borderRadius: 10,
+                border: "1px solid #d1d5db",
+                background: queueLoading ? "#e5e7eb" : "#111827",
+                color: queueLoading ? "#6b7280" : "#ffffff",
+                cursor: queueLoading ? "not-allowed" : "pointer",
+                fontWeight: 700,
+              }}
+            >
+              {queueLoading ? "Queue write çalışıyor..." : "Queue write testini başlat"}
+            </button>
+
+            <div style={{ marginTop: 16 }}>
+              <Row label="Status" value={queueWrite?.ok ? "OK" : queueWrite ? "Hata" : "-"} />
+              <Row label="Run ID" value={queueWrite?.runId || "-"} />
+              <Row label="Source Name" value={queueWrite?.sourceName || "-"} />
+              <Row label="Queued Count" value={queueWrite?.queuedCount ?? 0} />
+              <Row
+                label="Queued External IDs"
+                value={
+                  queueWrite?.queuedExternalProductIds?.length
+                    ? queueWrite.queuedExternalProductIds.join(", ")
+                    : "-"
+                }
+              />
+              <Row label="Error" value={queueWrite?.error || "-"} />
             </div>
           </Card>
 
