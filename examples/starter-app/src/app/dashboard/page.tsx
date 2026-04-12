@@ -9,23 +9,42 @@ export default function DashboardPage() {
   const [token, setToken] = useState<string | null>(null);
   const [storeName, setStoreName] = useState('');
 
-  /**
-   * Fetches and sets the store name using the provided token.
-   */
+  const getHostStoreName = () => {
+    if (typeof window === 'undefined') return '';
+
+    const host = window.location.hostname || '';
+    const firstPart = host.split('.')[0] || '';
+
+    if (!firstPart) return '';
+    if (['localhost', '127', 'ikas-app-examples'].includes(firstPart)) return '';
+
+    return firstPart;
+  };
+
   const fetchStoreName = useCallback(async (currentToken: string) => {
     try {
       const res = await ApiRequests.ikas.getMerchant(currentToken);
-      if (res.status === 200 && res.data?.data?.merchantInfo?.storeName) {
-        setStoreName(res.data.data.merchantInfo.storeName);
+      const apiStoreName = res.data?.data?.merchantInfo?.storeName?.trim?.() || '';
+
+      if (res.status === 200 && apiStoreName) {
+        setStoreName(apiStoreName);
+        return;
+      }
+
+      const hostStoreName = getHostStoreName();
+      if (hostStoreName) {
+        setStoreName(hostStoreName);
       }
     } catch (error) {
       console.error('Error fetching store name:', error);
+
+      const hostStoreName = getHostStoreName();
+      if (hostStoreName) {
+        setStoreName(hostStoreName);
+      }
     }
   }, []);
 
-  /**
-   * Initializes the dashboard by fetching the token and store name.
-   */
   const initializeDashboard = useCallback(async () => {
     try {
       const fetchedToken = await TokenHelpers.getTokenForIframeApp();
@@ -33,17 +52,26 @@ export default function DashboardPage() {
 
       if (fetchedToken) {
         await fetchStoreName(fetchedToken);
+        return;
+      }
+
+      const hostStoreName = getHostStoreName();
+      if (hostStoreName) {
+        setStoreName(hostStoreName);
       }
     } catch (error) {
       console.error('Error initializing dashboard:', error);
+
+      const hostStoreName = getHostStoreName();
+      if (hostStoreName) {
+        setStoreName(hostStoreName);
+      }
     }
   }, [fetchStoreName]);
 
-  // Run initialization on mount
   useEffect(() => {
     initializeDashboard();
   }, [initializeDashboard]);
 
-  // HomePage
   return <HomePage token={token} storeName={storeName} />;
 }
