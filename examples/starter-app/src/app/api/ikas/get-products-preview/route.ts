@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: \`Bearer \${authToken.accessToken}\`,
+       Authorization: 'Bearer ' + authToken.accessToken,
       },
       body: JSON.stringify({ query }),
       cache: 'no-store',
@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
           items: [],
           error:
             raw?.errors?.[0]?.message ||
-            \`Graph API request failed with status \${upstreamResponse.status}\`,
+            'Graph API request failed with status ' + upstreamResponse.status,
         },
         { status: upstreamResponse.ok ? 500 : upstreamResponse.status },
       );
