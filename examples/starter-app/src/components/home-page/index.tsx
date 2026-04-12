@@ -1,40 +1,39 @@
-import React from 'react';
-import { CheckCircle2 } from 'lucide-react';
+"use client";
 
-// Props for HomePage component
-interface HomePageProps {
-  token: string | null;
-  storeName?: string;
-}
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
-/**
- * HomePage component
- */
-const HomePage: React.FC<HomePageProps> = ({ token, storeName }) => {
-  if (!token) {
-    return (
-      <div className="max-w-[1200px] mx-auto p-6 bg-background min-h-[100vh]">
-        <div className="text-center p-20 bg-muted rounded-xl border border-dashed">
-          <h3 className="text-lg font-semibold mb-2">Authentication Required</h3>
-          <p className="text-muted-foreground">Please authenticate to manage webhooks.</p>
-        </div>
-      </div>
-    );
-  }
+export default function HomePage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace("/dashboard");
+  }, [router]);
 
   return (
-    <div className="max-w-[1200px] mx-auto p-6 bg-background min-h-[100vh]">
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="text-center">
-          <CheckCircle2 className="mx-auto text-green-600" size={56} />
-          <h2 className="mt-4 text-2xl font-semibold tracking-tight">Congratulations!</h2>
-          <p className="mt-2 text-muted-foreground">
-            You are authenticated to <span className="font-medium">{storeName}</span>
-          </p>
-        </div>
+    <main
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "#f9fafb",
+        padding: 24,
+      }}
+    >
+      <div
+        style={{
+          background: "#ffffff",
+          border: "1px solid #e5e7eb",
+          borderRadius: 16,
+          padding: 24,
+          boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+          fontSize: 16,
+          fontWeight: 600,
+        }}
+      >
+        Dashboard ekranına yönlendiriliyor...
       </div>
-    </div>
+    </main>
   );
-};
-
-export default HomePage;
+}
