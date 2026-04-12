@@ -277,15 +277,15 @@ export async function POST(request: NextRequest) {
       };
     });
 
-    return NextResponse.json({
-      ok: true,
-      fetchedAt: new Date().toISOString(),
-      runId: transactionResult.runId,
-      sourceName: source.source_name,
-      queuedCount: payloadItems.length,
-      queuedExternalProductIds: payloadItems.map((item) => item.id),
-      error: undefined,
-    });
+   return NextResponse.json({
+  ok: true,
+  fetchedAt: new Date().toISOString(),
+  runId: transactionResult.runId,
+  sourceName: source.source_name,
+  queuedCount: payloadItems.length,
+  queuedExternalProductIds: payloadItems.map((item: { id: string }) => item.id),
+  error: undefined,
+});
   } catch (error) {
     return NextResponse.json(
       {
