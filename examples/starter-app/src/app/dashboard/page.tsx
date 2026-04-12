@@ -40,6 +40,19 @@ type ProductsResponse = {
   error?: string;
 };
 
+type SyncPayloadResponse = {
+  ok: boolean;
+  fetchedAt?: string;
+  itemCount?: number;
+  items?: Array<{
+    externalProductId: string;
+    title: string;
+    createdAt?: string | null;
+    itemType?: string;
+  }>;
+  error?: string;
+};
+
 function Card({
   title,
   children,
@@ -91,6 +104,7 @@ function Row({
 export default function DashboardPage() {
   const [merchant, setMerchant] = useState<MerchantResponse | null>(null);
   const [products, setProducts] = useState<ProductsResponse | null>(null);
+  const [syncPayload, setSyncPayload] = useState<SyncPayloadResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -120,14 +134,21 @@ export default function DashboardPage() {
             error: "iFrame JWT token alınamadı.",
           });
 
+          setSyncPayload({
+            ok: false,
+            itemCount: 0,
+            items: [],
+            error: "iFrame JWT token alınamadı.",
+          });
+
           return;
         }
 
         const headers = {
-          Authorization: `JWT ${iframeToken}`,
+          Authorization: "JWT " + iframeToken,
         };
 
-        const [merchantRes, productsRes] = await Promise.all([
+        const [merchantRes, productsRes, syncPayloadRes] = await Promise.all([
           fetch("/api/ikas/get-merchant", {
             cache: "no-store",
             headers,
@@ -136,10 +157,15 @@ export default function DashboardPage() {
             cache: "no-store",
             headers,
           }),
+          fetch("/api/ikas/get-products-sync-payload", {
+            cache: "no-store",
+            headers,
+          }),
         ]);
 
         const merchantRaw = await merchantRes.json();
         const productsRaw = await productsRes.json();
+        const syncPayloadRaw = await syncPayloadRes.json();
 
         const merchantInfo =
           merchantRaw?.data?.merchantInfo ??
@@ -159,7 +185,7 @@ export default function DashboardPage() {
           fetchedAt: new Date().toISOString(),
           store: {
             name: merchantName,
-            host: merchantName ? `${merchantName}.myikas.com` : null,
+            host: merchantName ? merchantName + ".myikas.com" : null,
           },
           merchant: {
             id: merchantInfo?.id ?? null,
@@ -197,6 +223,14 @@ export default function DashboardPage() {
           items: Array.isArray(productsRaw?.items) ? productsRaw.items : [],
           error: productsRaw?.error,
         });
+
+        setSyncPayload({
+          ok: !!syncPayloadRaw?.ok,
+          fetchedAt: syncPayloadRaw?.fetchedAt,
+          itemCount: syncPayloadRaw?.itemCount ?? 0,
+          items: Array.isArray(syncPayloadRaw?.items) ? syncPayloadRaw.items : [],
+          error: syncPayloadRaw?.error,
+        });
       } catch (error) {
         setMerchant({
           ok: false,
@@ -205,6 +239,12 @@ export default function DashboardPage() {
         setProducts({
           ok: false,
           count: 0,
+          items: [],
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+        setSyncPayload({
+          ok: false,
+          itemCount: 0,
           items: [],
           error: error instanceof Error ? error.message : "Unknown error",
         });
@@ -247,6 +287,7 @@ export default function DashboardPage() {
           <Card title="Bağlantı Durumu">
             <Row label="Merchant API" value={merchant?.ok ? "OK" : "Hata"} />
             <Row label="Products Preview API" value={products?.ok ? "OK" : "Hata"} />
+            <Row label="Sync Payload API" value={syncPayload?.ok ? "OK" : "Hata"} />
           </Card>
 
           <Card title="Store Bilgisi">
@@ -318,9 +359,45 @@ export default function DashboardPage() {
             </div>
           </Card>
 
+          <Card title="Sync Payload Preview">
+            <Row label="Fetch Status" value={syncPayload?.ok ? "OK" : "Hata"} />
+            <Row label="Item Count" value={syncPayload?.itemCount ?? 0} />
+            <div style={{ marginTop: 12 }}>
+              {syncPayload?.items?.length ? (
+                <div style={{ display: "grid", gap: 10 }}>
+                  {syncPayload.items.map((item) => (
+                    <div
+                      key={item.externalProductId}
+                      style={{
+                        border: "1px solid #e5e7eb",
+                        borderRadius: 12,
+                        padding: 12,
+                        background: "#fafafa",
+                      }}
+                    >
+                      <div style={{ fontWeight: 700 }}>{item.title}</div>
+                      <div style={{ fontSize: 13, color: "#6b7280", marginTop: 4 }}>
+                        External Product ID: {item.externalProductId}
+                      </div>
+                      <div style={{ fontSize: 13, color: "#6b7280", marginTop: 4 }}>
+                        Item Type: {item.itemType || "-"}
+                      </div>
+                      <div style={{ fontSize: 13, color: "#6b7280", marginTop: 4 }}>
+                        Created At: {item.createdAt || "-"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div>Henüz sync payload verisi gelmedi.</div>
+              )}
+            </div>
+          </Card>
+
           <Card title="Hata Mesajları">
             <Row label="Merchant Error" value={merchant?.error || "-"} />
             <Row label="Products Error" value={products?.error || "-"} />
+            <Row label="Sync Payload Error" value={syncPayload?.error || "-"} />
           </Card>
         </div>
       )}
