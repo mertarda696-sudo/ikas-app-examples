@@ -462,7 +462,7 @@ export default function DashboardPage() {
           <Card title="Queue Write Test">
             <div style={{ marginBottom: 12, color: "#6b7280" }}>
               Bu butona test için yalnızca bir kez bas. Bu işlem yeni bir sync run açar ve
-              ilk 5 ürünü raw queue'ya yazar.
+              ilk 5 ürünü raw queue alanına yazar.
             </div>
 
             <button
