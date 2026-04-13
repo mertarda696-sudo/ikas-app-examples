@@ -11,15 +11,32 @@ type SourceRow = {
 };
 
 const IKAS_SOURCE_NAME = 'MIRELLE IKAS App Catalog';
+const PRODUCT_LIMIT = 1;
 
-function slugify(value: string | null | undefined) {
+function normalizeText(value: string | null | undefined) {
   return String(value || '')
     .toLocaleLowerCase('tr-TR')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/ı/g, 'i')
+    .trim();
+}
+
+function slugify(value: string | null | undefined) {
+  return normalizeText(value)
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+}
+
+function getVariantOptionValue(
+  variantValues: any[],
+  aliases: string[],
+) {
+  const match = variantValues.find((value: any) =>
+    aliases.includes(normalizeText(value?.variantTypeName)),
+  );
+
+  return match?.variantValueName ?? null;
 }
 
 export async function POST(request: NextRequest) {
@@ -100,7 +117,7 @@ export async function POST(request: NextRequest) {
     }
 
     const query = `
-      query SyncProductsToQueue {
+      query SyncProductsToQueueVariantPilot {
         listProduct {
           data {
             id
@@ -114,6 +131,14 @@ export async function POST(request: NextRequest) {
             }
             categories {
               name
+            }
+            variants {
+              id
+              sku
+              variantValues {
+                variantTypeName
+                variantValueName
+              }
             }
           }
         }
@@ -150,55 +175,94 @@ export async function POST(request: NextRequest) {
     }
 
     const fetchedItems = Array.isArray(raw?.data?.listProduct?.data)
-      ? raw.data.listProduct.data.slice(0, 5)
+      ? raw.data.listProduct.data.slice(0, PRODUCT_LIMIT)
       : [];
 
-    const payloadItems = fetchedItems.map((item: any) => {
-      const firstCategoryName =
-        Array.isArray(item?.categories) && item.categories.length
-          ? item.categories[0]?.name || null
-          : null;
+    const payloadItems = fetchedItems
+      .map((item: any) => {
+        const firstCategoryName =
+          Array.isArray(item?.categories) && item.categories.length
+            ? item.categories[0]?.name || null
+            : null;
 
-      const normalizedCategory = slugify(firstCategoryName) || 'unknown';
-      const sourceBrandName = item?.brand?.name ?? null;
-      const totalStock =
-        typeof item?.totalStock === 'number' ? item.totalStock : null;
+        const normalizedCategory = slugify(firstCategoryName) || 'unknown';
+        const sourceBrandName = item?.brand?.name ?? null;
+        const totalStock =
+          typeof item?.totalStock === 'number' ? item.totalStock : null;
 
-      return {
-        id: item?.id ?? '',
-        brand: sourceBrandName,
-        title: item?.name ?? '-',
-        handle: slugify(item?.name) || item?.id || '',
-        category: normalizedCategory,
-        currency: 'TRY',
-        variants: [],
-        is_active: true,
-        attributes: {
-          source_platform: 'ikas',
-          sync_origin: 'ikas_app',
-          merchant_id: user.merchantId,
-          store_name: 'mirellestudio',
-          source_category_name: firstCategoryName,
-          source_brand_name: sourceBrandName,
-          source_total_stock: totalStock,
-          source_short_description_present: !!item?.shortDescription,
-          source_description_present: !!item?.description,
-        },
-        base_price: null,
-        description: item?.description ?? null,
-        subcategory: null,
-        stock_status:
-          totalStock == null
-            ? 'unknown'
-            : totalStock > 0
-              ? 'in_stock'
-              : 'out_of_stock',
-        short_description: item?.shortDescription ?? null,
-        external_product_id: item?.id ?? '',
-        created_at_source:
-          item?.createdAt != null ? String(item.createdAt) : null,
-      };
-    });
+        const variantsRaw = Array.isArray(item?.variants) ? item.variants : [];
+
+        const normalizedVariants = variantsRaw
+          .map((variant: any) => {
+            const variantValues = Array.isArray(variant?.variantValues)
+              ? variant.variantValues
+              : [];
+
+            const optionSummary =
+              variantValues
+                .map((value: any) => {
+                  const typeName = value?.variantTypeName ?? '';
+                  const valueName = value?.variantValueName ?? '';
+                  return [typeName, valueName].filter(Boolean).join(': ');
+                })
+                .filter(Boolean)
+                .join(' / ') || null;
+
+            const sizeValue = getVariantOptionValue(variantValues, ['beden', 'size']);
+            const colorValue = getVariantOptionValue(variantValues, ['renk', 'color']);
+
+            return {
+              id: variant?.id ?? '',
+              external_product_id: item?.id ?? '',
+              sku: variant?.sku ?? null,
+              title: optionSummary,
+              color: colorValue,
+              size: sizeValue,
+              price: null,
+              stock_qty: null,
+              stock_status: 'unknown',
+              is_active: true,
+            };
+          })
+          .filter((variant: { id: string }) => !!variant.id);
+
+        return {
+          id: item?.id ?? '',
+          brand: sourceBrandName,
+          title: item?.name ?? '-',
+          handle: slugify(item?.name) || item?.id || '',
+          category: normalizedCategory,
+          currency: 'TRY',
+          variants: normalizedVariants,
+          is_active: true,
+          attributes: {
+            source_platform: 'ikas',
+            sync_origin: 'ikas_app',
+            merchant_id: user.merchantId,
+            store_name: 'mirellestudio',
+            source_category_name: firstCategoryName,
+            source_brand_name: sourceBrandName,
+            source_total_stock: totalStock,
+            source_short_description_present: !!item?.shortDescription,
+            source_description_present: !!item?.description,
+            source_variant_count: normalizedVariants.length,
+          },
+          base_price: null,
+          description: item?.description ?? null,
+          subcategory: null,
+          stock_status:
+            totalStock == null
+              ? 'unknown'
+              : totalStock > 0
+                ? 'in_stock'
+                : 'out_of_stock',
+          short_description: item?.shortDescription ?? null,
+          external_product_id: item?.id ?? '',
+          created_at_source:
+            item?.createdAt != null ? String(item.createdAt) : null,
+        };
+      })
+      .filter((item: { id: string }) => !!item.id);
 
     if (!payloadItems.length) {
       return NextResponse.json({
@@ -241,12 +305,13 @@ export async function POST(request: NextRequest) {
           0,
           0,
           0,
-          'IKAS app queue write pilot',
+          'IKAS app queue write variant pilot',
           jsonb_build_object(
-            'trigger', 'ikas_app_queue_pilot',
+            'trigger', 'ikas_app_queue_variant_pilot',
             'source_name', ${source.source_name},
             'merchant_id', ${user.merchantId},
-            'queued_count', ${payloadItems.length}
+            'queued_count', ${payloadItems.length},
+            'product_limit', ${PRODUCT_LIMIT}
           )
         )
         returning id
