@@ -41,6 +41,8 @@ export async function GET(request: NextRequest) {
           itemCount: 0,
           items: [],
           variantAuditMode: 'unauthorized',
+          schemaAuditMode: 'not_run',
+          variantSchemaTypes: [],
           error: 'Unauthorized',
         },
         { status: 401 },
@@ -57,6 +59,8 @@ export async function GET(request: NextRequest) {
           itemCount: 0,
           items: [],
           variantAuditMode: 'no_token',
+          schemaAuditMode: 'not_run',
+          variantSchemaTypes: [],
           error: 'Auth token not found',
         },
         { status: 404 },
@@ -71,6 +75,8 @@ export async function GET(request: NextRequest) {
           itemCount: 0,
           items: [],
           variantAuditMode: 'no_graph_url',
+          schemaAuditMode: 'not_run',
+          variantSchemaTypes: [],
           error: 'Graph API URL not configured',
         },
         { status: 500 },
@@ -127,6 +133,19 @@ export async function GET(request: NextRequest) {
       }
     `;
 
+    const introspectionQuery = `
+      query VariantSchemaAudit {
+        __schema {
+          types {
+            name
+            fields {
+              name
+            }
+          }
+        }
+      }
+    `;
+
     let variantAuditMode: 'variant_full' | 'variant_fallback' = 'variant_full';
     let preferredErrorMessage: string | null = null;
 
@@ -149,6 +168,8 @@ export async function GET(request: NextRequest) {
           itemCount: 0,
           items: [],
           variantAuditMode,
+          schemaAuditMode: 'not_run',
+          variantSchemaTypes: [],
           error:
             graphResult.raw?.errors?.[0]?.message ||
             'Graph API request failed with status ' + graphResult.status,
@@ -198,12 +219,56 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    let schemaAuditMode: 'introspection_ok' | 'introspection_failed' = 'introspection_failed';
+    let variantSchemaTypes: Array<{ typeName: string; fieldNames: string[] }> = [];
+
+    const schemaResult = await callGraphApi(introspectionQuery, authToken.accessToken);
+
+    if (schemaResult.ok && !schemaResult.raw?.errors) {
+      const allTypes = Array.isArray(schemaResult.raw?.data?.__schema?.types)
+        ? schemaResult.raw.data.__schema.types
+        : [];
+
+      const filteredTypes = allTypes
+        .map((type: any) => {
+          const fieldNames = Array.isArray(type?.fields)
+            ? type.fields.map((field: any) => field?.name).filter(Boolean)
+            : [];
+
+          return {
+            typeName: type?.name ?? '',
+            fieldNames,
+          };
+        })
+        .filter((type: { typeName: string; fieldNames: string[] }) => {
+          const lowerTypeName = String(type.typeName || '').toLowerCase();
+          const lowerFields = type.fieldNames.map((field) => String(field).toLowerCase());
+
+          return (
+            lowerTypeName.includes('variant') ||
+            lowerFields.includes('variantvalues') ||
+            lowerFields.includes('sku') ||
+            lowerFields.includes('price') ||
+            lowerFields.includes('totalstock') ||
+            lowerFields.includes('stock') ||
+            lowerFields.includes('inventory') ||
+            lowerFields.includes('barcode')
+          );
+        })
+        .slice(0, 20);
+
+      variantSchemaTypes = filteredTypes;
+      schemaAuditMode = 'introspection_ok';
+    }
+
     return NextResponse.json({
       ok: true,
       fetchedAt: new Date().toISOString(),
       itemCount: items.length,
       items,
       variantAuditMode,
+      schemaAuditMode,
+      variantSchemaTypes,
       error: variantAuditMode === 'variant_fallback' ? preferredErrorMessage : undefined,
     });
   } catch (error) {
@@ -214,6 +279,8 @@ export async function GET(request: NextRequest) {
         itemCount: 0,
         items: [],
         variantAuditMode: 'runtime_error',
+        schemaAuditMode: 'runtime_error',
+        variantSchemaTypes: [],
         error: error instanceof Error ? error.message : 'Unknown error',
       },
       { status: 500 },
