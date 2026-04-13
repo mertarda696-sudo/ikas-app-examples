@@ -69,14 +69,20 @@ type SyncPayloadResponse = {
     itemType?: string;
     variantCount?: number;
     variantsPreview?: Array<{
-      externalVariantId: string;
-      sku?: string | null;
-      optionSummary?: string | null;
-      buyPrice?: number | null;
-      sellPrice?: number | null;
-      discountPrice?: number | null;
-      priceCurrency?: string | null;
-    }>;
+  externalVariantId: string;
+  sku?: string | null;
+  optionSummary?: string | null;
+  buyPrice?: number | null;
+  sellPrice?: number | null;
+  discountPrice?: number | null;
+  priceCurrency?: string | null;
+  sellIfOutOfStock?: boolean | null;
+  stockTotal?: number | null;
+  stockPreview?: Array<{
+    stockLocationId?: string | null;
+    stockCount?: number | null;
+  }>;
+}>;
   }>;
   error?: string;
 };
@@ -558,6 +564,19 @@ export default function DashboardPage() {
                                 <div>Discount Price: {variant.discountPrice ?? "-"}</div>
                                 <div>Buy Price: {variant.buyPrice ?? "-"}</div>
                                 <div>Currency: {variant.priceCurrency || "-"}</div>
+                                <div>Sell If Out Of Stock: {String(variant.sellIfOutOfStock ?? "-")}</div>
+<div>Stock Total: {variant.stockTotal ?? "-"}</div>
+<div>
+  Stock Preview:{" "}
+  {variant.stockPreview?.length
+    ? variant.stockPreview
+        .map(
+          (stock) =>
+            `${stock.stockLocationId || "unknown"}:${stock.stockCount ?? "-"}`
+        )
+        .join(" | ")
+    : "-"}
+</div>
                               </div>
                             ))}
                           </div>
