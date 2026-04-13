@@ -49,12 +49,21 @@ export async function GET(request: NextRequest) {
     }
 
     const query = `
-      query ProductsSyncPayload {
+      query ProductsSyncPayloadAudit {
         listProduct {
           data {
             id
             name
             createdAt
+            description
+            shortDescription
+            totalStock
+            brand {
+              name
+            }
+            categories {
+              name
+            }
           }
         }
       }
@@ -87,14 +96,29 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const items = Array.isArray(raw?.data?.listProduct?.data)
-      ? raw.data.listProduct.data.slice(0, 5).map((item: any) => ({
-          externalProductId: item?.id ?? '',
-          title: item?.name ?? '-',
-          createdAt: item?.createdAt != null ? String(item.createdAt) : null,
-          itemType: 'product',
-        }))
+    const products = Array.isArray(raw?.data?.listProduct?.data)
+      ? raw.data.listProduct.data.slice(0, 5)
       : [];
+
+    const items = products.map((item: any) => {
+      const firstCategoryName =
+        Array.isArray(item?.categories) && item.categories.length
+          ? item.categories[0]?.name || null
+          : null;
+
+      return {
+        externalProductId: item?.id ?? '',
+        title: item?.name ?? '-',
+        createdAt: item?.createdAt != null ? String(item.createdAt) : null,
+        brandName: item?.brand?.name ?? null,
+        categoryName: firstCategoryName,
+        totalStock:
+          typeof item?.totalStock === 'number' ? item.totalStock : null,
+        shortDescription: item?.shortDescription ?? null,
+        description: item?.description ?? null,
+        itemType: 'product',
+      };
+    });
 
     return NextResponse.json({
       ok: true,
