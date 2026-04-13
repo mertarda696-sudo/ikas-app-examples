@@ -62,17 +62,14 @@ type SyncPayloadResponse = {
     itemType?: string;
     variantCount?: number;
     variantsPreview?: Array<{
-      externalVariantId: string;
-      sku?: string | null;
-      optionSummary?: string | null;
-      buyPrice?: number | null;
-      sellPrice?: number | null;
-      discountPrice?: number | null;
-      priceCurrency?: string | null;
-      stockValue?: number | null;
-      stockLocationId?: string | null;
-      barcodePreview?: string | null;
-    }>;
+  externalVariantId: string;
+  sku?: string | null;
+  optionSummary?: string | null;
+  buyPrice?: number | null;
+  sellPrice?: number | null;
+  discountPrice?: number | null;
+  priceCurrency?: string | null;
+}>;
   }>;
   error?: string;
 };
@@ -532,9 +529,6 @@ export default function DashboardPage() {
                                 <div>Discount Price: {variant.discountPrice ?? "-"}</div>
                                 <div>Buy Price: {variant.buyPrice ?? "-"}</div>
                                 <div>Currency: {variant.priceCurrency || "-"}</div>
-                                <div>Stock: {variant.stockValue ?? "-"}</div>
-                                <div>Stock Location ID: {variant.stockLocationId || "-"}</div>
-                                <div>Barcode: {variant.barcodePreview || "-"}</div>
                               </div>
                             ))}
                           </div>
