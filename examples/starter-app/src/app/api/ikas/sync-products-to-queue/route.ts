@@ -159,14 +159,17 @@ export async function POST(request: NextRequest) {
           ? item.categories[0]?.name || null
           : null;
 
-      const normalizedSubcategory = slugify(firstCategoryName) || null;
+      const normalizedCategory = slugify(firstCategoryName) || 'unknown';
+      const sourceBrandName = item?.brand?.name ?? null;
+      const totalStock =
+        typeof item?.totalStock === 'number' ? item.totalStock : null;
 
       return {
         id: item?.id ?? '',
-        brand: item?.brand?.name ?? 'MIRELLE STUDIO',
+        brand: sourceBrandName,
         title: item?.name ?? '-',
         handle: slugify(item?.name) || item?.id || '',
-        category: 'giyim',
+        category: normalizedCategory,
         currency: 'TRY',
         variants: [],
         is_active: true,
@@ -175,15 +178,21 @@ export async function POST(request: NextRequest) {
           sync_origin: 'ikas_app',
           merchant_id: user.merchantId,
           store_name: 'mirellestudio',
-          original_category_name: firstCategoryName,
+          source_category_name: firstCategoryName,
+          source_brand_name: sourceBrandName,
+          source_total_stock: totalStock,
+          source_short_description_present: !!item?.shortDescription,
+          source_description_present: !!item?.description,
         },
-        base_price: 0,
+        base_price: null,
         description: item?.description ?? null,
-        subcategory: normalizedSubcategory,
+        subcategory: null,
         stock_status:
-          typeof item?.totalStock === 'number' && item.totalStock > 0
-            ? 'in_stock'
-            : 'out_of_stock',
+          totalStock == null
+            ? 'unknown'
+            : totalStock > 0
+              ? 'in_stock'
+              : 'out_of_stock',
         short_description: item?.shortDescription ?? null,
         external_product_id: item?.id ?? '',
         created_at_source:
@@ -277,15 +286,15 @@ export async function POST(request: NextRequest) {
       };
     });
 
-   return NextResponse.json({
-  ok: true,
-  fetchedAt: new Date().toISOString(),
-  runId: transactionResult.runId,
-  sourceName: source.source_name,
-  queuedCount: payloadItems.length,
-  queuedExternalProductIds: payloadItems.map((item: { id: string }) => item.id),
-  error: undefined,
-});
+    return NextResponse.json({
+      ok: true,
+      fetchedAt: new Date().toISOString(),
+      runId: transactionResult.runId,
+      sourceName: source.source_name,
+      queuedCount: payloadItems.length,
+      queuedExternalProductIds: payloadItems.map((item: { id: string }) => item.id),
+      error: undefined,
+    });
   } catch (error) {
     return NextResponse.json(
       {
