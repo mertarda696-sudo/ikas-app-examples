@@ -304,23 +304,31 @@ export async function GET(request: NextRequest) {
             categories {
               name
             }
-            variants {
-              id
-              sku
-              variantValues {
-                variantTypeName
-                variantValueName
-              }
-              prices {
-                buyPrice
-                discountPrice
-                sellPrice
-                priceListId
-                currency
-                currencyCode
-                currencySymbol
-              }
-            }
+           variants {
+  id
+  sku
+  sellIfOutOfStock
+  variantValues {
+    variantTypeName
+    variantValueName
+  }
+  prices {
+    buyPrice
+    discountPrice
+    sellPrice
+    priceListId
+    currency
+    currencyCode
+    currencySymbol
+  }
+  stocks {
+    id
+    productId
+    variantId
+    stockLocationId
+    stockCount
+  }
+}
           }
         }
       }
@@ -420,32 +428,44 @@ export async function GET(request: NextRequest) {
         itemType: 'product',
         variantCount: variants.length,
         variantsPreview: variants.slice(0, 10).map((variant: any) => {
-          const prices = Array.isArray(variant?.prices) ? variant.prices : [];
-          const firstPrice = prices[0] || null;
+  const prices = Array.isArray(variant?.prices) ? variant.prices : [];
+  const firstPrice = prices[0] || null;
 
-          return {
-            externalVariantId: variant?.id ?? '',
-            sku: variant?.sku ?? null,
-            optionSummary: Array.isArray(variant?.variantValues)
-              ? variant.variantValues
-                  .map((value: any) => {
-                    const typeName = value?.variantTypeName ?? '';
-                    const valueName = value?.variantValueName ?? '';
-                    return [typeName, valueName].filter(Boolean).join(': ');
-                  })
-                  .filter(Boolean)
-                  .join(' / ')
-              : null,
-            buyPrice: firstPrice?.buyPrice ?? null,
-            sellPrice: firstPrice?.sellPrice ?? null,
-            discountPrice: firstPrice?.discountPrice ?? null,
-            priceCurrency:
-              firstPrice?.currencySymbol ??
-              firstPrice?.currencyCode ??
-              firstPrice?.currency ??
-              null,
-          };
-        }),
+  const stocks = Array.isArray(variant?.stocks) ? variant.stocks : [];
+  const stockTotal = stocks.reduce((sum: number, stock: any) => {
+    const count = typeof stock?.stockCount === 'number' ? stock.stockCount : 0;
+    return sum + count;
+  }, 0);
+
+  return {
+    externalVariantId: variant?.id ?? '',
+    sku: variant?.sku ?? null,
+    optionSummary: Array.isArray(variant?.variantValues)
+      ? variant.variantValues
+          .map((value: any) => {
+            const typeName = value?.variantTypeName ?? '';
+            const valueName = value?.variantValueName ?? '';
+            return [typeName, valueName].filter(Boolean).join(': ');
+          })
+          .filter(Boolean)
+          .join(' / ')
+      : null,
+    buyPrice: firstPrice?.buyPrice ?? null,
+    sellPrice: firstPrice?.sellPrice ?? null,
+    discountPrice: firstPrice?.discountPrice ?? null,
+    priceCurrency:
+      firstPrice?.currencySymbol ??
+      firstPrice?.currencyCode ??
+      firstPrice?.currency ??
+      null,
+    sellIfOutOfStock: variant?.sellIfOutOfStock ?? null,
+    stockTotal,
+    stockPreview: stocks.slice(0, 10).map((stock: any) => ({
+      stockLocationId: stock?.stockLocationId ?? null,
+      stockCount: typeof stock?.stockCount === 'number' ? stock.stockCount : null,
+    })),
+  };
+}),
       };
     });
 
