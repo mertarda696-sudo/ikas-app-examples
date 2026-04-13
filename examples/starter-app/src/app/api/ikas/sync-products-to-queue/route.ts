@@ -11,7 +11,7 @@ type SourceRow = {
 };
 
 const IKAS_SOURCE_NAME = 'MIRELLE IKAS App Catalog';
-const PRODUCT_LIMIT = 5;
+const PRODUCT_LIMIT = 1;
 
 function normalizeText(value: string | null | undefined) {
   return String(value || '')
@@ -133,13 +133,22 @@ export async function POST(request: NextRequest) {
               name
             }
             variants {
-              id
-              sku
-              variantValues {
-                variantTypeName
-                variantValueName
-              }
-            }
+  id
+  sku
+  variantValues {
+    variantTypeName
+    variantValueName
+  }
+  prices {
+    buyPrice
+    discountPrice
+    sellPrice
+    priceListId
+    currency
+    currencyCode
+    currencySymbol
+  }
+}
           }
         }
       }
@@ -209,20 +218,24 @@ export async function POST(request: NextRequest) {
                 .join(' / ') || null;
 
             const sizeValue = getVariantOptionValue(variantValues, ['beden', 'size']);
-            const colorValue = getVariantOptionValue(variantValues, ['renk', 'color']);
+const colorValue = getVariantOptionValue(variantValues, ['renk', 'color']);
+const prices = Array.isArray(variant?.prices) ? variant.prices : [];
+const firstPrice = prices[0] || null;
+const sellPrice =
+  typeof firstPrice?.sellPrice === 'number' ? firstPrice.sellPrice : null;
 
-            return {
-              id: variant?.id ?? '',
-              external_product_id: item?.id ?? '',
-              sku: variant?.sku ?? null,
-              title: optionSummary,
-              color: colorValue,
-              size: sizeValue,
-              price: null,
-              stock_qty: null,
-              stock_status: 'unknown',
-              is_active: true,
-            };
+return {
+  id: variant?.id ?? '',
+  external_product_id: item?.id ?? '',
+  sku: variant?.sku ?? null,
+  title: optionSummary,
+  color: colorValue,
+  size: sizeValue,
+  price: sellPrice,
+  stock_qty: null,
+  stock_status: 'unknown',
+  is_active: true,
+};
           })
           .filter((variant: { id: string }) => !!variant.id);
 
@@ -236,17 +249,18 @@ export async function POST(request: NextRequest) {
           variants: normalizedVariants,
           is_active: true,
           attributes: {
-            source_platform: 'ikas',
-            sync_origin: 'ikas_app',
-            merchant_id: user.merchantId,
-            store_name: 'mirellestudio',
-            source_category_name: firstCategoryName,
-            source_brand_name: sourceBrandName,
-            source_total_stock: totalStock,
-            source_short_description_present: !!item?.shortDescription,
-            source_description_present: !!item?.description,
-            source_variant_count: normalizedVariants.length,
-          },
+  source_platform: 'ikas',
+  sync_origin: 'ikas_app',
+  merchant_id: user.merchantId,
+  store_name: 'mirellestudio',
+  source_category_name: firstCategoryName,
+  source_brand_name: sourceBrandName,
+  source_total_stock: totalStock,
+  source_short_description_present: !!item?.shortDescription,
+  source_description_present: !!item?.description,
+  source_variant_count: normalizedVariants.length,
+  source_variant_price_mode: 'sell_price_only',
+},
           base_price: null,
           description: item?.description ?? null,
           subcategory: null,
