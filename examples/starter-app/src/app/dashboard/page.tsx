@@ -48,6 +48,11 @@ type SyncPayloadResponse = {
     externalProductId: string;
     title: string;
     createdAt?: string | null;
+    brandName?: string | null;
+    categoryName?: string | null;
+    totalStock?: number | null;
+    shortDescription?: string | null;
+    description?: string | null;
     itemType?: string;
   }>;
   error?: string;
@@ -446,6 +451,21 @@ export default function DashboardPage() {
                       </div>
                       <div style={{ fontSize: 13, color: "#6b7280", marginTop: 4 }}>
                         Item Type: {item.itemType || "-"}
+                      </div>
+                      <div style={{ fontSize: 13, color: "#6b7280", marginTop: 4 }}>
+                        Brand: {item.brandName || "-"}
+                      </div>
+                      <div style={{ fontSize: 13, color: "#6b7280", marginTop: 4 }}>
+                        Category: {item.categoryName || "-"}
+                      </div>
+                      <div style={{ fontSize: 13, color: "#6b7280", marginTop: 4 }}>
+                        Total Stock: {item.totalStock ?? "-"}
+                      </div>
+                      <div style={{ fontSize: 13, color: "#6b7280", marginTop: 4 }}>
+                        Short Description: {item.shortDescription || "-"}
+                      </div>
+                      <div style={{ fontSize: 13, color: "#6b7280", marginTop: 4 }}>
+                        Description: {item.description || "-"}
                       </div>
                       <div style={{ fontSize: 13, color: "#6b7280", marginTop: 4 }}>
                         Created At: {item.createdAt || "-"}
