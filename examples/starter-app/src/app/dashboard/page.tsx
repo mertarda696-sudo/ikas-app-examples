@@ -46,10 +46,17 @@ type SyncPayloadResponse = {
   itemCount?: number;
   variantAuditMode?: string;
   schemaAuditMode?: string;
+  stockAuditMode?: string;
   variantSchemaTypes?: Array<{
     typeName: string;
     fieldNames: string[];
   }>;
+  stockSchemaTypes?: Array<{
+    typeName: string;
+    fieldNames: string[];
+    matchedStockFields?: string[];
+  }>;
+  variantDirectStockFields?: string[];
   items?: Array<{
     externalProductId: string;
     title: string;
@@ -62,14 +69,14 @@ type SyncPayloadResponse = {
     itemType?: string;
     variantCount?: number;
     variantsPreview?: Array<{
-  externalVariantId: string;
-  sku?: string | null;
-  optionSummary?: string | null;
-  buyPrice?: number | null;
-  sellPrice?: number | null;
-  discountPrice?: number | null;
-  priceCurrency?: string | null;
-}>;
+      externalVariantId: string;
+      sku?: string | null;
+      optionSummary?: string | null;
+      buyPrice?: number | null;
+      sellPrice?: number | null;
+      discountPrice?: number | null;
+      priceCurrency?: string | null;
+    }>;
   }>;
   error?: string;
 };
@@ -173,7 +180,10 @@ export default function DashboardPage() {
             items: [],
             variantAuditMode: "no_token",
             schemaAuditMode: "not_run",
+            stockAuditMode: "not_run",
             variantSchemaTypes: [],
+            stockSchemaTypes: [],
+            variantDirectStockFields: [],
             error: "iFrame JWT token alınamadı.",
           });
 
@@ -266,8 +276,15 @@ export default function DashboardPage() {
           itemCount: syncPayloadRaw?.itemCount ?? 0,
           variantAuditMode: syncPayloadRaw?.variantAuditMode ?? "-",
           schemaAuditMode: syncPayloadRaw?.schemaAuditMode ?? "-",
+          stockAuditMode: syncPayloadRaw?.stockAuditMode ?? "-",
           variantSchemaTypes: Array.isArray(syncPayloadRaw?.variantSchemaTypes)
             ? syncPayloadRaw.variantSchemaTypes
+            : [],
+          stockSchemaTypes: Array.isArray(syncPayloadRaw?.stockSchemaTypes)
+            ? syncPayloadRaw.stockSchemaTypes
+            : [],
+          variantDirectStockFields: Array.isArray(syncPayloadRaw?.variantDirectStockFields)
+            ? syncPayloadRaw.variantDirectStockFields
             : [],
           items: Array.isArray(syncPayloadRaw?.items) ? syncPayloadRaw.items : [],
           error: syncPayloadRaw?.error,
@@ -289,7 +306,10 @@ export default function DashboardPage() {
           items: [],
           variantAuditMode: "runtime_error",
           schemaAuditMode: "runtime_error",
+          stockAuditMode: "runtime_error",
           variantSchemaTypes: [],
+          stockSchemaTypes: [],
+          variantDirectStockFields: [],
           error: error instanceof Error ? error.message : "Unknown error",
         });
       } finally {
@@ -368,7 +388,7 @@ export default function DashboardPage() {
           ikas Merchant Dashboard
         </h1>
         <p style={{ color: "#4b5563" }}>
-          Merchant bilgisi, auth durumu ve ilk ürün preview testi
+          Merchant bilgisi, auth durumu ve ürün sync audit testi
         </p>
       </div>
 
@@ -461,6 +481,15 @@ export default function DashboardPage() {
             <Row label="Item Count" value={syncPayload?.itemCount ?? 0} />
             <Row label="Variant Audit Mode" value={syncPayload?.variantAuditMode || "-"} />
             <Row label="Schema Audit Mode" value={syncPayload?.schemaAuditMode || "-"} />
+            <Row label="Stock Audit Mode" value={syncPayload?.stockAuditMode || "-"} />
+            <Row
+              label="Variant Direct Stock Fields"
+              value={
+                syncPayload?.variantDirectStockFields?.length
+                  ? syncPayload.variantDirectStockFields.join(", ")
+                  : "-"
+              }
+            />
 
             <div style={{ marginTop: 12 }}>
               {syncPayload?.items?.length ? (
@@ -572,7 +601,44 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <div style={{ fontSize: 13, color: "#6b7280" }}>
-                  Schema audit verisi gelmedi.
+                  Variant schema audit verisi gelmedi.
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#374151", marginBottom: 8 }}>
+                Stock Schema Preview
+              </div>
+
+              {syncPayload?.stockSchemaTypes?.length ? (
+                <div style={{ display: "grid", gap: 10 }}>
+                  {syncPayload.stockSchemaTypes.map((schemaType) => (
+                    <div
+                      key={schemaType.typeName}
+                      style={{
+                        border: "1px solid #e5e7eb",
+                        borderRadius: 12,
+                        padding: 12,
+                        background: "#fafafa",
+                      }}
+                    >
+                      <div style={{ fontWeight: 700 }}>{schemaType.typeName}</div>
+                      <div style={{ fontSize: 13, color: "#6b7280", marginTop: 6 }}>
+                        Fields: {schemaType.fieldNames.join(", ") || "-"}
+                      </div>
+                      <div style={{ fontSize: 13, color: "#6b7280", marginTop: 6 }}>
+                        Matched Stock Fields:{" "}
+                        {schemaType.matchedStockFields?.length
+                          ? schemaType.matchedStockFields.join(", ")
+                          : "-"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: 13, color: "#6b7280" }}>
+                  Stock schema audit verisi gelmedi.
                 </div>
               )}
             </div>
