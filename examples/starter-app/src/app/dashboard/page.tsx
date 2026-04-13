@@ -45,6 +45,11 @@ type SyncPayloadResponse = {
   fetchedAt?: string;
   itemCount?: number;
   variantAuditMode?: string;
+  schemaAuditMode?: string;
+  variantSchemaTypes?: Array<{
+    typeName: string;
+    fieldNames: string[];
+  }>;
   items?: Array<{
     externalProductId: string;
     title: string;
@@ -163,6 +168,8 @@ export default function DashboardPage() {
             itemCount: 0,
             items: [],
             variantAuditMode: "no_token",
+            schemaAuditMode: "not_run",
+            variantSchemaTypes: [],
             error: "iFrame JWT token alınamadı.",
           });
 
@@ -254,6 +261,10 @@ export default function DashboardPage() {
           fetchedAt: syncPayloadRaw?.fetchedAt,
           itemCount: syncPayloadRaw?.itemCount ?? 0,
           variantAuditMode: syncPayloadRaw?.variantAuditMode ?? "-",
+          schemaAuditMode: syncPayloadRaw?.schemaAuditMode ?? "-",
+          variantSchemaTypes: Array.isArray(syncPayloadRaw?.variantSchemaTypes)
+            ? syncPayloadRaw.variantSchemaTypes
+            : [],
           items: Array.isArray(syncPayloadRaw?.items) ? syncPayloadRaw.items : [],
           error: syncPayloadRaw?.error,
         });
@@ -273,6 +284,8 @@ export default function DashboardPage() {
           itemCount: 0,
           items: [],
           variantAuditMode: "runtime_error",
+          schemaAuditMode: "runtime_error",
+          variantSchemaTypes: [],
           error: error instanceof Error ? error.message : "Unknown error",
         });
       } finally {
@@ -443,6 +456,8 @@ export default function DashboardPage() {
             <Row label="Fetch Status" value={syncPayload?.ok ? "OK" : "Hata"} />
             <Row label="Item Count" value={syncPayload?.itemCount ?? 0} />
             <Row label="Variant Audit Mode" value={syncPayload?.variantAuditMode || "-"} />
+            <Row label="Schema Audit Mode" value={syncPayload?.schemaAuditMode || "-"} />
+
             <div style={{ marginTop: 12 }}>
               {syncPayload?.items?.length ? (
                 <div style={{ display: "grid", gap: 10 }}>
@@ -520,6 +535,37 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <div>Henüz sync payload verisi gelmedi.</div>
+              )}
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#374151", marginBottom: 8 }}>
+                Variant Schema Preview
+              </div>
+
+              {syncPayload?.variantSchemaTypes?.length ? (
+                <div style={{ display: "grid", gap: 10 }}>
+                  {syncPayload.variantSchemaTypes.map((schemaType) => (
+                    <div
+                      key={schemaType.typeName}
+                      style={{
+                        border: "1px solid #e5e7eb",
+                        borderRadius: 12,
+                        padding: 12,
+                        background: "#fafafa",
+                      }}
+                    >
+                      <div style={{ fontWeight: 700 }}>{schemaType.typeName}</div>
+                      <div style={{ fontSize: 13, color: "#6b7280", marginTop: 6 }}>
+                        Fields: {schemaType.fieldNames.join(", ") || "-"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: 13, color: "#6b7280" }}>
+                  Schema audit verisi gelmedi.
+                </div>
               )}
             </div>
           </Card>
