@@ -230,32 +230,90 @@ export async function GET(request: NextRequest) {
         : [];
 
       const filteredTypes = allTypes
-        .map((type: any) => {
-          const fieldNames = Array.isArray(type?.fields)
-            ? type.fields.map((field: any) => field?.name).filter(Boolean)
-            : [];
+  .map((type: any) => {
+    const fieldNames = Array.isArray(type?.fields)
+      ? type.fields.map((field: any) => field?.name).filter(Boolean)
+      : [];
 
-          return {
-            typeName: type?.name ?? '',
-            fieldNames,
-          };
-        })
-        .filter((type: { typeName: string; fieldNames: string[] }) => {
-          const lowerTypeName = String(type.typeName || '').toLowerCase();
-          const lowerFields = type.fieldNames.map((field) => String(field).toLowerCase());
+    const lowerTypeName = String(type?.name || '').toLowerCase();
+    const lowerFields = fieldNames.map((field: string) => String(field).toLowerCase());
 
-          return (
-            lowerTypeName.includes('variant') ||
-            lowerFields.includes('variantvalues') ||
-            lowerFields.includes('sku') ||
-            lowerFields.includes('price') ||
-            lowerFields.includes('totalstock') ||
-            lowerFields.includes('stock') ||
-            lowerFields.includes('inventory') ||
-            lowerFields.includes('barcode')
-          );
-        })
-        .slice(0, 20);
+    const hasTargetTypeName =
+      lowerTypeName.includes('productvariant') ||
+      lowerTypeName.includes('variantprice') ||
+      lowerTypeName.includes('variantvalue') ||
+      lowerTypeName.includes('inventory') ||
+      lowerTypeName.includes('stock') ||
+      lowerTypeName.includes('barcode');
+
+    const hasTargetFieldName =
+      lowerFields.includes('sku') ||
+      lowerFields.includes('price') ||
+      lowerFields.includes('prices') ||
+      lowerFields.includes('sellprice') ||
+      lowerFields.includes('buyprice') ||
+      lowerFields.includes('discountprice') ||
+      lowerFields.includes('stock') ||
+      lowerFields.includes('quantity') ||
+      lowerFields.includes('totalstock') ||
+      lowerFields.includes('inventory') ||
+      lowerFields.includes('barcode') ||
+      lowerFields.includes('variantvalues');
+
+    const hasExcludedTypeName =
+      lowerTypeName.includes('orderline') ||
+      lowerTypeName.includes('shipping') ||
+      lowerTypeName.includes('subscription') ||
+      lowerTypeName.includes('payment') ||
+      lowerTypeName.includes('gift') ||
+      lowerTypeName.includes('cargo') ||
+      lowerTypeName.includes('available');
+
+    let priority = 0;
+
+    if (lowerTypeName.includes('productvariant')) priority += 100;
+    if (lowerTypeName.includes('variantprice')) priority += 90;
+    if (lowerTypeName.includes('inventory')) priority += 80;
+    if (lowerTypeName.includes('stock')) priority += 70;
+    if (lowerTypeName.includes('barcode')) priority += 60;
+
+    if (lowerFields.includes('sellprice')) priority += 25;
+    if (lowerFields.includes('buyprice')) priority += 25;
+    if (lowerFields.includes('discountprice')) priority += 25;
+    if (lowerFields.includes('price')) priority += 15;
+    if (lowerFields.includes('prices')) priority += 15;
+    if (lowerFields.includes('stock')) priority += 15;
+    if (lowerFields.includes('quantity')) priority += 15;
+    if (lowerFields.includes('inventory')) priority += 15;
+    if (lowerFields.includes('barcode')) priority += 10;
+    if (lowerFields.includes('sku')) priority += 10;
+    if (lowerFields.includes('variantvalues')) priority += 10;
+
+    return {
+      typeName: type?.name ?? '',
+      fieldNames,
+      hasTargetTypeName,
+      hasTargetFieldName,
+      hasExcludedTypeName,
+      priority,
+    };
+  })
+  .filter((type: {
+    hasTargetTypeName: boolean;
+    hasTargetFieldName: boolean;
+    hasExcludedTypeName: boolean;
+  }) => {
+    return (type.hasTargetTypeName || type.hasTargetFieldName) && !type.hasExcludedTypeName;
+  })
+  .sort((a: { priority: number; typeName: string }, b: { priority: number; typeName: string }) => {
+    if (b.priority !== a.priority) return b.priority - a.priority;
+    return a.typeName.localeCompare(b.typeName);
+  })
+  .slice(0, 20)
+  .map((type: { typeName: string; fieldNames: string[] }) => ({
+    typeName: type.typeName,
+    fieldNames: type.fieldNames,
+  }));
 
       variantSchemaTypes = filteredTypes;
       schemaAuditMode = 'introspection_ok';
