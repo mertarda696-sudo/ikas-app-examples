@@ -132,9 +132,10 @@ export async function POST(request: NextRequest) {
             categories {
               name
             }
-            variants {
+           variants {
   id
   sku
+  sellIfOutOfStock
   variantValues {
     variantTypeName
     variantValueName
@@ -147,6 +148,13 @@ export async function POST(request: NextRequest) {
     currency
     currencyCode
     currencySymbol
+  }
+  stocks {
+    id
+    productId
+    variantId
+    stockLocationId
+    stockCount
   }
 }
           }
@@ -224,6 +232,19 @@ const firstPrice = prices[0] || null;
 const sellPrice =
   typeof firstPrice?.sellPrice === 'number' ? firstPrice.sellPrice : null;
 
+const stocks = Array.isArray(variant?.stocks) ? variant.stocks : [];
+const stockQty = stocks.reduce((sum: number, stock: any) => {
+  const count = typeof stock?.stockCount === 'number' ? stock.stockCount : 0;
+  return sum + count;
+}, 0);
+
+const stockStatus =
+  stockQty > 0
+    ? 'in_stock'
+    : variant?.sellIfOutOfStock === true
+      ? 'preorder'
+      : 'out_of_stock';
+
 return {
   id: variant?.id ?? '',
   external_product_id: item?.id ?? '',
@@ -232,9 +253,14 @@ return {
   color: colorValue,
   size: sizeValue,
   price: sellPrice,
-  stock_qty: null,
-  stock_status: 'unknown',
+  stock_qty: stockQty,
+  stock_status: stockStatus,
   is_active: true,
+  sell_if_out_of_stock: variant?.sellIfOutOfStock ?? null,
+  stock_preview: stocks.slice(0, 10).map((stock: any) => ({
+    stock_location_id: stock?.stockLocationId ?? null,
+    stock_count: typeof stock?.stockCount === 'number' ? stock.stockCount : null,
+  })),
 };
           })
           .filter((variant: { id: string }) => !!variant.id);
@@ -260,6 +286,7 @@ return {
   source_description_present: !!item?.description,
   source_variant_count: normalizedVariants.length,
   source_variant_price_mode: 'sell_price_only',
+  source_variant_stock_mode: 'stocks_sum',          
 },
           base_price: null,
           description: item?.description ?? null,
