@@ -44,6 +44,7 @@ type SyncPayloadResponse = {
   ok: boolean;
   fetchedAt?: string;
   itemCount?: number;
+  variantAuditMode?: string;
   items?: Array<{
     externalProductId: string;
     title: string;
@@ -54,6 +55,12 @@ type SyncPayloadResponse = {
     shortDescription?: string | null;
     description?: string | null;
     itemType?: string;
+    variantCount?: number;
+    variantsPreview?: Array<{
+      externalVariantId: string;
+      sku?: string | null;
+      optionSummary?: string | null;
+    }>;
   }>;
   error?: string;
 };
@@ -155,6 +162,7 @@ export default function DashboardPage() {
             ok: false,
             itemCount: 0,
             items: [],
+            variantAuditMode: "no_token",
             error: "iFrame JWT token alınamadı.",
           });
 
@@ -245,6 +253,7 @@ export default function DashboardPage() {
           ok: !!syncPayloadRaw?.ok,
           fetchedAt: syncPayloadRaw?.fetchedAt,
           itemCount: syncPayloadRaw?.itemCount ?? 0,
+          variantAuditMode: syncPayloadRaw?.variantAuditMode ?? "-",
           items: Array.isArray(syncPayloadRaw?.items) ? syncPayloadRaw.items : [],
           error: syncPayloadRaw?.error,
         });
@@ -263,6 +272,7 @@ export default function DashboardPage() {
           ok: false,
           itemCount: 0,
           items: [],
+          variantAuditMode: "runtime_error",
           error: error instanceof Error ? error.message : "Unknown error",
         });
       } finally {
@@ -432,6 +442,7 @@ export default function DashboardPage() {
           <Card title="Sync Payload Preview">
             <Row label="Fetch Status" value={syncPayload?.ok ? "OK" : "Hata"} />
             <Row label="Item Count" value={syncPayload?.itemCount ?? 0} />
+            <Row label="Variant Audit Mode" value={syncPayload?.variantAuditMode || "-"} />
             <div style={{ marginTop: 12 }}>
               {syncPayload?.items?.length ? (
                 <div style={{ display: "grid", gap: 10 }}>
@@ -468,7 +479,41 @@ export default function DashboardPage() {
                         Description: {item.description || "-"}
                       </div>
                       <div style={{ fontSize: 13, color: "#6b7280", marginTop: 4 }}>
+                        Variant Count: {item.variantCount ?? 0}
+                      </div>
+                      <div style={{ fontSize: 13, color: "#6b7280", marginTop: 4 }}>
                         Created At: {item.createdAt || "-"}
+                      </div>
+
+                      <div style={{ marginTop: 10 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "#374151" }}>
+                          Variant Preview
+                        </div>
+                        {item.variantsPreview?.length ? (
+                          <div style={{ display: "grid", gap: 6, marginTop: 6 }}>
+                            {item.variantsPreview.map((variant) => (
+                              <div
+                                key={variant.externalVariantId}
+                                style={{
+                                  border: "1px solid #e5e7eb",
+                                  borderRadius: 10,
+                                  padding: 10,
+                                  background: "#ffffff",
+                                  fontSize: 13,
+                                  color: "#4b5563",
+                                }}
+                              >
+                                <div>Variant ID: {variant.externalVariantId || "-"}</div>
+                                <div>SKU: {variant.sku || "-"}</div>
+                                <div>Options: {variant.optionSummary || "-"}</div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={{ marginTop: 6, fontSize: 13, color: "#6b7280" }}>
+                            Varyant verisi gelmedi.
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
