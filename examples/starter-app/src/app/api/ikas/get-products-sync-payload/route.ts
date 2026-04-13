@@ -100,27 +100,22 @@ export async function GET(request: NextRequest) {
               name
             }
             variants {
-              id
-              sku
-              barcodeList
-              variantValues {
-                variantTypeName
-                variantValueName
-              }
-              prices {
-                buyPrice
-                discountPrice
-                sellPrice
-                priceListId
-                currency
-                currencyCode
-                currencySymbol
-              }
-              stocks {
-                stock
-                stockLocationId
-              }
-            }
+  id
+  sku
+  variantValues {
+    variantTypeName
+    variantValueName
+  }
+  prices {
+    buyPrice
+    discountPrice
+    sellPrice
+    priceListId
+    currency
+    currencyCode
+    currencySymbol
+  }
+}
           }
         }
       }
@@ -220,36 +215,28 @@ export async function GET(request: NextRequest) {
           const prices = Array.isArray(variant?.prices) ? variant.prices : [];
           const firstPrice = prices[0] || null;
 
-          const stocks = Array.isArray(variant?.stocks) ? variant.stocks : [];
-          const firstStock = stocks[0] || null;
-
-          const barcodeList = Array.isArray(variant?.barcodeList) ? variant.barcodeList : [];
-
           return {
-            externalVariantId: variant?.id ?? '',
-            sku: variant?.sku ?? null,
-            optionSummary: Array.isArray(variant?.variantValues)
-              ? variant.variantValues
-                  .map((value: any) => {
-                    const typeName = value?.variantTypeName ?? '';
-                    const valueName = value?.variantValueName ?? '';
-                    return [typeName, valueName].filter(Boolean).join(': ');
-                  })
-                  .filter(Boolean)
-                  .join(' / ')
-              : null,
-            buyPrice: firstPrice?.buyPrice ?? null,
-            sellPrice: firstPrice?.sellPrice ?? null,
-            discountPrice: firstPrice?.discountPrice ?? null,
-            priceCurrency:
-              firstPrice?.currencySymbol ??
-              firstPrice?.currencyCode ??
-              firstPrice?.currency ??
-              null,
-            stockValue: firstStock?.stock ?? null,
-            stockLocationId: firstStock?.stockLocationId ?? null,
-            barcodePreview: barcodeList.length ? barcodeList.join(', ') : null,
-          };
+  externalVariantId: variant?.id ?? '',
+  sku: variant?.sku ?? null,
+  optionSummary: Array.isArray(variant?.variantValues)
+    ? variant.variantValues
+        .map((value: any) => {
+          const typeName = value?.variantTypeName ?? '';
+          const valueName = value?.variantValueName ?? '';
+          return [typeName, valueName].filter(Boolean).join(': ');
+        })
+        .filter(Boolean)
+        .join(' / ')
+    : null,
+  buyPrice: firstPrice?.buyPrice ?? null,
+  sellPrice: firstPrice?.sellPrice ?? null,
+  discountPrice: firstPrice?.discountPrice ?? null,
+  priceCurrency:
+    firstPrice?.currencySymbol ??
+    firstPrice?.currencyCode ??
+    firstPrice?.currency ??
+    null,
+};
         }),
       };
     });
