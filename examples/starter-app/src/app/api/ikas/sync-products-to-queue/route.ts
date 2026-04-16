@@ -11,7 +11,7 @@ type SourceRow = {
 };
 
 const IKAS_SOURCE_NAME = 'MIRELLE IKAS App Catalog';
-const PRODUCT_LIMIT = 5;
+const PRODUCT_LIMIT = 50;
 
 function normalizeText(value: string | null | undefined) {
   return String(value || '')
