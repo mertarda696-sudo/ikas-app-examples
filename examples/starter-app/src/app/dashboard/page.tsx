@@ -73,6 +73,48 @@ function getBoolTone(value: boolean): 'success' | 'danger' {
   return value ? 'success' : 'danger';
 }
 
+function mapConnectionLabel(value: boolean): string {
+  return value ? 'Bağlı' : 'Bağlı değil';
+}
+
+function mapSyncStatusLabel(status: string | null | undefined): string {
+  const normalized = String(status || '').toLowerCase();
+
+  if (normalized === 'success') return 'Başarılı';
+  if (normalized === 'running' || normalized === 'processing') return 'Çalışıyor';
+  if (
+    normalized === 'failed' ||
+    normalized === 'error' ||
+    normalized === 'cancelled'
+  ) {
+    return 'Hata';
+  }
+
+  return status || 'Bilinmiyor';
+}
+
+function mapStockStatusLabel(status: string | null | undefined): string {
+  const normalized = String(status || '').toLowerCase();
+
+  if (normalized === 'in_stock') return 'Stokta';
+  if (normalized === 'out_of_stock') return 'Stokta yok';
+  if (normalized === 'low_stock') return 'Stok az';
+
+  return status || 'Bilinmiyor';
+}
+
+function mapChannelLabel(channel: string | null | undefined): string {
+  const normalized = String(channel || '').toLowerCase();
+
+  if (normalized === 'whatsapp') return 'WhatsApp';
+  if (normalized === 'email') return 'E-posta';
+  if (normalized === 'instagram') return 'Instagram';
+  if (normalized === 'facebook') return 'Facebook';
+  if (normalized === 'other') return 'İletişim';
+
+  return channel || 'İletişim';
+}
+
 export default function DashboardPage() {
   const [dashboard, setDashboard] = useState<DashboardSummaryResponse | null>(null);
   const [catalogHealth, setCatalogHealth] = useState<CatalogHealthResponse | null>(null);
@@ -371,7 +413,7 @@ export default function DashboardPage() {
         header: 'Stok',
         render: (row) => (
           <StatusBadge
-            label={row.stockStatus || 'unknown'}
+            label={mapStockStatusLabel(row.stockStatus)}
             tone={
               row.stockStatus === 'in_stock'
                 ? 'success'
@@ -387,7 +429,7 @@ export default function DashboardPage() {
         header: 'Aktif',
         render: (row) => (
           <StatusBadge
-            label={row.isActive ? 'aktif' : 'pasif'}
+            label={row.isActive ? 'Aktif' : 'Pasif'}
             tone={row.isActive ? 'success' : 'danger'}
           />
         ),
@@ -434,7 +476,7 @@ export default function DashboardPage() {
         header: 'Stok Durumu',
         render: (row) => (
           <StatusBadge
-            label={row.stockStatus || 'unknown'}
+            label={mapStockStatusLabel(row.stockStatus)}
             tone={
               row.stockStatus === 'in_stock'
                 ? 'success'
@@ -511,24 +553,28 @@ export default function DashboardPage() {
               />
               <MetricCard
                 label='WhatsApp'
-                value={tenant?.waPhoneNumberId || '-'}
-                helper='Aktif kanal: WhatsApp'
+                value={tenant?.waPhoneNumberId || 'Henüz bağlı değil'}
+                helper={
+                  tenant?.waPhoneNumberId
+                    ? 'Aktif kanal: WhatsApp'
+                    : 'Bağlantı bilgisi henüz tanımlı değil'
+                }
               />
               <MetricCard
-                label='ikas Connection'
+                label='ikas Bağlantısı'
                 value={
                   <StatusBadge
-                    label={dashboard?.ikasConnected ? 'connected' : 'not connected'}
+                    label={mapConnectionLabel(Boolean(dashboard?.ikasConnected))}
                     tone={getBoolTone(Boolean(dashboard?.ikasConnected))}
                   />
                 }
               />
               <MetricCard
-                label='Latest Sync'
+                label='Son Senkron'
                 value={
                   dashboard?.latestSync?.status ? (
                     <StatusBadge
-                      label={dashboard.latestSync.status}
+                      label={mapSyncStatusLabel(dashboard.latestSync.status)}
                       tone={getSyncTone(dashboard.latestSync.status)}
                     />
                   ) : (
@@ -683,7 +729,7 @@ export default function DashboardPage() {
                       >
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                           <StatusBadge
-                            label={channel.channelKey || 'channel'}
+                            label={mapChannelLabel(channel.channelKey)}
                             tone='neutral'
                           />
                           {channel.isPrimary ? (
@@ -692,7 +738,7 @@ export default function DashboardPage() {
                         </div>
 
                         <div style={{ marginTop: 8, fontWeight: 700 }}>
-                          {channel.label || '-'}
+                          {channel.label || 'İletişim'}
                         </div>
 
                         <div style={{ marginTop: 6, color: '#374151' }}>
@@ -729,13 +775,13 @@ export default function DashboardPage() {
           </SectionCard>
 
           <SectionCard
-            title='Integration Tools'
-            subtitle='Geçici admin/test araçları. İlk sürümde yalnızca queue write bırakıldı.'
+            title='Teknik Araçlar'
+            subtitle='Bu alan iç kullanım ve entegrasyon testi için tutulur.'
           >
             <div style={{ display: 'grid', gap: 12 }}>
               <div style={{ color: '#6b7280', fontSize: 14 }}>
-                Bu buton test amaçlı queue write çalıştırır. Üretim panelinde daha sonra
-                ayrı admin araçları ekranına taşınabilir.
+                Bu buton entegrasyon testi amacıyla queue write işlemini tetikler.
+                İleride ayrı bir teknik araçlar ekranına taşınabilir.
               </div>
 
               <div>
@@ -768,7 +814,7 @@ export default function DashboardPage() {
                   value={
                     queueWrite ? (
                       <StatusBadge
-                        label={queueWrite.ok ? 'ok' : 'error'}
+                        label={queueWrite.ok ? 'Başarılı' : 'Hata'}
                         tone={queueWrite.ok ? 'success' : 'danger'}
                       />
                     ) : (
