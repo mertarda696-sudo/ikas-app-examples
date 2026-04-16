@@ -39,6 +39,7 @@ type ProductRow = {
   category: string | null;
   subcategory: string | null;
   base_price: number | string | null;
+  display_price: number | string | null;
   currency: string | null;
   stock_status: string | null;
   is_active: boolean | null;
@@ -346,18 +347,19 @@ export async function getProductsListByMerchantId(
 
     const rows = await prisma.$queryRaw<ProductRow[]>`
       select
-        p.id,
-        p.name,
-        p.handle,
-        p.category,
-        p.subcategory,
-        p.base_price,
-        p.currency,
-        p.stock_status,
-        p.is_active,
-        p.short_description,
-        p.attributes,
-        count(v.id)::int as variant_count
+  p.id,
+  p.name,
+  p.handle,
+  p.category,
+  p.subcategory,
+  p.base_price,
+  coalesce(p.base_price, min(v.price)) as display_price,
+  p.currency,
+  p.stock_status,
+  p.is_active,
+  p.short_description,
+  p.attributes,
+  count(v.id)::int as variant_count
       from public.products p
       left join public.product_variants v
         on v.product_id = p.id
@@ -388,7 +390,7 @@ export async function getProductsListByMerchantId(
       handle: row.handle,
       category: row.category,
       subcategory: row.subcategory,
-      basePrice: toNullableNumber(row.base_price),
+      basePrice: toNullableNumber(row.display_price),
       currency: row.currency,
       stockStatus: row.stock_status,
       isActive: Boolean(row.is_active),
