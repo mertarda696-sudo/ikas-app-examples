@@ -531,7 +531,7 @@ export default function DashboardPage() {
       ) : (
         <div style={{ display: 'grid', gap: 16 }}>
           <SectionCard
-            title='Store & Connection Summary'
+            title='Mağaza ve Bağlantı Özeti'
             subtitle='Mağaza, kanal ve senkron durumunu tek ekranda özetler.'
           >
             <div
@@ -542,12 +542,12 @@ export default function DashboardPage() {
               }}
             >
               <MetricCard
-                label='Brand / Tenant'
+                label='Marka'
                 value={tenant?.brandName || '-'}
                 helper={tenant?.tenantId || '-'}
               />
               <MetricCard
-                label='Store Name'
+                label='Mağaza Adı'
                 value={tenant?.storeName || '-'}
                 helper={tenant?.sourcePlatform || '-'}
               />
@@ -584,14 +584,14 @@ export default function DashboardPage() {
                 helper={formatDate(dashboard?.latestSync?.finishedAt)}
               />
               <MetricCard
-                label='Merchant ID'
+                label='Mağaza Kimliği'
                 value={tenant?.merchantId || '-'}
               />
             </div>
           </SectionCard>
 
           <SectionCard
-            title='Catalog Health'
+            title='Katalog Sağlığı'
             subtitle='Ürün ve varyant yüzeyinin ne kadar dolu olduğunu gösterir.'
           >
             <div
@@ -634,7 +634,7 @@ export default function DashboardPage() {
                 value={dashboard?.contactChannelCount ?? 0}
               />
               <MetricCard
-                label='Last Sync Error Count'
+                label='Son Senkron Hata Sayısı'
                 value={dashboard?.latestSync?.errorCount ?? 0}
                 tone={
                   (dashboard?.latestSync?.errorCount ?? 0) > 0 ? 'warning' : 'success'
@@ -644,8 +644,8 @@ export default function DashboardPage() {
           </SectionCard>
 
           <SectionCard
-            title='Products'
-            subtitle='İlk 50 ürün read-only görünüm.'
+            title='Ürünler'
+            subtitle='İlk 50 ürünün salt okunur görünümü.'
           >
             <SimpleDataTable
               columns={productColumns}
@@ -655,7 +655,7 @@ export default function DashboardPage() {
           </SectionCard>
 
           <SectionCard
-            title='Variants'
+            title='Varyantlar'
             subtitle='Giyim varyantları: SKU, renk, beden, fiyat ve stok.'
           >
             <SimpleDataTable
@@ -666,7 +666,7 @@ export default function DashboardPage() {
           </SectionCard>
 
           <SectionCard
-            title='Policies & Contact'
+            title='Politikalar ve İletişim'
             subtitle='Kargo, iade, değişim, destek ve iletişim özeti.'
           >
             <div style={{ display: 'grid', gap: 12 }}>
@@ -678,27 +678,27 @@ export default function DashboardPage() {
                 }}
               >
                 <MetricCard
-                  label='Shipping'
+                  label='Kargo'
                   value={policiesContact?.policies.shipping || '-'}
                 />
                 <MetricCard
-                  label='Delivery'
+                  label='Teslimat'
                   value={policiesContact?.policies.delivery || '-'}
                 />
                 <MetricCard
-                  label='Return'
+                  label='İade'
                   value={policiesContact?.policies.return || '-'}
                 />
                 <MetricCard
-                  label='Exchange'
+                  label='Değişim'
                   value={policiesContact?.policies.exchange || '-'}
                 />
                 <MetricCard
-                  label='Support'
+                  label='Destek'
                   value={policiesContact?.policies.support || '-'}
                 />
                 <MetricCard
-                  label='Contact'
+                  label='İletişim'
                   value={policiesContact?.policies.contact || '-'}
                 />
               </div>
@@ -712,7 +712,7 @@ export default function DashboardPage() {
                     color: '#111827',
                   }}
                 >
-                  Contact Channels
+                  İletişim Kanalları
                 </h3>
 
                 {(policiesContact?.contactChannels || []).length ? (
@@ -774,81 +774,96 @@ export default function DashboardPage() {
             </div>
           </SectionCard>
 
-          <SectionCard
-            title='Teknik Araçlar'
-            subtitle='Bu alan iç kullanım ve entegrasyon testi için tutulur.'
-          >
-            <div style={{ display: 'grid', gap: 12 }}>
-              <div style={{ color: '#6b7280', fontSize: 14 }}>
-                Bu buton entegrasyon testi amacıyla queue write işlemini tetikler.
-                İleride ayrı bir teknik araçlar ekranına taşınabilir.
-              </div>
+          <details
+  style={{
+    border: '1px solid #e5e7eb',
+    borderRadius: 16,
+    background: '#ffffff',
+    padding: 16,
+  }}
+>
+  <summary
+    style={{
+      cursor: 'pointer',
+      fontWeight: 700,
+      fontSize: 16,
+      color: '#111827',
+      outline: 'none',
+    }}
+  >
+    Teknik Araçlar
+  </summary>
 
-              <div>
-                <button
-                  onClick={handleQueueWrite}
-                  disabled={queueLoading}
-                  style={{
-                    padding: '10px 16px',
-                    borderRadius: 10,
-                    border: '1px solid #d1d5db',
-                    background: queueLoading ? '#e5e7eb' : '#111827',
-                    color: queueLoading ? '#6b7280' : '#ffffff',
-                    cursor: queueLoading ? 'not-allowed' : 'pointer',
-                    fontWeight: 700,
-                  }}
-                >
-                  {queueLoading ? 'Queue write çalışıyor...' : 'Queue write testini başlat'}
-                </button>
-              </div>
+  <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
+    <div style={{ color: '#6b7280', fontSize: 14 }}>
+      Bu alan iç kullanım ve entegrasyon testi için tutulur.
+    </div>
 
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                  gap: 12,
-                }}
-              >
-                <MetricCard
-                  label='Queue Status'
-                  value={
-                    queueWrite ? (
-                      <StatusBadge
-                        label={queueWrite.ok ? 'Başarılı' : 'Hata'}
-                        tone={queueWrite.ok ? 'success' : 'danger'}
-                      />
-                    ) : (
-                      '-'
-                    )
-                  }
-                />
-                <MetricCard label='Run ID' value={queueWrite?.runId || '-'} />
-                <MetricCard
-                  label='Queued Count'
-                  value={queueWrite?.queuedCount ?? 0}
-                />
-                <MetricCard
-                  label='Source Name'
-                  value={queueWrite?.sourceName || '-'}
-                />
-              </div>
+    <div>
+      <button
+        onClick={handleQueueWrite}
+        disabled={queueLoading}
+        style={{
+          padding: '10px 16px',
+          borderRadius: 10,
+          border: '1px solid #d1d5db',
+          background: queueLoading ? '#e5e7eb' : '#111827',
+          color: queueLoading ? '#6b7280' : '#ffffff',
+          cursor: queueLoading ? 'not-allowed' : 'pointer',
+          fontWeight: 700,
+        }}
+      >
+        {queueLoading ? 'Teknik test çalışıyor...' : 'Teknik kuyruk testini başlat'}
+      </button>
+    </div>
 
-              {queueWrite?.queuedExternalProductIds?.length ? (
-                <div
-                  style={{
-                    border: '1px solid #e5e7eb',
-                    borderRadius: 12,
-                    padding: 12,
-                    background: '#fafafa',
-                    fontSize: 13,
-                    color: '#374151',
-                  }}
-                >
-                  {queueWrite.queuedExternalProductIds.join(', ')}
-                </div>
-              ) : null}
-            </div>
-          </SectionCard>
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+        gap: 12,
+      }}
+    >
+      <MetricCard
+        label='Teknik Durum'
+        value={
+          queueWrite ? (
+            <StatusBadge
+              label={queueWrite.ok ? 'Başarılı' : 'Hata'}
+              tone={queueWrite.ok ? 'success' : 'danger'}
+            />
+          ) : (
+            '-'
+          )
+        }
+      />
+      <MetricCard label='Çalıştırma Kimliği' value={queueWrite?.runId || '-'} />
+      <MetricCard
+        label='Kuyruğa Eklenen'
+        value={queueWrite?.queuedCount ?? 0}
+      />
+      <MetricCard
+        label='Kaynak Adı'
+        value={queueWrite?.sourceName || '-'}
+      />
+    </div>
+
+    {queueWrite?.queuedExternalProductIds?.length ? (
+      <div
+        style={{
+          border: '1px solid #e5e7eb',
+          borderRadius: 12,
+          padding: 12,
+          background: '#fafafa',
+          fontSize: 13,
+          color: '#374151',
+        }}
+      >
+        {queueWrite.queuedExternalProductIds.join(', ')}
+      </div>
+    ) : null}
+  </div>
+</details>
 
           {topError ? (
             <SectionCard title='Errors'>
