@@ -32,6 +32,34 @@ function getVariantOptionValue(
   variantValues: any[],
   aliases: string[],
 ) {
+  const APPAREL_COLOR_ALIASES: Array<[string, string]> = [
+  ['siyah', 'siyah'],
+  ['beyaz', 'beyaz'],
+  ['ekru', 'ekru'],
+  ['vizon', 'vizon'],
+  ['tas', 'taş'],
+  ['taş', 'taş'],
+  ['bej', 'bej'],
+  ['mavi', 'mavi'],
+  ['lacivert', 'lacivert'],
+  ['gri', 'gri'],
+  ['haki', 'haki'],
+  ['kahve', 'kahve'],
+  ['bordo', 'bordo'],
+  ['krem', 'krem'],
+];
+
+function extractColorFromText(...values: Array<string | null | undefined>) {
+  const merged = normalizeText(values.filter(Boolean).join(' '));
+
+  for (const [needle, canonical] of APPAREL_COLOR_ALIASES) {
+    if (merged.includes(normalizeText(needle))) {
+      return canonical;
+    }
+  }
+
+  return null;
+}
   const match = variantValues.find((value: any) =>
     aliases.includes(normalizeText(value?.variantTypeName)),
   );
@@ -226,7 +254,13 @@ export async function POST(request: NextRequest) {
                 .join(' / ') || null;
 
             const sizeValue = getVariantOptionValue(variantValues, ['beden', 'size']);
-const colorValue = getVariantOptionValue(variantValues, ['renk', 'color']);
+const colorValue =
+  getVariantOptionValue(variantValues, ['renk', 'color']) ||
+  extractColorFromText(
+    item?.name,
+    optionSummary,
+    variant?.sku,
+  );
 const prices = Array.isArray(variant?.prices) ? variant.prices : [];
 const firstPrice = prices[0] || null;
 const sellPrice =
