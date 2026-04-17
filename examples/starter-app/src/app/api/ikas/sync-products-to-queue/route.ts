@@ -28,11 +28,7 @@ function slugify(value: string | null | undefined) {
     .replace(/^-+|-+$/g, '');
 }
 
-function getVariantOptionValue(
-  variantValues: any[],
-  aliases: string[],
-) {
-  const APPAREL_COLOR_ALIASES: Array<[string, string]> = [
+const APPAREL_COLOR_ALIASES: Array<[string, string]> = [
   ['siyah', 'siyah'],
   ['beyaz', 'beyaz'],
   ['ekru', 'ekru'],
@@ -60,6 +56,11 @@ function extractColorFromText(...values: Array<string | null | undefined>) {
 
   return null;
 }
+
+function getVariantOptionValue(
+  variantValues: any[],
+  aliases: string[],
+) {
   const match = variantValues.find((value: any) =>
     aliases.includes(normalizeText(value?.variantTypeName)),
   );
