@@ -319,57 +319,70 @@ export default function DashboardPage() {
   }, []);
 
   const handleQueueWrite = async () => {
-    try {
-      setQueueLoading(true);
+  try {
+    setQueueLoading(true);
+    setQueueWrite(null);
 
-      const iframeToken = await TokenHelpers.getTokenForIframeApp();
+    const iframeToken = await TokenHelpers.getTokenForIframeApp();
 
-      if (!iframeToken) {
-        setQueueWrite({
-          ok: false,
-          runId: null,
-          sourceName: null,
-          queuedCount: 0,
-          queuedExternalProductIds: [],
-          error: 'iFrame JWT token alınamadı.',
-        });
-        return;
-      }
-
-      const response = await fetch('/api/ikas/sync-products-to-queue', {
-        method: 'POST',
-        cache: 'no-store',
-        headers: {
-          Authorization: 'JWT ' + iframeToken,
-        },
-      });
-
-      const raw = await response.json();
-
-      setQueueWrite({
-        ok: !!raw?.ok && response.ok,
-        fetchedAt: raw?.fetchedAt,
-        runId: raw?.runId ?? null,
-        sourceName: raw?.sourceName ?? null,
-        queuedCount: raw?.queuedCount ?? 0,
-        queuedExternalProductIds: Array.isArray(raw?.queuedExternalProductIds)
-          ? raw.queuedExternalProductIds
-          : [],
-        error: raw?.error,
-      });
-    } catch (error) {
+    if (!iframeToken) {
       setQueueWrite({
         ok: false,
         runId: null,
         sourceName: null,
         queuedCount: 0,
         queuedExternalProductIds: [],
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: 'iFrame JWT token alınamadı.',
       });
-    } finally {
-      setQueueLoading(false);
+      return;
     }
-  };
+
+    const response = await fetch('/api/ikas/sync-products-to-queue', {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        Authorization: 'JWT ' + iframeToken,
+      },
+    });
+
+    const rawText = await response.text();
+    let raw: any = {};
+
+    try {
+      raw = rawText ? JSON.parse(rawText) : {};
+    } catch {
+      raw = {
+        ok: false,
+        error: rawText || `HTTP ${response.status} ${response.statusText}`,
+      };
+    }
+
+    setQueueWrite({
+      ok: !!raw?.ok && response.ok,
+      fetchedAt: raw?.fetchedAt,
+      runId: raw?.runId ?? null,
+      sourceName: raw?.sourceName ?? null,
+      queuedCount: raw?.queuedCount ?? 0,
+      queuedExternalProductIds: Array.isArray(raw?.queuedExternalProductIds)
+        ? raw.queuedExternalProductIds
+        : [],
+      error:
+        raw?.error ||
+        (!response.ok ? `HTTP ${response.status} ${response.statusText}` : undefined),
+    });
+  } catch (error) {
+    setQueueWrite({
+      ok: false,
+      runId: null,
+      sourceName: null,
+      queuedCount: 0,
+      queuedExternalProductIds: [],
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  } finally {
+    setQueueLoading(false);
+  }
+};
 
   const productColumns = useMemo<TableColumn<NonNullable<ProductsListResponse['items']>[number]>[]>(
     () => [
@@ -847,6 +860,39 @@ export default function DashboardPage() {
         value={queueWrite?.sourceName || '-'}
       />
     </div>
+
+    {queueWrite?.fetchedAt ? (
+      <div
+        style={{
+          border: '1px solid #e5e7eb',
+          borderRadius: 12,
+          padding: 12,
+          background: '#fafafa',
+          fontSize: 13,
+          color: '#374151',
+        }}
+      >
+        Son İstek Zamanı: {formatDate(queueWrite.fetchedAt)}
+      </div>
+    ) : null}
+
+    {queueWrite?.error ? (
+      <div
+        style={{
+          border: '1px solid #fecaca',
+          borderRadius: 12,
+          padding: 12,
+          background: '#fef2f2',
+          color: '#991b1b',
+          fontSize: 13,
+          fontWeight: 600,
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+        }}
+      >
+        Hata Detayı: {queueWrite.error}
+      </div>
+    ) : null}
 
     {queueWrite?.queuedExternalProductIds?.length ? (
       <div
