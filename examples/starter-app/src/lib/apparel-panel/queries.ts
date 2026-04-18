@@ -2,7 +2,12 @@ import { prisma } from "@/lib/prisma";
 import type {
   CatalogHealthResponse,
   ContactChannelItem,
+  ConversationDetailItem,
+  ConversationDetailResponse,
+  ConversationMessageItem,
   DashboardSummaryResponse,
+  InboxConversationItem,
+  InboxListResponse,
   LatestSyncSummary,
   PoliciesContactResponse,
   PolicyMap,
@@ -77,6 +82,37 @@ type ContactRow = {
   is_primary: boolean | null;
   is_active: boolean | null;
   priority: number | string | null;
+};
+
+type InboxConversationRow = {
+  conversation_id: string;
+  member_id: string | null;
+  customer_id: string | null;
+  channel: string | null;
+  status: string | null;
+  context_product_name: string | null;
+  last_message_at: Date | string | null;
+  last_message_text: string | null;
+  last_message_direction: "in" | "out" | null;
+};
+
+type ConversationHeaderRow = {
+  conversation_id: string;
+  member_id: string | null;
+  customer_id: string | null;
+  channel: string | null;
+  status: string | null;
+  context_product_name: string | null;
+  last_message_at: Date | string | null;
+};
+
+type ConversationMessageRow = {
+  id: string;
+  direction: "in" | "out" | null;
+  msg_type: string | null;
+  text_body: string | null;
+  created_at: Date | string | null;
+  raw: Record<string, unknown> | null;
 };
 
 function toNumber(value: number | string | null | undefined): number {
@@ -594,6 +630,194 @@ export async function getPoliciesContactByMerchantId(
         contact: null,
       },
       contactChannels: [],
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+export async function getInboxListByMerchantId(
+  merchantId: string,
+): Promise<InboxListResponse> {
+  try {
+    const tenant = await getTenantPanelContextByMerchantId(merchantId);
+
+    if (!tenant) {
+      return {
+        ok: false,
+        fetchedAt: new Date().toISOString(),
+        tenant: null,
+        items: [],
+        error: "Tenant not found for merchant",
+      };
+    }
+
+    const rows = await prisma.$queryRaw<InboxConversationRow[]>`
+      with latest_messages as (
+        select distinct on (m.conversation_id)
+          m.conversation_id as conversation_id,
+          m.text_body as last_message_text,
+          m.direction as last_message_direction,
+          m.created_at as last_message_at
+        from public.messages m
+        inner join public.conversations c
+          on c.id = m.conversation_id
+        where c.tenant_id = CAST(${tenant.tenantId} AS uuid)
+        order by m.conversation_id, m.created_at desc nulls last
+      )
+      select
+        c.id as conversation_id,
+        c.member_id,
+        tm.wa_user_id as customer_id,
+        c.channel,
+        c.status,
+        c.context_product_name,
+        coalesce(lm.last_message_at, c.last_message_at) as last_message_at,
+        lm.last_message_text,
+        lm.last_message_direction
+      from public.conversations c
+      left join public.tenant_members tm
+        on tm.id = c.member_id
+      left join latest_messages lm
+        on lm.conversation_id = c.id
+      where c.tenant_id = CAST(${tenant.tenantId} AS uuid)
+      order by coalesce(lm.last_message_at, c.last_message_at) desc nulls last, c.created_at desc
+      limit 100
+    `;
+
+    const items: InboxConversationItem[] = rows.map((row) => ({
+      id: row.conversation_id,
+      memberId: row.member_id,
+      customerId: row.customer_id,
+      customerDisplay: row.customer_id || "Bilinmeyen müşteri",
+      channel: row.channel,
+      status: row.status,
+      isOpen: row.status === "open",
+      lastMessageText: row.last_message_text,
+      lastMessageDirection: row.last_message_direction,
+      lastMessageAt: toIso(row.last_message_at),
+      contextProductName: row.context_product_name,
+    }));
+
+    return {
+      ok: true,
+      fetchedAt: new Date().toISOString(),
+      tenant,
+      items,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      fetchedAt: new Date().toISOString(),
+      tenant: null,
+      items: [],
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+export async function getConversationDetailByMerchantId(
+  merchantId: string,
+  conversationId: string,
+): Promise<ConversationDetailResponse> {
+  try {
+    const tenant = await getTenantPanelContextByMerchantId(merchantId);
+
+    if (!tenant) {
+      return {
+        ok: false,
+        fetchedAt: new Date().toISOString(),
+        tenant: null,
+        conversation: null,
+        error: "Tenant not found for merchant",
+      };
+    }
+
+    const headerRows = await prisma.$queryRaw<ConversationHeaderRow[]>`
+      select
+        c.id as conversation_id,
+        c.member_id,
+        tm.wa_user_id as customer_id,
+        c.channel,
+        c.status,
+        c.context_product_name,
+        c.last_message_at
+      from public.conversations c
+      left join public.tenant_members tm
+        on tm.id = c.member_id
+      where c.tenant_id = CAST(${tenant.tenantId} AS uuid)
+        and c.id = CAST(${conversationId} AS uuid)
+      limit 1
+    `;
+
+    const header = headerRows[0];
+
+    if (!header) {
+      return {
+        ok: false,
+        fetchedAt: new Date().toISOString(),
+        tenant,
+        conversation: null,
+        error: "Conversation not found",
+      };
+    }
+
+    const messageRows = await prisma.$queryRaw<ConversationMessageRow[]>`
+      select
+        m.id,
+        m.direction,
+        m.msg_type,
+        m.text_body,
+        m.created_at,
+        m.raw
+      from public.messages m
+      where m.conversation_id = CAST(${conversationId} AS uuid)
+      order by m.created_at asc nulls last, m.id asc
+      limit 300
+    `;
+
+    const messages: ConversationMessageItem[] = messageRows.map((row) => {
+      const rawString = JSON.stringify(row.raw || {});
+      const msgType = row.msg_type || null;
+
+      return {
+        id: row.id,
+        direction: row.direction,
+        msgType,
+        textBody: row.text_body,
+        createdAt: toIso(row.created_at),
+        hasMediaLikePayload:
+          msgType != null &&
+          msgType !== "text" &&
+          msgType !== "interactive" &&
+          rawString.length > 2,
+      };
+    });
+
+    const conversation: ConversationDetailItem = {
+      id: header.conversation_id,
+      memberId: header.member_id,
+      customerId: header.customer_id,
+      customerDisplay: header.customer_id || "Bilinmeyen müşteri",
+      channel: header.channel,
+      status: header.status,
+      isOpen: header.status === "open",
+      lastMessageAt: toIso(header.last_message_at),
+      contextProductName: header.context_product_name,
+      messages,
+    };
+
+    return {
+      ok: true,
+      fetchedAt: new Date().toISOString(),
+      tenant,
+      conversation,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      fetchedAt: new Date().toISOString(),
+      tenant: null,
+      conversation: null,
       error: error instanceof Error ? error.message : "Unknown error",
     };
   }
