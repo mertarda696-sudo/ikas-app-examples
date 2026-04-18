@@ -115,3 +115,55 @@ export type PoliciesContactResponse = {
   contactChannels: ContactChannelItem[];
   error?: string;
 };
+
+export type InboxConversationItem = {
+  id: string;
+  memberId: string | null;
+  customerId: string | null;
+  customerDisplay: string;
+  channel: string | null;
+  status: string | null;
+  isOpen: boolean;
+  lastMessageText: string | null;
+  lastMessageDirection: 'in' | 'out' | null;
+  lastMessageAt: string | null;
+  contextProductName: string | null;
+};
+
+export type InboxListResponse = {
+  ok: boolean;
+  fetchedAt: string;
+  tenant: TenantPanelContext | null;
+  items: InboxConversationItem[];
+  error?: string;
+};
+
+export type ConversationMessageItem = {
+  id: string;
+  direction: 'in' | 'out' | null;
+  msgType: string | null;
+  textBody: string | null;
+  createdAt: string | null;
+  hasMediaLikePayload: boolean;
+};
+
+export type ConversationDetailItem = {
+  id: string;
+  memberId: string | null;
+  customerId: string | null;
+  customerDisplay: string;
+  channel: string | null;
+  status: string | null;
+  isOpen: boolean;
+  lastMessageAt: string | null;
+  contextProductName: string | null;
+  messages: ConversationMessageItem[];
+};
+
+export type ConversationDetailResponse = {
+  ok: boolean;
+  fetchedAt: string;
+  tenant: TenantPanelContext | null;
+  conversation: ConversationDetailItem | null;
+  error?: string;
+};
