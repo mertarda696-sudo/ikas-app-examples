@@ -64,15 +64,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             borderRight: '1px solid #e5e7eb',
             background: '#ffffff',
             padding: 20,
+            position: 'sticky',
+            top: 0,
+            alignSelf: 'start',
+            height: '100vh',
+            overflowY: 'auto',
           }}
         >
           <div
             style={{
               border: '1px solid #e5e7eb',
-              borderRadius: 16,
-              padding: 16,
-              background: '#fafafa',
+              borderRadius: 18,
+              padding: 18,
+              background: 'linear-gradient(180deg, #ffffff 0%, #f9fafb 100%)',
               marginBottom: 20,
+              boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
             }}
           >
             <div
@@ -81,7 +87,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 fontWeight: 700,
                 color: '#6b7280',
                 textTransform: 'uppercase',
-                letterSpacing: 0.4,
+                letterSpacing: 0.5,
                 marginBottom: 6,
               }}
             >
@@ -90,7 +96,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
             <div
               style={{
-                fontSize: 20,
+                fontSize: 22,
                 fontWeight: 800,
                 color: '#111827',
                 marginBottom: 8,
@@ -102,12 +108,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div
               style={{
                 fontSize: 14,
-                lineHeight: 1.5,
+                lineHeight: 1.6,
                 color: '#4b5563',
               }}
             >
               Dashboard, mesajlar, katalog ve entegrasyon ekranlarını tek panelde
-              toplayan temel uygulama kabuğu.
+              toplayan müşteri görünümü.
             </div>
           </div>
 
@@ -122,11 +128,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   style={{
                     textDecoration: 'none',
                     border: active ? '1px solid #111827' : '1px solid #e5e7eb',
-                    borderRadius: 14,
+                    borderRadius: 16,
                     padding: 14,
                     background: active ? '#111827' : '#ffffff',
                     color: active ? '#ffffff' : '#111827',
                     transition: 'all 0.15s ease',
+                    boxShadow: active ? '0 6px 16px rgba(17,24,39,0.10)' : 'none',
                   }}
                 >
                   <div
@@ -157,16 +164,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             style={{
               marginTop: 20,
               border: '1px dashed #d1d5db',
-              borderRadius: 14,
+              borderRadius: 16,
               padding: 14,
               background: '#fafafa',
               fontSize: 13,
-              lineHeight: 1.5,
+              lineHeight: 1.6,
               color: '#6b7280',
             }}
           >
-            İlk fazda dashboard ve WhatsApp inbox odaklı ilerliyoruz.
-            Instagram, e-posta, medya/kanıt ekranları sonraki fazlarda buraya eklenecek.
+            İlk ürünleşen fazda dashboard ve WhatsApp inbox odaklı ilerliyoruz.
+            Sonraki fazlarda medya/kanıt, operatör müdahalesi ve çok kanallı inbox
+            bu yapının üstüne eklenecek.
           </div>
         </aside>
 
