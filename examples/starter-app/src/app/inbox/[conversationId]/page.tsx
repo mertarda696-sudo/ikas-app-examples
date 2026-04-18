@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { AppShell } from '@/components/apparel-panel/AppShell';
@@ -30,6 +31,46 @@ function mapMsgTypeLabel(msgType: string | null | undefined) {
   if (msgType === 'audio') return 'ses';
   if (msgType === 'document') return 'doküman';
   return msgType;
+}
+
+function mapChannelLabel(channel: string | null | undefined) {
+  const normalized = String(channel || '').toLowerCase();
+
+  if (normalized === 'whatsapp') return 'WhatsApp';
+  if (normalized === 'instagram') return 'Instagram';
+  if (normalized === 'email') return 'E-posta';
+
+  return channel || 'Kanal';
+}
+
+function mapStatusLabel(status: string | null | undefined) {
+  const normalized = String(status || '').toLowerCase();
+  if (normalized === 'open') return 'Açık';
+  if (normalized === 'closed') return 'Kapalı';
+  return status || '-';
+}
+
+function statusColors(status: string | null | undefined) {
+  const normalized = String(status || '').toLowerCase();
+
+  if (normalized === 'open') {
+    return {
+      background: '#ecfdf5',
+      color: '#065f46',
+    };
+  }
+
+  if (normalized === 'closed') {
+    return {
+      background: '#f3f4f6',
+      color: '#4b5563',
+    };
+  }
+
+  return {
+    background: '#eff6ff',
+    color: '#1d4ed8',
+  };
 }
 
 export default function ConversationDetailPage() {
@@ -94,6 +135,7 @@ export default function ConversationDetailPage() {
   }, [conversationId]);
 
   const conversation = data?.conversation || null;
+  const badge = statusColors(conversation?.status);
 
   return (
     <AppShell>
@@ -105,12 +147,29 @@ export default function ConversationDetailPage() {
           minHeight: '100vh',
         }}
       >
-        <div style={{ marginBottom: 24 }}>
+        <div style={{ marginBottom: 20 }}>
+          <Link
+            href="/inbox"
+            style={{
+              display: 'inline-block',
+              textDecoration: 'none',
+              borderRadius: 10,
+              padding: '8px 12px',
+              background: '#ffffff',
+              color: '#111827',
+              border: '1px solid #e5e7eb',
+              fontWeight: 700,
+              marginBottom: 14,
+            }}
+          >
+            ← Mesajlara dön
+          </Link>
+
           <h1 style={{ fontSize: 30, fontWeight: 800, marginBottom: 8 }}>
             Konuşma Detayı
           </h1>
           <p style={{ color: '#4b5563', margin: 0 }}>
-            Mesaj akışı, ürün bağlamı ve medya/kanıt görünümü burada yer alır.
+            Mesaj akışı, ürün bağlamı ve medya / kanıt görünümü burada yer alır.
           </p>
         </div>
 
@@ -146,22 +205,103 @@ export default function ConversationDetailPage() {
             <section
               style={{
                 border: '1px solid #e5e7eb',
-                borderRadius: 16,
+                borderRadius: 18,
                 padding: 18,
                 background: '#ffffff',
               }}
             >
-              <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>
-                Konuşma Özeti
-              </div>
-
-              <div style={{ display: 'grid', gap: 8, color: '#374151' }}>
-                <div><strong>Müşteri:</strong> {conversation.customerDisplay}</div>
-                <div><strong>Kanal:</strong> {conversation.channel || '-'}</div>
-                <div><strong>Durum:</strong> {conversation.status || '-'}</div>
-                <div><strong>Son mesaj:</strong> {formatDate(conversation.lastMessageAt)}</div>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 16,
+                  alignItems: 'flex-start',
+                  flexWrap: 'wrap',
+                }}
+              >
                 <div>
-                  <strong>Aktif ürün bağlamı:</strong> {conversation.contextProductName || '-'}
+                  <div
+                    style={{
+                      fontSize: 20,
+                      fontWeight: 800,
+                      color: '#111827',
+                      marginBottom: 8,
+                    }}
+                  >
+                    {conversation.customerDisplay}
+                  </div>
+
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 8,
+                      flexWrap: 'wrap',
+                      marginBottom: 10,
+                    }}
+                  >
+                    <div
+                      style={{
+                        borderRadius: 999,
+                        padding: '5px 10px',
+                        background: '#eef2ff',
+                        color: '#3730a3',
+                        fontSize: 12,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {mapChannelLabel(conversation.channel)}
+                    </div>
+
+                    <div
+                      style={{
+                        borderRadius: 999,
+                        padding: '5px 10px',
+                        background: badge.background,
+                        color: badge.color,
+                        fontSize: 12,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {mapStatusLabel(conversation.status)}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gap: 6, color: '#4b5563' }}>
+                    <div>
+                      <strong>Müşteri kimliği:</strong> {conversation.customerId || '-'}
+                    </div>
+                    <div>
+                      <strong>Aktif ürün bağlamı:</strong> {conversation.contextProductName || '-'}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ minWidth: 220, textAlign: 'right' }}>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: '#6b7280',
+                      marginBottom: 8,
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.3,
+                    }}
+                  >
+                    Son mesaj zamanı
+                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>
+                    {formatDate(conversation.lastMessageAt)}
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 12,
+                      fontSize: 13,
+                      color: '#6b7280',
+                    }}
+                  >
+                    Toplam mesaj: {conversation.messages.length}
+                  </div>
                 </div>
               </div>
             </section>
@@ -169,12 +309,12 @@ export default function ConversationDetailPage() {
             <section
               style={{
                 border: '1px solid #e5e7eb',
-                borderRadius: 16,
+                borderRadius: 18,
                 padding: 18,
                 background: '#ffffff',
               }}
             >
-              <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 14 }}>
+              <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 14 }}>
                 Mesaj Akışı
               </div>
 
@@ -195,26 +335,27 @@ export default function ConversationDetailPage() {
                       >
                         <div
                           style={{
-                            maxWidth: '75%',
-                            borderRadius: 16,
+                            maxWidth: '78%',
+                            borderRadius: 18,
                             padding: 14,
                             background: incoming ? '#ffffff' : '#111827',
                             color: incoming ? '#111827' : '#ffffff',
                             border: incoming ? '1px solid #e5e7eb' : '1px solid #111827',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
                           }}
                         >
                           <div
                             style={{
                               fontSize: 12,
-                              fontWeight: 700,
-                              opacity: 0.8,
+                              fontWeight: 800,
+                              opacity: 0.82,
                               marginBottom: 6,
                             }}
                           >
                             {mapDirectionLabel(message.direction)} · {mapMsgTypeLabel(message.msgType)}
                           </div>
 
-                          <div style={{ fontSize: 14, lineHeight: 1.6 }}>
+                          <div style={{ fontSize: 14, lineHeight: 1.7 }}>
                             {message.textBody || 'Metin içeriği bulunmuyor.'}
                           </div>
 
@@ -233,11 +374,11 @@ export default function ConversationDetailPage() {
                               style={{
                                 marginTop: 10,
                                 fontSize: 12,
-                                fontWeight: 700,
-                                opacity: 0.85,
+                                fontWeight: 800,
+                                opacity: 0.9,
                               }}
                             >
-                              Medya / kanıt içeriği mevcut olabilir.
+                              Medya / kanıt içeriği mevcut olabilir
                             </div>
                           ) : null}
                         </div>
@@ -251,12 +392,12 @@ export default function ConversationDetailPage() {
             <section
               style={{
                 border: '1px solid #e5e7eb',
-                borderRadius: 16,
+                borderRadius: 18,
                 padding: 18,
                 background: '#ffffff',
               }}
             >
-              <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>
+              <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 10 }}>
                 Medya ve Kanıt Alanı
               </div>
               <div style={{ color: '#4b5563', lineHeight: 1.7 }}>
