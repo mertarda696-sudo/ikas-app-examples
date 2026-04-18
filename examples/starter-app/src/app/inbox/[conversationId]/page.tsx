@@ -1,3 +1,4 @@
+import React from 'react';
 import { AppShell } from '@/components/apparel-panel/AppShell';
 
 const cardStyle: React.CSSProperties = {
@@ -7,11 +8,13 @@ const cardStyle: React.CSSProperties = {
   background: '#ffffff',
 };
 
-export default function ConversationDetailPage({
+export default async function ConversationDetailPage({
   params,
 }: {
-  params: { conversationId: string };
+  params: Promise<{ conversationId: string }>;
 }) {
+  const { conversationId } = await params;
+
   return (
     <AppShell>
       <main
@@ -37,7 +40,7 @@ export default function ConversationDetailPage({
               Route parametresi
             </div>
             <div style={{ color: '#111827', fontWeight: 600 }}>
-              conversationId: {decodeURIComponent(params.conversationId)}
+              conversationId: {decodeURIComponent(conversationId)}
             </div>
           </section>
 
