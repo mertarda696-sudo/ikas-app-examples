@@ -32,6 +32,36 @@ function mapDirectionLabel(direction: 'in' | 'out' | null | undefined) {
   return 'Bilinmiyor';
 }
 
+function mapStatusLabel(status: string | null | undefined) {
+  const normalized = String(status || '').toLowerCase();
+  if (normalized === 'open') return 'Açık';
+  if (normalized === 'closed') return 'Kapalı';
+  return status || '-';
+}
+
+function statusColors(status: string | null | undefined) {
+  const normalized = String(status || '').toLowerCase();
+
+  if (normalized === 'open') {
+    return {
+      background: '#ecfdf5',
+      color: '#065f46',
+    };
+  }
+
+  if (normalized === 'closed') {
+    return {
+      background: '#f3f4f6',
+      color: '#4b5563',
+    };
+  }
+
+  return {
+    background: '#eff6ff',
+    color: '#1d4ed8',
+  };
+}
+
 export default function InboxPage() {
   const [data, setData] = useState<InboxListResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -94,7 +124,7 @@ export default function InboxPage() {
             Mesajlar
           </h1>
           <p style={{ color: '#4b5563', margin: 0 }}>
-            WhatsApp konuşmaları ve konuşma detay ekranı burada listelenecek.
+            WhatsApp konuşmaları, müşteri akışı ve operatör görünümü burada listelenir.
           </p>
         </div>
 
@@ -106,7 +136,7 @@ export default function InboxPage() {
               border: '1px solid #fecaca',
               background: '#fef2f2',
               color: '#991b1b',
-              borderRadius: 12,
+              borderRadius: 14,
               padding: 16,
               fontWeight: 600,
             }}
@@ -123,79 +153,141 @@ export default function InboxPage() {
               color: '#6b7280',
             }}
           >
-            Bu tenant için henüz konuşma görünmüyor. WhatsApp bağlı değilse bu ekranın boş gelmesi normaldir.
+            Bu tenant için henüz konuşma görünmüyor. WhatsApp bağlı değilse bu ekranın boş
+            gelmesi normaldir.
           </div>
         ) : (
-          <div style={{ display: 'grid', gap: 12 }}>
-            {items.map((item) => (
-              <Link
-                key={item.id}
-                href={`/inbox/${item.id}`}
-                style={{
-                  textDecoration: 'none',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: 16,
-                  background: '#ffffff',
-                  padding: 16,
-                  color: '#111827',
-                }}
-              >
-                <div
+          <div style={{ display: 'grid', gap: 14 }}>
+            {items.map((item) => {
+              const badge = statusColors(item.status);
+
+              return (
+                <Link
+                  key={item.id}
+                  href={`/inbox/${item.id}`}
                   style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    gap: 16,
-                    alignItems: 'flex-start',
-                    flexWrap: 'wrap',
+                    textDecoration: 'none',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: 18,
+                    background: '#ffffff',
+                    padding: 18,
+                    color: '#111827',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
                   }}
                 >
-                  <div style={{ minWidth: 280, flex: 1 }}>
-                    <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>
-                      {item.customerDisplay}
-                    </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 18,
+                      alignItems: 'flex-start',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <div style={{ minWidth: 300, flex: 1 }}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: 8,
+                          alignItems: 'center',
+                          flexWrap: 'wrap',
+                          marginBottom: 10,
+                        }}
+                      >
+                        <div style={{ fontSize: 17, fontWeight: 800 }}>
+                          {item.customerDisplay}
+                        </div>
 
-                    <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>
-                      {mapChannelLabel(item.channel)} · {item.isOpen ? 'Açık konuşma' : 'Kapalı konuşma'}
-                    </div>
+                        <div
+                          style={{
+                            borderRadius: 999,
+                            padding: '5px 10px',
+                            background: '#eef2ff',
+                            color: '#3730a3',
+                            fontSize: 12,
+                            fontWeight: 700,
+                          }}
+                        >
+                          {mapChannelLabel(item.channel)}
+                        </div>
 
-                    <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.6 }}>
-                      <strong>{mapDirectionLabel(item.lastMessageDirection)}:</strong>{' '}
-                      {item.lastMessageText || 'Mesaj metni bulunmuyor.'}
-                    </div>
-
-                    {item.contextProductName ? (
-                      <div style={{ marginTop: 8, fontSize: 13, color: '#6b7280' }}>
-                        Aktif ürün bağlamı: {item.contextProductName}
+                        <div
+                          style={{
+                            borderRadius: 999,
+                            padding: '5px 10px',
+                            background: badge.background,
+                            color: badge.color,
+                            fontSize: 12,
+                            fontWeight: 700,
+                          }}
+                        >
+                          {mapStatusLabel(item.status)}
+                        </div>
                       </div>
-                    ) : null}
-                  </div>
 
-                  <div style={{ minWidth: 180, textAlign: 'right' }}>
-                    <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>
-                      Son mesaj zamanı
-                    </div>
-                    <div style={{ fontSize: 14, fontWeight: 600 }}>
-                      {formatDate(item.lastMessageAt)}
+                      <div
+                        style={{
+                          fontSize: 14,
+                          color: '#374151',
+                          lineHeight: 1.7,
+                          marginBottom: 10,
+                        }}
+                      >
+                        <strong>{mapDirectionLabel(item.lastMessageDirection)}:</strong>{' '}
+                        {item.lastMessageText || 'Mesaj metni bulunmuyor.'}
+                      </div>
+
+                      {item.contextProductName ? (
+                        <div
+                          style={{
+                            display: 'inline-block',
+                            borderRadius: 999,
+                            padding: '6px 10px',
+                            background: '#f9fafb',
+                            color: '#4b5563',
+                            fontSize: 12,
+                            fontWeight: 700,
+                            border: '1px solid #e5e7eb',
+                          }}
+                        >
+                          Aktif ürün bağlamı: {item.contextProductName}
+                        </div>
+                      ) : null}
                     </div>
 
                     <div
                       style={{
-                        marginTop: 12,
-                        display: 'inline-block',
-                        borderRadius: 999,
-                        padding: '6px 10px',
-                        background: item.isOpen ? '#ecfdf5' : '#f3f4f6',
-                        color: item.isOpen ? '#065f46' : '#4b5563',
-                        fontSize: 12,
-                        fontWeight: 700,
+                        minWidth: 190,
+                        textAlign: 'right',
                       }}
                     >
-                      {item.status || '-'}
+                      <div
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: '#6b7280',
+                          marginBottom: 8,
+                          textTransform: 'uppercase',
+                          letterSpacing: 0.3,
+                        }}
+                      >
+                        Son mesaj zamanı
+                      </div>
+
+                      <div
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 700,
+                          color: '#111827',
+                        }}
+                      >
+                        {formatDate(item.lastMessageAt)}
+                      </div>
                     </div>
                   </div>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              );
+            })}
           </div>
         )}
       </main>
