@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { AppShell } from '@/components/apparel-panel/AppShell';
 
@@ -166,14 +167,42 @@ export default function OperationsPage() {
           minHeight: '100vh',
         }}
       >
-        <div style={{ marginBottom: 20 }}>
-          <h1 style={{ fontSize: 30, fontWeight: 800, marginBottom: 8 }}>
-            Operasyonlar
-          </h1>
-          <p style={{ color: '#4b5563', margin: 0, lineHeight: 1.7 }}>
-            Hasarlı ürün, kargo şikayeti, dekont ve diğer operasyon vakalarını tek
-            ekranda toplamak için hazırlanan v1 yapı.
-          </p>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: 16,
+            alignItems: 'flex-start',
+            flexWrap: 'wrap',
+            marginBottom: 20,
+          }}
+        >
+          <div>
+            <h1 style={{ fontSize: 30, fontWeight: 800, marginBottom: 8 }}>
+              Operasyonlar
+            </h1>
+            <p style={{ color: '#4b5563', margin: 0, lineHeight: 1.7 }}>
+              Hasarlı ürün, kargo şikayeti, dekont ve diğer operasyon vakalarını tek
+              ekranda toplamak için hazırlanan v1 yapı.
+            </p>
+          </div>
+
+          <div
+            style={{
+              border: '1px dashed #d1d5db',
+              borderRadius: 16,
+              background: '#ffffff',
+              padding: 14,
+              color: '#6b7280',
+              maxWidth: 320,
+              fontSize: 13,
+              lineHeight: 1.6,
+            }}
+          >
+            Bu ekran ilk aşamada vaka merkezi mantığını göstermek için placeholder
+            veriyle çalışıyor. Sonraki fazda gerçek case modeli ve medya/kanıt
+            ilişkileri bağlanacak.
+          </div>
         </div>
 
         <section
@@ -251,32 +280,6 @@ export default function OperationsPage() {
           }}
         >
           <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
-            V1 Operasyon Mantığı
-          </div>
-
-          <div style={{ display: 'grid', gap: 10, color: '#4b5563', lineHeight: 1.7 }}>
-            <div>
-              Bu ekran hasarlı ürün, kargo şikayeti, genel şikayet, ödeme/dekont ve
-              iade/değişim kayıtlarını ayrı sayfalara bölmek yerine tek vaka merkezi
-              altında toplamak için tasarlanıyor.
-            </div>
-            <div>
-              Sonraki fazda her kayıt müşteri, sipariş, konuşma ve medya/kanıt
-              bağlantısıyla gerçek veriye bağlanacak.
-            </div>
-          </div>
-        </section>
-
-        <section
-          style={{
-            border: '1px solid #e5e7eb',
-            borderRadius: 18,
-            background: '#ffffff',
-            padding: 18,
-            marginBottom: 16,
-          }}
-        >
-          <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
             Vaka Tipleri
           </div>
 
@@ -322,7 +325,7 @@ export default function OperationsPage() {
               fontWeight: 800,
             }}
           >
-            Operasyon Listesi Taslağı
+            Operasyon Listesi
           </div>
 
           <div style={{ overflowX: 'auto' }}>
@@ -330,7 +333,7 @@ export default function OperationsPage() {
               style={{
                 width: '100%',
                 borderCollapse: 'collapse',
-                minWidth: 1080,
+                minWidth: 1180,
               }}
             >
               <thead>
@@ -346,6 +349,7 @@ export default function OperationsPage() {
                     'Sorumlu',
                     'Medya',
                     'Son Güncelleme',
+                    'Detay',
                   ].map((header) => (
                     <th
                       key={header}
@@ -367,7 +371,13 @@ export default function OperationsPage() {
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.id}>
-                    <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6', fontWeight: 700 }}>
+                    <td
+                      style={{
+                        padding: 14,
+                        borderBottom: '1px solid #f3f4f6',
+                        fontWeight: 700,
+                      }}
+                    >
                       {row.id}
                     </td>
                     <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
@@ -394,8 +404,26 @@ export default function OperationsPage() {
                     <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
                       {row.media}
                     </td>
-                    <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6', color: '#6b7280' }}>
+                    <td
+                      style={{
+                        padding: 14,
+                        borderBottom: '1px solid #f3f4f6',
+                        color: '#6b7280',
+                      }}
+                    >
                       {row.updatedAt}
+                    </td>
+                    <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
+                      <Link
+                        href={`/operations/${row.id}`}
+                        style={{
+                          textDecoration: 'none',
+                          color: '#111827',
+                          fontWeight: 700,
+                        }}
+                      >
+                        Detayı Aç →
+                      </Link>
                     </td>
                   </tr>
                 ))}
@@ -403,7 +431,7 @@ export default function OperationsPage() {
                 {rows.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={10}
+                      colSpan={11}
                       style={{
                         padding: 18,
                         color: '#6b7280',
