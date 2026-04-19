@@ -82,57 +82,128 @@ export default function ConversationDetailPage() {
   const [data, setData] = useState<ConversationDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const run = async () => {
-      try {
-        if (!conversationId) {
-          setData({
-            ok: false,
-            fetchedAt: new Date().toISOString(),
-            tenant: null,
-            conversation: null,
-            error: 'conversationId bulunamadı.',
-          });
-          return;
-        }
+  const [replyText, setReplyText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
-        const iframeToken = await TokenHelpers.getTokenForIframeApp();
-
-        if (!iframeToken) {
-          setData({
-            ok: false,
-            fetchedAt: new Date().toISOString(),
-            tenant: null,
-            conversation: null,
-            error: 'iFrame JWT token alınamadı.',
-          });
-          return;
-        }
-
-        const response = await fetch(`/api/apparel/conversations/${conversationId}`, {
-          cache: 'no-store',
-          headers: {
-            Authorization: 'JWT ' + iframeToken,
-          },
-        });
-
-        const raw = await response.json();
-        setData(raw);
-      } catch (error) {
+  const loadConversation = async (options?: { silent?: boolean }) => {
+    try {
+      if (!conversationId) {
         setData({
           ok: false,
           fetchedAt: new Date().toISOString(),
           tenant: null,
           conversation: null,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: 'conversationId bulunamadı.',
         });
-      } finally {
+        return;
+      }
+
+      if (!options?.silent) {
+        setLoading(true);
+      }
+
+      const iframeToken = await TokenHelpers.getTokenForIframeApp();
+
+      if (!iframeToken) {
+        setData({
+          ok: false,
+          fetchedAt: new Date().toISOString(),
+          tenant: null,
+          conversation: null,
+          error: 'iFrame JWT token alınamadı.',
+        });
+        return;
+      }
+
+      const response = await fetch(`/api/apparel/conversations/${conversationId}`, {
+        cache: 'no-store',
+        headers: {
+          Authorization: 'JWT ' + iframeToken,
+        },
+      });
+
+      const raw = await response.json();
+      setData(raw);
+    } catch (error) {
+      setData({
+        ok: false,
+        fetchedAt: new Date().toISOString(),
+        tenant: null,
+        conversation: null,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    } finally {
+      if (!options?.silent) {
         setLoading(false);
       }
-    };
+    }
+  };
 
-    run();
+  useEffect(() => {
+    loadConversation();
   }, [conversationId]);
+
+  const handleSendReply = async () => {
+    try {
+      const normalizedReply = replyText.trim();
+
+      setActionError(null);
+      setActionSuccess(null);
+
+      if (!conversationId) {
+        setActionError('conversationId bulunamadı.');
+        return;
+      }
+
+      if (!normalizedReply) {
+        setActionError('Lütfen gönderilecek mesajı yazın.');
+        return;
+      }
+
+      setSending(true);
+
+      const iframeToken = await TokenHelpers.getTokenForIframeApp();
+
+      if (!iframeToken) {
+        setActionError('iFrame JWT token alınamadı.');
+        return;
+      }
+
+      const response = await fetch(
+        `/api/apparel/conversations/${conversationId}/reply`,
+        {
+          method: 'POST',
+          cache: 'no-store',
+          headers: {
+            Authorization: 'JWT ' + iframeToken,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            replyText: normalizedReply,
+          }),
+        },
+      );
+
+      const raw = await response.json();
+
+      if (!response.ok || !raw?.ok) {
+        throw new Error(raw?.error || 'Mesaj gönderilemedi.');
+      }
+
+      setReplyText('');
+      setActionSuccess('Mesaj başarıyla gönderildi.');
+
+      await loadConversation({ silent: true });
+    } catch (error) {
+      setActionError(
+        error instanceof Error ? error.message : 'Mesaj gönderilirken hata oluştu.',
+      );
+    } finally {
+      setSending(false);
+    }
+  };
 
   const conversation = data?.conversation || null;
   const badge = statusColors(conversation?.status);
@@ -271,7 +342,8 @@ export default function ConversationDetailPage() {
                       <strong>Müşteri kimliği:</strong> {conversation.customerId || '-'}
                     </div>
                     <div>
-                      <strong>Aktif ürün bağlamı:</strong> {conversation.contextProductName || '-'}
+                      <strong>Aktif ürün bağlamı:</strong>{' '}
+                      {conversation.contextProductName || '-'}
                     </div>
                   </div>
                 </div>
@@ -352,7 +424,8 @@ export default function ConversationDetailPage() {
                               marginBottom: 6,
                             }}
                           >
-                            {mapDirectionLabel(message.direction)} · {mapMsgTypeLabel(message.msgType)}
+                            {mapDirectionLabel(message.direction)} ·{' '}
+                            {mapMsgTypeLabel(message.msgType)}
                           </div>
 
                           <div style={{ fontSize: 14, lineHeight: 1.7 }}>
@@ -387,6 +460,106 @@ export default function ConversationDetailPage() {
                   })}
                 </div>
               )}
+            </section>
+
+            <section
+              style={{
+                border: '1px solid #e5e7eb',
+                borderRadius: 18,
+                padding: 18,
+                background: '#ffffff',
+              }}
+            >
+              <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 10 }}>
+                Operatör Mesajı
+              </div>
+
+              <div style={{ color: '#4b5563', lineHeight: 1.7, marginBottom: 12 }}>
+                Bu alandan müşteriye manuel WhatsApp mesajı gönderebilirsin.
+              </div>
+
+              <textarea
+                value={replyText}
+                onChange={(event) => setReplyText(event.target.value)}
+                placeholder="Müşteriye gönderilecek manuel mesajı yazın..."
+                style={{
+                  width: '100%',
+                  minHeight: 120,
+                  borderRadius: 14,
+                  border: '1px solid #d1d5db',
+                  padding: 14,
+                  fontSize: 14,
+                  lineHeight: 1.6,
+                  resize: 'vertical',
+                  outline: 'none',
+                }}
+                disabled={sending}
+              />
+
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  marginTop: 12,
+                }}
+              >
+                <div style={{ fontSize: 12, color: '#6b7280' }}>
+                  {replyText.trim().length} karakter
+                </div>
+
+                <button
+                  onClick={handleSendReply}
+                  disabled={sending}
+                  style={{
+                    border: 'none',
+                    borderRadius: 12,
+                    padding: '10px 16px',
+                    background: sending ? '#9ca3af' : '#111827',
+                    color: '#ffffff',
+                    fontWeight: 700,
+                    cursor: sending ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {sending ? 'Gönderiliyor...' : 'Mesajı Gönder'}
+                </button>
+              </div>
+
+              {actionError ? (
+                <div
+                  style={{
+                    marginTop: 12,
+                    border: '1px solid #fecaca',
+                    background: '#fef2f2',
+                    color: '#991b1b',
+                    borderRadius: 12,
+                    padding: 12,
+                    fontSize: 14,
+                    fontWeight: 600,
+                  }}
+                >
+                  {actionError}
+                </div>
+              ) : null}
+
+              {actionSuccess ? (
+                <div
+                  style={{
+                    marginTop: 12,
+                    border: '1px solid #bbf7d0',
+                    background: '#f0fdf4',
+                    color: '#166534',
+                    borderRadius: 12,
+                    padding: 12,
+                    fontSize: 14,
+                    fontWeight: 600,
+                  }}
+                >
+                  {actionSuccess}
+                </div>
+              ) : null}
             </section>
 
             <section
