@@ -145,6 +145,14 @@ export default function ConversationDetailPage() {
     loadConversation();
   }, [conversationId]);
 
+  const conversation = data?.conversation || null;
+  const badge = statusColors(conversation?.status);
+
+  const hasWhatsAppLine = Boolean(data?.tenant?.waPhoneNumberId);
+  const replyDisabledReason = hasWhatsAppLine
+    ? null
+    : 'Bu mağaza için WhatsApp hattı henüz bağlanmamış.';
+
   const handleSendReply = async () => {
     try {
       const normalizedReply = replyText.trim();
@@ -154,6 +162,11 @@ export default function ConversationDetailPage() {
 
       if (!conversationId) {
         setActionError('conversationId bulunamadı.');
+        return;
+      }
+
+      if (!hasWhatsAppLine) {
+        setActionError('Bu mağaza için WhatsApp hattı henüz bağlanmamış.');
         return;
       }
 
@@ -204,9 +217,6 @@ export default function ConversationDetailPage() {
       setSending(false);
     }
   };
-
-  const conversation = data?.conversation || null;
-  const badge = statusColors(conversation?.status);
 
   return (
     <AppShell>
@@ -345,6 +355,10 @@ export default function ConversationDetailPage() {
                       <strong>Aktif ürün bağlamı:</strong>{' '}
                       {conversation.contextProductName || '-'}
                     </div>
+                    <div>
+                      <strong>WhatsApp hattı:</strong>{' '}
+                      {hasWhatsAppLine ? 'Bağlı' : 'Bağlı değil'}
+                    </div>
                   </div>
                 </div>
 
@@ -475,13 +489,36 @@ export default function ConversationDetailPage() {
               </div>
 
               <div style={{ color: '#4b5563', lineHeight: 1.7, marginBottom: 12 }}>
-                Bu alandan müşteriye manuel WhatsApp mesajı gönderebilirsin.
+                {hasWhatsAppLine
+                  ? 'Bu alandan müşteriye manuel WhatsApp mesajı gönderebilirsin.'
+                  : 'Bu mağaza için WhatsApp hattı henüz bağlanmadığı için manuel gönderim şu anda kapalı.'}
               </div>
+
+              {!hasWhatsAppLine ? (
+                <div
+                  style={{
+                    marginBottom: 12,
+                    border: '1px solid #fde68a',
+                    background: '#fffbeb',
+                    color: '#92400e',
+                    borderRadius: 12,
+                    padding: 12,
+                    fontSize: 14,
+                    fontWeight: 600,
+                  }}
+                >
+                  {replyDisabledReason}
+                </div>
+              ) : null}
 
               <textarea
                 value={replyText}
                 onChange={(event) => setReplyText(event.target.value)}
-                placeholder="Müşteriye gönderilecek manuel mesajı yazın..."
+                placeholder={
+                  hasWhatsAppLine
+                    ? 'Müşteriye gönderilecek manuel mesajı yazın...'
+                    : 'WhatsApp hattı bağlanmadan manuel gönderim açılamaz.'
+                }
                 style={{
                   width: '100%',
                   minHeight: 120,
@@ -492,8 +529,9 @@ export default function ConversationDetailPage() {
                   lineHeight: 1.6,
                   resize: 'vertical',
                   outline: 'none',
+                  background: hasWhatsAppLine ? '#ffffff' : '#f9fafb',
                 }}
-                disabled={sending}
+                disabled={sending || !hasWhatsAppLine}
               />
 
               <div
@@ -507,20 +545,22 @@ export default function ConversationDetailPage() {
                 }}
               >
                 <div style={{ fontSize: 12, color: '#6b7280' }}>
-                  {replyText.trim().length} karakter
+                  {hasWhatsAppLine
+                    ? `${replyText.trim().length} karakter`
+                    : 'WhatsApp hattı bekleniyor'}
                 </div>
 
                 <button
                   onClick={handleSendReply}
-                  disabled={sending}
+                  disabled={sending || !hasWhatsAppLine}
                   style={{
                     border: 'none',
                     borderRadius: 12,
                     padding: '10px 16px',
-                    background: sending ? '#9ca3af' : '#111827',
+                    background: sending || !hasWhatsAppLine ? '#9ca3af' : '#111827',
                     color: '#ffffff',
                     fontWeight: 700,
-                    cursor: sending ? 'not-allowed' : 'pointer',
+                    cursor: sending || !hasWhatsAppLine ? 'not-allowed' : 'pointer',
                   }}
                 >
                   {sending ? 'Gönderiliyor...' : 'Mesajı Gönder'}
