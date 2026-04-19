@@ -135,7 +135,7 @@ function toIso(value: Date | string | null | undefined): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-async function getTenantPanelContextByMerchantId(
+export async function getTenantPanelContextByMerchantId(
   merchantId: string,
 ): Promise<TenantPanelContext | null> {
   const rows = await prisma.$queryRaw<TenantContextRow[]>`
