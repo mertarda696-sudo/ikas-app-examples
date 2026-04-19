@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { AppShell } from '@/components/apparel-panel/AppShell';
 
 const ORDER_ROWS = [
@@ -74,14 +75,41 @@ export default function OrdersPage() {
           minHeight: '100vh',
         }}
       >
-        <div style={{ marginBottom: 20 }}>
-          <h1 style={{ fontSize: 30, fontWeight: 800, marginBottom: 8 }}>
-            Siparişler
-          </h1>
-          <p style={{ color: '#4b5563', margin: 0, lineHeight: 1.7 }}>
-            Sipariş, ödeme, kargo ve bağlı konuşma / operasyon kayıtlarını tek yerde
-            izlemek için hazırlanan v1 ekranı.
-          </p>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: 16,
+            alignItems: 'flex-start',
+            flexWrap: 'wrap',
+            marginBottom: 20,
+          }}
+        >
+          <div>
+            <h1 style={{ fontSize: 30, fontWeight: 800, marginBottom: 8 }}>
+              Siparişler
+            </h1>
+            <p style={{ color: '#4b5563', margin: 0, lineHeight: 1.7 }}>
+              Sipariş, ödeme, kargo ve bağlı konuşma / operasyon kayıtlarını tek
+              yerde izlemek için hazırlanan v1 ekranı.
+            </p>
+          </div>
+
+          <div
+            style={{
+              border: '1px dashed #d1d5db',
+              borderRadius: 16,
+              background: '#ffffff',
+              padding: 14,
+              color: '#6b7280',
+              maxWidth: 320,
+              fontSize: 13,
+              lineHeight: 1.6,
+            }}
+          >
+            Bu sayfa ilk aşamada placeholder veriyle detail akışını doğrulamak için
+            hazırlandı. Sonraki fazda gerçek sipariş verisine bağlanacak.
+          </div>
         </div>
 
         <section
@@ -159,17 +187,18 @@ export default function OrdersPage() {
           }}
         >
           <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
-            V1 Bilgi Mimarisi
+            V1 Sipariş Mantığı
           </div>
 
           <div style={{ display: 'grid', gap: 10, color: '#4b5563', lineHeight: 1.7 }}>
             <div>
-              Bu ekran ilk fazda gerçek sipariş verisi yerine doğru operasyon omurgasını
-              gösterecek şekilde hazırlanıyor.
+              Bu ekran sipariş omurgasını panelde görünür hale getirmek için
+              hazırlanıyor. Sipariş, ödeme, kargo ve bağlı operasyon akışı burada
+              birleşecek.
             </div>
             <div>
-              Sonraki fazda sipariş no, müşteri, ödeme durumu, kargo durumu, konuşma
-              bağlantısı ve operasyon kaydı ilişkisi gerçek veriye bağlanacak.
+              Aşağıdaki satırlara tıklayarak detail ekranı açabilir ve sipariş detail
+              bilgi mimarisini görebilirsin.
             </div>
           </div>
         </section>
@@ -190,7 +219,7 @@ export default function OrdersPage() {
               fontWeight: 800,
             }}
           >
-            Sipariş Listesi Taslağı
+            Sipariş Listesi
           </div>
 
           <div style={{ overflowX: 'auto' }}>
@@ -198,7 +227,7 @@ export default function OrdersPage() {
               style={{
                 width: '100%',
                 borderCollapse: 'collapse',
-                minWidth: 980,
+                minWidth: 1060,
               }}
             >
               <thead>
@@ -212,6 +241,7 @@ export default function OrdersPage() {
                     'Bağlı Konuşma',
                     'Açık Vaka',
                     'Son Güncelleme',
+                    'Detay',
                   ].map((header) => (
                     <th
                       key={header}
@@ -233,7 +263,13 @@ export default function OrdersPage() {
               <tbody>
                 {ORDER_ROWS.map((row) => (
                   <tr key={row.id}>
-                    <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6', fontWeight: 700 }}>
+                    <td
+                      style={{
+                        padding: 14,
+                        borderBottom: '1px solid #f3f4f6',
+                        fontWeight: 700,
+                      }}
+                    >
                       {row.id}
                     </td>
                     <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
@@ -269,8 +305,26 @@ export default function OrdersPage() {
                     <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
                       {row.linkedCase}
                     </td>
-                    <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6', color: '#6b7280' }}>
+                    <td
+                      style={{
+                        padding: 14,
+                        borderBottom: '1px solid #f3f4f6',
+                        color: '#6b7280',
+                      }}
+                    >
                       {row.updatedAt}
+                    </td>
+                    <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
+                      <Link
+                        href={`/orders/${row.id}`}
+                        style={{
+                          textDecoration: 'none',
+                          color: '#111827',
+                          fontWeight: 700,
+                        }}
+                      >
+                        Detayı Aç →
+                      </Link>
                     </td>
                   </tr>
                 ))}
