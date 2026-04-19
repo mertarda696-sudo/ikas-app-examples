@@ -8,61 +8,44 @@ type NavItem = {
   href: string;
   label: string;
   hint: string;
-  group: 'overview' | 'commerce' | 'system';
 };
 
 const NAV_ITEMS: NavItem[] = [
   {
     href: '/dashboard',
     label: 'Dashboard',
-    hint: 'Genel sağlık, katalog ve tenant özeti',
-    group: 'overview',
+    hint: 'Genel özet',
   },
   {
     href: '/inbox',
     label: 'Mesajlar',
-    hint: 'WhatsApp konuşmaları ve operatör görünümü',
-    group: 'overview',
+    hint: 'Konuşmalar',
   },
   {
     href: '/orders',
     label: 'Siparişler',
-    hint: 'Sipariş akışı, ödeme ve kargo durumu',
-    group: 'commerce',
+    hint: 'Sipariş ve ödeme',
   },
   {
     href: '/operations',
     label: 'Operasyonlar',
-    hint: 'Hasarlı ürün, dekont ve şikayet vakaları',
-    group: 'commerce',
+    hint: 'Vaka merkezi',
   },
   {
     href: '/catalog',
     label: 'Katalog',
-    hint: 'Ürünler, varyantlar ve senkron görünümü',
-    group: 'commerce',
+    hint: 'Ürün ve varyant',
   },
   {
     href: '/policies',
     label: 'Politikalar',
-    hint: 'Kargo, iade, değişim ve iletişim metinleri',
-    group: 'system',
+    hint: 'Kural ve iletişim',
   },
   {
     href: '/integrations',
     label: 'Entegrasyonlar',
-    hint: 'WhatsApp, ikas ve ileride diğer kanallar',
-    group: 'system',
+    hint: 'Bağlantılar',
   },
-];
-
-const NAV_GROUPS: Array<{
-  key: NavItem['group'];
-  label: string;
-}> = [
-  { key: 'overview', label: 'Genel Görünüm' },
-  { key: 'commerce', label: 'Ticari Operasyon' },
-  { key: 'system', label: 'Sistem ve Ayarlar' },
 ];
 
 function isActivePath(pathname: string, href: string) {
@@ -82,7 +65,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: '300px minmax(0, 1fr)',
+          gridTemplateColumns: '220px minmax(0, 1fr)',
           minHeight: '100vh',
         }}
       >
@@ -90,7 +73,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           style={{
             borderRight: '1px solid #e5e7eb',
             background: '#ffffff',
-            padding: 20,
+            padding: 12,
             position: 'sticky',
             top: 0,
             alignSelf: 'start',
@@ -101,20 +84,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div
             style={{
               border: '1px solid #e5e7eb',
-              borderRadius: 18,
-              padding: 18,
-              background: 'linear-gradient(180deg, #ffffff 0%, #f9fafb 100%)',
-              marginBottom: 20,
-              boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+              borderRadius: 14,
+              padding: 12,
+              background: '#ffffff',
+              marginBottom: 14,
             }}
           >
             <div
               style={{
-                fontSize: 12,
-                fontWeight: 700,
+                fontSize: 11,
+                fontWeight: 800,
                 color: '#6b7280',
                 textTransform: 'uppercase',
-                letterSpacing: 0.5,
+                letterSpacing: 0.45,
                 marginBottom: 6,
               }}
             >
@@ -123,114 +105,69 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
             <div
               style={{
-                fontSize: 22,
+                fontSize: 17,
                 fontWeight: 800,
                 color: '#111827',
-                marginBottom: 8,
+                marginBottom: 6,
+                lineHeight: 1.3,
               }}
             >
-              Giyim Operasyon Paneli
+              Giyim Paneli
             </div>
 
             <div
               style={{
-                fontSize: 14,
-                lineHeight: 1.6,
-                color: '#4b5563',
+                fontSize: 12,
+                lineHeight: 1.5,
+                color: '#6b7280',
               }}
             >
-              Mesajlar, siparişler, operasyon kayıtları ve katalog görünümünü tek
-              panelde toplayan müşteri çalışma alanı.
+              Mesaj, sipariş ve operasyon takibini tek alanda toplar.
             </div>
           </div>
 
-          <div style={{ display: 'grid', gap: 18 }}>
-            {NAV_GROUPS.map((group) => {
-              const items = NAV_ITEMS.filter((item) => item.group === group.key);
+          <nav style={{ display: 'grid', gap: 8 }}>
+            {NAV_ITEMS.map((item) => {
+              const active = isActivePath(pathname, item.href);
 
               return (
-                <div key={group.key}>
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  style={{
+                    textDecoration: 'none',
+                    border: active ? '1px solid #111827' : '1px solid #e5e7eb',
+                    borderRadius: 12,
+                    padding: 10,
+                    background: active ? '#111827' : '#ffffff',
+                    color: active ? '#ffffff' : '#111827',
+                    display: 'block',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 700,
+                      marginBottom: 4,
+                      lineHeight: 1.3,
+                    }}
+                  >
+                    {item.label}
+                  </div>
+
                   <div
                     style={{
                       fontSize: 12,
-                      fontWeight: 800,
-                      color: '#6b7280',
-                      textTransform: 'uppercase',
-                      letterSpacing: 0.45,
-                      marginBottom: 10,
-                      paddingInline: 4,
+                      lineHeight: 1.35,
+                      color: active ? '#e5e7eb' : '#6b7280',
                     }}
                   >
-                    {group.label}
+                    {item.hint}
                   </div>
-
-                  <div style={{ display: 'grid', gap: 10 }}>
-                    {items.map((item) => {
-                      const active = isActivePath(pathname, item.href);
-
-                      return (
-                        <Link
-                          key={item.href}
-                          href={item.href}
-                          style={{
-                            textDecoration: 'none',
-                            border: active
-                              ? '1px solid #111827'
-                              : '1px solid #e5e7eb',
-                            borderRadius: 16,
-                            padding: 14,
-                            background: active ? '#111827' : '#ffffff',
-                            color: active ? '#ffffff' : '#111827',
-                            transition: 'all 0.15s ease',
-                            boxShadow: active
-                              ? '0 6px 16px rgba(17,24,39,0.10)'
-                              : 'none',
-                          }}
-                        >
-                          <div
-                            style={{
-                              fontSize: 15,
-                              fontWeight: 700,
-                              marginBottom: 6,
-                            }}
-                          >
-                            {item.label}
-                          </div>
-
-                          <div
-                            style={{
-                              fontSize: 13,
-                              lineHeight: 1.45,
-                              color: active ? '#e5e7eb' : '#6b7280',
-                            }}
-                          >
-                            {item.hint}
-                          </div>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                </div>
+                </Link>
               );
             })}
-          </div>
-
-          <div
-            style={{
-              marginTop: 20,
-              border: '1px dashed #d1d5db',
-              borderRadius: 16,
-              padding: 14,
-              background: '#fafafa',
-              fontSize: 13,
-              lineHeight: 1.6,
-              color: '#6b7280',
-            }}
-          >
-            İlk ürünleşen fazda mesajlar, siparişler ve operasyon takibi birlikte
-            ilerliyor. Sonraki fazlarda medya/kanıt yönetimi, sipariş entegrasyonu ve
-            çok kanallı akış bu iskeletin üstüne eklenecek.
-          </div>
+          </nav>
         </aside>
 
         <div style={{ minWidth: 0 }}>{children}</div>
