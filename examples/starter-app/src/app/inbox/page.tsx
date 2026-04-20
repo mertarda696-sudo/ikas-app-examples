@@ -69,7 +69,10 @@ function normalizeText(value: string | null | undefined) {
     .trim();
 }
 
-function inferLinkedOrderId(lastMessageText: string | null | undefined, contextProductName: string | null | undefined) {
+function inferLinkedOrderId(
+  lastMessageText: string | null | undefined,
+  contextProductName: string | null | undefined,
+) {
   const text = normalizeText(lastMessageText);
   const product = normalizeText(contextProductName);
 
@@ -86,8 +89,10 @@ function inferLinkedCaseId(lastMessageText: string | null | undefined) {
 
   if (text.includes('dekont') || text.includes('odeme')) return 'OP-303';
   if (text.includes('kargo')) return 'OP-302';
-  if (text.includes('iade') || text.includes('degisim') || text.includes('beden')) return 'OP-304';
-  if (text.includes('hasar') || text.includes('yirtik') || text.includes('kusur')) return 'OP-301';
+  if (text.includes('iade') || text.includes('degisim') || text.includes('beden'))
+    return 'OP-304';
+  if (text.includes('hasar') || text.includes('yirtik') || text.includes('kusur'))
+    return 'OP-301';
 
   return null;
 }
@@ -100,6 +105,80 @@ function inferPriorityLabel(lastMessageText: string | null | undefined) {
   if (text.includes('iade') || text.includes('degisim')) return 'Operasyon adayı';
   if (text.includes('hasar') || text.includes('kusur')) return 'Kanıt kontrolü';
   return 'Genel takip';
+}
+
+function inferOperatorRecommendation(item: {
+  lastMessageText: string | null;
+  contextProductName: string | null;
+  lastMessageDirection: 'in' | 'out' | null;
+  status: string | null;
+}) {
+  const text = normalizeText(item.lastMessageText);
+  const hasProductContext = Boolean(item.contextProductName);
+  const customerWaiting =
+    String(item.status || '').toLowerCase() === 'open' &&
+    item.lastMessageDirection === 'in';
+
+  if (text.includes('dekont') || text.includes('odeme')) {
+    return {
+      title: 'Önce ödeme akışını kontrol et',
+      helper: 'Dekont veya ödeme sinyali var. Finans ve sipariş tarafı birlikte kontrol edilmeli.',
+      tone: 'warning' as const,
+      queueLabel: 'Finans akışı',
+    };
+  }
+
+  if (text.includes('kargo')) {
+    return {
+      title: 'Sipariş ve kargo durumuna bak',
+      helper: 'Teslimat / kargo ile ilgili konuşma görünüyor. Sipariş detail ekranı faydalı olur.',
+      tone: 'info' as const,
+      queueLabel: 'Kargo takibi',
+    };
+  }
+
+  if (text.includes('iade') || text.includes('degisim') || text.includes('beden')) {
+    return {
+      title: 'Operasyon ve sipariş kaydını birlikte aç',
+      helper: 'İade, değişim veya beden akışı olabilir. Operasyon tarafı kontrol edilmeli.',
+      tone: 'warning' as const,
+      queueLabel: 'Operasyon adayı',
+    };
+  }
+
+  if (text.includes('hasar') || text.includes('kusur') || text.includes('yirtik')) {
+    return {
+      title: 'Kanıt ve operasyon sinyalini kontrol et',
+      helper: 'Hasar/kusur dili geçtiği için vaka akışı üretmeye yakın olabilir.',
+      tone: 'warning' as const,
+      queueLabel: 'Kanıt kontrolü',
+    };
+  }
+
+  if (customerWaiting && hasProductContext) {
+    return {
+      title: 'Ürün bağlamıyla müşteriye cevap ver',
+      helper: 'Müşteri açık konuşmada bekliyor. Ürün bağlamı görünür olduğu için hızlı dönüş yapılabilir.',
+      tone: 'success' as const,
+      queueLabel: 'Müşteri bekliyor',
+    };
+  }
+
+  if (customerWaiting) {
+    return {
+      title: 'Müşteriye geri dönüş yap',
+      helper: 'Son mesaj müşteriden gelmiş görünüyor. Önce konuşma detail ekranı açılmalı.',
+      tone: 'warning' as const,
+      queueLabel: 'Açık konuşma',
+    };
+  }
+
+  return {
+    title: 'Genel takip',
+    helper: 'Bu konuşma şu an kritik görünmüyor ama kayıt bağı için detail ekranı açılabilir.',
+    tone: 'neutral' as const,
+    queueLabel: 'Rutin takip',
+  };
 }
 
 function SmallBadge({
@@ -212,15 +291,17 @@ export default function InboxPage() {
     const openCount = items.filter((item) => String(item.status).toLowerCase() === 'open').length;
     const closedCount = items.filter((item) => String(item.status).toLowerCase() === 'closed').length;
     const productContextCount = items.filter((item) => item.contextProductName).length;
-    const operationCandidateCount = items.filter((item) =>
-      Boolean(inferLinkedCaseId(item.lastMessageText)),
+    const customerWaitingCount = items.filter(
+      (item) =>
+        String(item.status).toLowerCase() === 'open' &&
+        item.lastMessageDirection === 'in',
     ).length;
 
     return {
       openCount,
       closedCount,
       productContextCount,
-      operationCandidateCount,
+      customerWaitingCount,
     };
   }, [items]);
 
@@ -249,8 +330,8 @@ export default function InboxPage() {
               Mesajlar
             </h1>
             <p style={{ color: '#4b5563', margin: 0, lineHeight: 1.7 }}>
-              Konuşmalar burada yalnız mesaj olarak değil, müşteri olayı olarak görünür.
-              Böylece sipariş ve operasyon akışına geçiş daha kolay olur.
+              Bu ekran konuşmaları yalnız mesaj listesi gibi değil, operatörün önceliklendireceği
+              müşteri olay kuyruğu gibi gösterir.
             </p>
           </div>
 
@@ -261,13 +342,13 @@ export default function InboxPage() {
               background: '#ffffff',
               padding: 14,
               color: '#6b7280',
-              maxWidth: 340,
+              maxWidth: 360,
               fontSize: 13,
               lineHeight: 1.6,
             }}
           >
-            Bu ekran müşteri firmanın önce hangi konuşmaya bakması gerektiğini, o
-            konuşmanın sipariş ve operasyon tarafıyla ilişkisini daha görünür hale getirmek için güçlendirildi.
+            Amaç, müşteri firmanın hangi konuşmayı önce açacağını, o konuşmanın sipariş
+            ve operasyon tarafıyla ilişkisini ilk bakışta anlamasını sağlamak.
           </div>
         </div>
 
@@ -314,9 +395,9 @@ export default function InboxPage() {
                 helper="Aktif müşteri konuşmaları"
               />
               <MetricCard
-                label="Kapalı Konuşma"
-                value={metrics.closedCount}
-                helper="Kapanmış kayıtlar"
+                label="Müşteri Dönüşü Bekleyen"
+                value={metrics.customerWaitingCount}
+                helper="Son mesajı müşteriden gelen açık konuşmalar"
               />
               <MetricCard
                 label="Ürün Bağlamlı"
@@ -324,9 +405,9 @@ export default function InboxPage() {
                 helper="Aktif ürün bağlamı olan konuşmalar"
               />
               <MetricCard
-                label="Operasyon Adayı"
-                value={metrics.operationCandidateCount}
-                helper="Vaka üretmeye yakın konuşmalar"
+                label="Kapalı Konuşma"
+                value={metrics.closedCount}
+                helper="Kapanmış kayıtlar"
               />
             </section>
 
@@ -339,7 +420,7 @@ export default function InboxPage() {
               }}
             >
               <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
-                Konuşma Listesi
+                Operatör Konuşma Kuyruğu
               </div>
 
               <div style={{ display: 'grid', gap: 14 }}>
@@ -351,6 +432,32 @@ export default function InboxPage() {
                   );
                   const linkedCaseId = inferLinkedCaseId(item.lastMessageText);
                   const priorityLabel = inferPriorityLabel(item.lastMessageText);
+                  const recommendation = inferOperatorRecommendation(item);
+
+                  const recommendationBoxStyle =
+                    recommendation.tone === 'success'
+                      ? {
+                          border: '1px solid #bbf7d0',
+                          background: '#f0fdf4',
+                          color: '#166534',
+                        }
+                      : recommendation.tone === 'warning'
+                        ? {
+                            border: '1px solid #fde68a',
+                            background: '#fffbeb',
+                            color: '#92400e',
+                          }
+                        : recommendation.tone === 'info'
+                          ? {
+                              border: '1px solid #bfdbfe',
+                              background: '#eff6ff',
+                              color: '#1d4ed8',
+                            }
+                          : {
+                              border: '1px solid #e5e7eb',
+                              background: '#f9fafb',
+                              color: '#374151',
+                            };
 
                   return (
                     <Link
@@ -368,14 +475,13 @@ export default function InboxPage() {
                     >
                       <div
                         style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          gap: 18,
-                          alignItems: 'flex-start',
-                          flexWrap: 'wrap',
+                          display: 'grid',
+                          gridTemplateColumns: 'minmax(0, 1.4fr) minmax(280px, 0.95fr)',
+                          gap: 16,
+                          alignItems: 'stretch',
                         }}
                       >
-                        <div style={{ minWidth: 320, flex: 1 }}>
+                        <div>
                           <div
                             style={{
                               display: 'flex',
@@ -439,13 +545,17 @@ export default function InboxPage() {
                             <SmallBadge label={priorityLabel} tone="warning" />
                             <SmallBadge
                               label={
-                                linkedOrderId ? `Bağlı sipariş: ${linkedOrderId}` : 'Sipariş bağı henüz yok'
+                                linkedOrderId
+                                  ? `Bağlı sipariş: ${linkedOrderId}`
+                                  : 'Sipariş bağı henüz yok'
                               }
                               tone={linkedOrderId ? 'info' : 'neutral'}
                             />
                             <SmallBadge
                               label={
-                                linkedCaseId ? `Bağlı vaka: ${linkedCaseId}` : 'Vaka bağı henüz yok'
+                                linkedCaseId
+                                  ? `Bağlı vaka: ${linkedCaseId}`
+                                  : 'Vaka bağı henüz yok'
                               }
                               tone={linkedCaseId ? 'info' : 'neutral'}
                             />
@@ -471,42 +581,65 @@ export default function InboxPage() {
 
                         <div
                           style={{
-                            minWidth: 210,
-                            textAlign: 'right',
+                            borderRadius: 16,
+                            padding: 14,
+                            ...recommendationBoxStyle,
                           }}
                         >
                           <div
                             style={{
                               fontSize: 12,
-                              fontWeight: 700,
-                              color: '#6b7280',
+                              fontWeight: 800,
                               marginBottom: 8,
                               textTransform: 'uppercase',
                               letterSpacing: 0.3,
+                              opacity: 0.85,
                             }}
                           >
-                            Son mesaj zamanı
+                            Operatör için önerilen aksiyon
                           </div>
 
                           <div
                             style={{
-                              fontSize: 14,
-                              fontWeight: 700,
-                              color: '#111827',
-                              marginBottom: 10,
+                              fontSize: 16,
+                              fontWeight: 800,
+                              marginBottom: 8,
+                              lineHeight: 1.4,
                             }}
                           >
-                            {formatDate(item.lastMessageAt)}
+                            {recommendation.title}
                           </div>
 
                           <div
                             style={{
                               fontSize: 13,
-                              color: '#6b7280',
-                              lineHeight: 1.6,
+                              lineHeight: 1.7,
+                              marginBottom: 12,
                             }}
                           >
-                            Konuşmayı açınca sipariş ve operasyon bağı daha detaylı görünür.
+                            {recommendation.helper}
+                          </div>
+
+                          <div
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              gap: 12,
+                              alignItems: 'center',
+                              flexWrap: 'wrap',
+                            }}
+                          >
+                            <SmallBadge label={recommendation.queueLabel} tone={recommendation.tone} />
+
+                            <div
+                              style={{
+                                fontSize: 12,
+                                fontWeight: 700,
+                                opacity: 0.85,
+                              }}
+                            >
+                              {formatDate(item.lastMessageAt)}
+                            </div>
                           </div>
                         </div>
                       </div>
