@@ -6,6 +6,10 @@ import { useParams } from 'next/navigation';
 import { AppShell } from '@/components/apparel-panel/AppShell';
 import { TokenHelpers } from '@/helpers/token-helpers';
 import type { ConversationDetailResponse } from '@/lib/apparel-panel/types';
+import {
+  getConversationDeskState,
+  getConversationFlowContext,
+} from '@/lib/apparel-panel/panel-relations';
 
 function formatDate(value: string | null | undefined) {
   if (!value) return '-';
@@ -70,183 +74,6 @@ function statusColors(status: string | null | undefined) {
   return {
     background: '#eff6ff',
     color: '#1d4ed8',
-  };
-}
-
-function normalizeText(value: string | null | undefined) {
-  return String(value || '')
-    .toLocaleLowerCase('tr-TR')
-    .replace(/ı/g, 'i')
-    .trim();
-}
-
-function inferFlowContext(conversation: ConversationDetailResponse['conversation']) {
-  if (!conversation) {
-    return {
-      orderId: null as string | null,
-      orderLabel: 'Henüz bağlanmadı',
-      caseId: null as string | null,
-      caseLabel: 'Henüz bağlanmadı',
-      summary: 'Konuşma bağı henüz oluşturulmadı.',
-    };
-  }
-
-  const allText = normalizeText(
-    conversation.messages.map((message) => message.textBody || '').join(' '),
-  );
-  const product = normalizeText(conversation.contextProductName);
-
-  if (allText.includes('dekont') || allText.includes('odeme')) {
-    return {
-      orderId: 'SIP-10387',
-      orderLabel: 'Dekont / ödeme ile ilişkili sipariş',
-      caseId: 'OP-303',
-      caseLabel: 'Ödeme / Dekont vakası',
-      summary: 'Bu konuşma finans ve dekont kontrolü gerektiren müşteri akışına benziyor.',
-    };
-  }
-
-  if (allText.includes('kargo')) {
-    return {
-      orderId: 'SIP-10412',
-      orderLabel: 'Kargo takibi olan sipariş',
-      caseId: 'OP-302',
-      caseLabel: 'Kargo şikayeti vakası',
-      summary: 'Bu konuşma daha çok teslimat ve kargo akışıyla ilişkili görünüyor.',
-    };
-  }
-
-  if (allText.includes('iade') || allText.includes('degisim') || allText.includes('beden')) {
-    return {
-      orderId: 'SIP-10374',
-      orderLabel: 'İade / değişim ilişkili sipariş',
-      caseId: 'OP-304',
-      caseLabel: 'İade / Değişim vakası',
-      summary: 'Bu konuşma değişim veya iade operasyonuna yakın görünüyor.',
-    };
-  }
-
-  if (
-    allText.includes('hasar') ||
-    allText.includes('kusur') ||
-    conversation.messages.some((message) => message.hasMediaLikePayload)
-  ) {
-    return {
-      orderId: 'SIP-10428',
-      orderLabel: 'Hasarlı ürün ilişkili sipariş',
-      caseId: 'OP-301',
-      caseLabel: 'Hasarlı Ürün vakası',
-      summary: 'Bu konuşmada medya veya hasar sinyali olduğu için operasyon bağı önemli olabilir.',
-    };
-  }
-
-  if (product) {
-    return {
-      orderId: 'SIP-10428',
-      orderLabel: 'Ürün bağlamına yakın sipariş',
-      caseId: null,
-      caseLabel: 'Şu an açık vaka görünmüyor',
-      summary: 'Konuşmada aktif ürün bağlamı var; sipariş ve ürün akışı birlikte düşünülmeli.',
-    };
-  }
-
-  return {
-    orderId: null,
-    orderLabel: 'Henüz bağlanmadı',
-    caseId: null,
-    caseLabel: 'Henüz bağlanmadı',
-    summary: 'Bu konuşma şu an genel yardım veya erken aşama müşteri akışı gibi görünüyor.',
-  };
-}
-
-function inferOperatorDeskState(
-  conversation: ConversationDetailResponse['conversation'],
-  flowContext: ReturnType<typeof inferFlowContext>,
-) {
-  if (!conversation) {
-    return {
-      title: 'Konuşma bilgisi bekleniyor',
-      helper: 'Henüz işlenebilir bir konuşma verisi görünmüyor.',
-      tone: 'neutral' as const,
-      attention: 'Belirsiz',
-      recommendedStep: 'Önce konuşma kaydı doğrulanmalı.',
-    };
-  }
-
-  const allText = normalizeText(
-    conversation.messages.map((message) => message.textBody || '').join(' '),
-  );
-  const lastMessage = conversation.messages[conversation.messages.length - 1];
-  const customerWaiting =
-    String(conversation.status || '').toLowerCase() === 'open' &&
-    lastMessage?.direction === 'in';
-
-  if (allText.includes('dekont') || allText.includes('odeme')) {
-    return {
-      title: 'Önce ödeme / dekont akışını kontrol et',
-      helper:
-        'Bu konuşmada finans ve sipariş tarafı birlikte düşünülmeli. Müşteriye cevap vermeden önce sipariş ve operasyon kaydına bakmak doğru olur.',
-      tone: 'warning' as const,
-      attention: customerWaiting ? 'Müşteri bekliyor' : 'Finans öncelikli',
-      recommendedStep:
-        'Önce sipariş ve operasyon kaydını aç, sonra müşteriye kontrollü dönüş yap.',
-    };
-  }
-
-  if (allText.includes('kargo')) {
-    return {
-      title: 'Sipariş ve kargo durumunu doğrula',
-      helper:
-        'Teslimat veya kargo akışı baskın görünüyor. Yanıt öncesi sipariş ekranında durum kontrolü faydalı olur.',
-      tone: 'info' as const,
-      attention: customerWaiting ? 'Müşteri bekliyor' : 'Takip gerekli',
-      recommendedStep:
-        'Önce sipariş ekranına bak, sonra müşteriye güncel durumla cevap ver.',
-    };
-  }
-
-  if (flowContext.caseId) {
-    return {
-      title: 'Operasyon kaydını da birlikte yönet',
-      helper:
-        'Bu konuşma vaka üretmiş veya üretmeye yakın görünüyor. Reply ile birlikte operasyon ekranı da önemli.',
-      tone: 'warning' as const,
-      attention: customerWaiting ? 'Vaka + müşteri bekliyor' : 'Operasyon odaklı',
-      recommendedStep:
-        'Operasyon kaydını aç, gerekiyorsa ardından sipariş ve reply akışına dön.',
-    };
-  }
-
-  if (conversation.contextProductName && customerWaiting) {
-    return {
-      title: 'Ürün bağlamını kullanarak hızlı dönüş yap',
-      helper:
-        'Aktif ürün bağlamı görünür olduğu için konuşma daha hızlı ve kontrollü cevaplanabilir.',
-      tone: 'success' as const,
-      attention: 'Ürün sorusu / müşteri bekliyor',
-      recommendedStep:
-        'Önce konuşma içinde ürün bağlamını doğrula, sonra müşteriye yanıt yaz.',
-    };
-  }
-
-  if (customerWaiting) {
-    return {
-      title: 'Müşteriye geri dönüş yap',
-      helper:
-        'Bu konuşmada son top müşteride. Operatör ekranından doğrudan yanıt üretmek öncelikli olabilir.',
-      tone: 'warning' as const,
-      attention: 'Açık konuşma',
-      recommendedStep: 'Reply alanına odaklan ve gerekirse sonra sipariş/operasyon akışına geç.',
-    };
-  }
-
-  return {
-    title: 'Genel takip modunda kal',
-    helper:
-      'Bu konuşma şu an kritik görünmüyor. Bağlı kayıtları gözden geçirip genel takipte kalınabilir.',
-    tone: 'neutral' as const,
-    attention: 'Rutin takip',
-    recommendedStep: 'Konuşmayı, siparişi ve operasyon kaydını ihtiyaç halinde aç.',
   };
 }
 
@@ -404,9 +231,9 @@ export default function ConversationDetailPage() {
 
   const conversation = data?.conversation || null;
   const badge = statusColors(conversation?.status);
-  const flowContext = useMemo(() => inferFlowContext(conversation), [conversation]);
+  const flowContext = useMemo(() => getConversationFlowContext(conversation), [conversation]);
   const operatorDeskState = useMemo(
-    () => inferOperatorDeskState(conversation, flowContext),
+    () => getConversationDeskState(conversation, flowContext),
     [conversation, flowContext],
   );
   const operatorTone = toneStyles(operatorDeskState.tone);
@@ -1096,7 +923,6 @@ export default function ConversationDetailPage() {
                 </div>
               </div>
             </section>
-
           </div>
         )}
       </main>
