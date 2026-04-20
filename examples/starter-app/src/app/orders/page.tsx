@@ -10,6 +10,7 @@ const ORDER_ROWS = [
     shipmentStatus: 'Kargoya hazırlanıyor',
     linkedConversation: 'Var',
     linkedCase: 'Yok',
+    attention: 'Hazırlanıyor / yakın takip',
     updatedAt: '15.04.2026 23:10',
   },
   {
@@ -20,6 +21,7 @@ const ORDER_ROWS = [
     shipmentStatus: 'Teslim edildi',
     linkedConversation: 'Var',
     linkedCase: 'Kargo şikayeti',
+    attention: 'Kargo şikayeti bağlı',
     updatedAt: '14.04.2026 18:42',
   },
   {
@@ -30,6 +32,7 @@ const ORDER_ROWS = [
     shipmentStatus: 'Beklemede',
     linkedConversation: 'Var',
     linkedCase: 'Ödeme / Dekont',
+    attention: 'Dekont kontrolü bekliyor',
     updatedAt: '13.04.2026 14:05',
   },
 ];
@@ -179,26 +182,82 @@ export default function OrdersPage() {
 
         <section
           style={{
-            border: '1px solid #e5e7eb',
-            borderRadius: 18,
-            background: '#ffffff',
-            padding: 18,
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1.2fr) minmax(320px, 0.9fr)',
+            gap: 16,
             marginBottom: 16,
           }}
         >
-          <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
-            V1 Sipariş Mantığı
+          <div
+            style={{
+              border: '1px solid #e5e7eb',
+              borderRadius: 18,
+              background: '#ffffff',
+              padding: 18,
+            }}
+          >
+            <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
+              Sipariş Ekranının Mantığı
+            </div>
+
+            <div style={{ display: 'grid', gap: 10, color: '#4b5563', lineHeight: 1.7 }}>
+              <div>
+                Bu ekran sipariş, ödeme, kargo ve bağlı operasyon kayıtlarını tek
+                omurgada görmek için hazırlanıyor.
+              </div>
+              <div>
+                Kullanıcı önce hangi siparişe bakması gerektiğini burada anlayacak;
+                ardından detail sayfasına geçip konuşma, operasyon ve ödeme/kargo
+                bağlarını görecek.
+              </div>
+            </div>
           </div>
 
-          <div style={{ display: 'grid', gap: 10, color: '#4b5563', lineHeight: 1.7 }}>
-            <div>
-              Bu ekran sipariş omurgasını panelde görünür hale getirmek için
-              hazırlanıyor. Sipariş, ödeme, kargo ve bağlı operasyon akışı burada
-              birleşecek.
+          <div
+            style={{
+              border: '1px solid #e5e7eb',
+              borderRadius: 18,
+              background: '#ffffff',
+              padding: 18,
+            }}
+          >
+            <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
+              Öncelikli İş Kuyruğu
             </div>
-            <div>
-              Aşağıdaki satırlara tıklayarak detail ekranı açabilir ve sipariş detail
-              bilgi mimarisini görebilirsin.
+
+            <div style={{ display: 'grid', gap: 10 }}>
+              <div
+                style={{
+                  border: '1px solid #fde68a',
+                  borderRadius: 14,
+                  background: '#fffbeb',
+                  padding: 12,
+                }}
+              >
+                <div style={{ fontWeight: 800, color: '#92400e', marginBottom: 6 }}>
+                  Dekont kontrolü bekleyen sipariş var
+                </div>
+                <div style={{ color: '#4b5563', lineHeight: 1.6 }}>
+                  Önce ödeme doğrulaması gereken siparişler incelenmeli.
+                </div>
+              </div>
+
+              <div
+                style={{
+                  border: '1px solid #e5e7eb',
+                  borderRadius: 14,
+                  background: '#ffffff',
+                  padding: 12,
+                }}
+              >
+                <div style={{ fontWeight: 800, color: '#111827', marginBottom: 6 }}>
+                  Operasyona bağlı siparişler görünür olmalı
+                </div>
+                <div style={{ color: '#4b5563', lineHeight: 1.6 }}>
+                  Kargo şikayeti ve hasarlı ürün gibi vakalar sipariş detail ile birlikte
+                  takip edilmeli.
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -227,7 +286,7 @@ export default function OrdersPage() {
               style={{
                 width: '100%',
                 borderCollapse: 'collapse',
-                minWidth: 1060,
+                minWidth: 1120,
               }}
             >
               <thead>
@@ -240,6 +299,7 @@ export default function OrdersPage() {
                     'Kargo',
                     'Bağlı Konuşma',
                     'Açık Vaka',
+                    'Öncelik / Not',
                     'Son Güncelleme',
                     'Detay',
                   ].map((header) => (
@@ -304,6 +364,16 @@ export default function OrdersPage() {
                     </td>
                     <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
                       {row.linkedCase}
+                    </td>
+                    <td
+                      style={{
+                        padding: 14,
+                        borderBottom: '1px solid #f3f4f6',
+                        color: '#374151',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {row.attention}
                     </td>
                     <td
                       style={{
