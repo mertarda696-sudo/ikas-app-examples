@@ -17,6 +17,7 @@ const ORDER_DETAIL_MAP: Record<
     note: string;
     action: string;
     risk: string;
+    linkedCaseId: string | null;
   }
 > = {
   'SIP-10428': {
@@ -30,6 +31,7 @@ const ORDER_DETAIL_MAP: Record<
     note: 'Bu sipariş detail ekranı ileride ödeme, kargo, konuşma ve operasyon kayıtlarını tek noktada toplayacak.',
     action: 'Kargoya hazırlık ve müşteri konuşma takibi',
     risk: 'Düşük',
+    linkedCaseId: null,
   },
   'SIP-10412': {
     customer: '905457464945',
@@ -42,6 +44,7 @@ const ORDER_DETAIL_MAP: Record<
     note: 'Teslim edilmiş siparişlerde müşteri memnuniyeti, kargo şikayeti ve son konuşmalar birlikte görülebilecek.',
     action: 'Kargo şikayeti ve müşteri memnuniyet kontrolü',
     risk: 'Orta',
+    linkedCaseId: 'OP-302',
   },
   'SIP-10387': {
     customer: '9055•••',
@@ -54,6 +57,7 @@ const ORDER_DETAIL_MAP: Record<
     note: 'Dekont kontrolü bekleyen siparişlerde finans doğrulama, operasyon kaydı ve müşteri konuşması aynı ekran altında bağlanacak.',
     action: 'Finans doğrulama ve dekont incelemesi',
     risk: 'Yüksek',
+    linkedCaseId: 'OP-303',
   },
 };
 
@@ -102,6 +106,7 @@ export default function OrderDetailPage() {
     note: 'Bu sipariş için placeholder detail ekranı gösteriliyor.',
     action: 'Aksiyon bilgisi yok',
     risk: 'Belirsiz',
+    linkedCaseId: null,
   };
 
   return (
@@ -174,29 +179,85 @@ export default function OrderDetailPage() {
         </section>
 
         <section
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-            gap: 12,
-            marginBottom: 16,
-          }}
-        >
-          <MetricCard
-            label="Bağlı Konuşma"
-            value={detail.linkedConversation}
-            helper="İleride konuşma detay ekranına tek tıkla geçiş burada olacak."
-          />
-          <MetricCard
-            label="Bağlı Operasyon Kaydı"
-            value={detail.linkedCase}
-            helper="Hasarlı ürün, kargo şikayeti, dekont ve iade kayıtları bu alana bağlanacak."
-          />
-          <MetricCard
-            label="Son Güncelleme"
-            value={detail.updatedAt}
-            helper="Sipariş, ödeme ve operasyon alanlarındaki son hareket zamanı burada izlenecek."
-          />
-        </section>
+  style={{
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+    gap: 12,
+    marginBottom: 16,
+  }}
+>
+  <div
+    style={{
+      border: '1px solid #e5e7eb',
+      borderRadius: 18,
+      background: '#ffffff',
+      padding: 18,
+    }}
+  >
+    <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>Bağlı Konuşma</div>
+    <div style={{ fontSize: 20, fontWeight: 800, color: '#111827', marginBottom: 8 }}>
+      {detail.linkedConversation}
+    </div>
+    <div style={{ marginBottom: 12, fontSize: 13, color: '#6b7280', lineHeight: 1.6 }}>
+      Sipariş ekranından konuşma ekranına geçip müşteri iletişim akışını takip edebilirsin.
+    </div>
+    <Link
+      href="/inbox"
+      style={{
+        textDecoration: 'none',
+        display: 'inline-flex',
+        borderRadius: 12,
+        padding: '9px 13px',
+        background: '#111827',
+        color: '#ffffff',
+        fontWeight: 700,
+        fontSize: 14,
+      }}
+    >
+      Mesajlara Git
+    </Link>
+  </div>
+
+  <div
+    style={{
+      border: '1px solid #e5e7eb',
+      borderRadius: 18,
+      background: '#ffffff',
+      padding: 18,
+    }}
+  >
+    <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>
+      Bağlı Operasyon Kaydı
+    </div>
+    <div style={{ fontSize: 20, fontWeight: 800, color: '#111827', marginBottom: 8 }}>
+      {detail.linkedCase}
+    </div>
+    <div style={{ marginBottom: 12, fontSize: 13, color: '#6b7280', lineHeight: 1.6 }}>
+      Siparişle ilişkili vaka varsa operasyon ekranından ilerleyebilirsin.
+    </div>
+    <Link
+      href={detail.linkedCaseId ? `/operations/${detail.linkedCaseId}` : '/operations'}
+      style={{
+        textDecoration: 'none',
+        display: 'inline-flex',
+        borderRadius: 12,
+        padding: '9px 13px',
+        background: '#111827',
+        color: '#ffffff',
+        fontWeight: 700,
+        fontSize: 14,
+      }}
+    >
+      Operasyona Git
+    </Link>
+  </div>
+
+  <MetricCard
+    label="Son Güncelleme"
+    value={detail.updatedAt}
+    helper="Sipariş, ödeme ve operasyon alanlarındaki son hareket zamanı burada izlenecek."
+  />
+</section>
 
         <section
           style={{
