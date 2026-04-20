@@ -4,12 +4,12 @@ const INTEGRATION_CARDS = [
   {
     name: 'WhatsApp',
     category: 'Canlı müşteri mesajlaşma hattı',
-    status: 'Kurulum gerekli',
+    status: 'Aktivasyon bekleniyor',
     tone: 'warning' as const,
     summary:
-      'Panel reply ve otomasyon zinciri hazır. Tenant seviyesinde gerçek WhatsApp hattı bağlandığında canlı kullanım tamamlanacak.',
+      'Panel reply, konuşma, sipariş ve operasyon yüzeyi hazır. Eksik halka tenant seviyesinde gerçek WhatsApp hattının bağlanması.',
     nextStep:
-      'MIRELLE için fiziksel hat + Meta doğrulaması + wa_phone_number_id eşleştirmesi yapılmalı.',
+      'MIRELLE için fiziksel hat + Meta doğrulaması + doğru wa_phone_number_id eşleştirmesi yapılmalı.',
   },
   {
     name: 'ikas',
@@ -19,57 +19,47 @@ const INTEGRATION_CARDS = [
     summary:
       'MIRELLE üzerinde embedded app, dashboard ve panel görünümü aktif pilot olarak çalışıyor.',
     nextStep:
-      'Panel ekranları ürünleştirilirken katalog ve tenant görünümü bu entegrasyon üzerinden ilerliyor.',
+      'WhatsApp hattı geldiğinde storefront + panel + konuşma akışı canlıya yakın doğrulanacak.',
   },
   {
     name: 'Meta Business',
     category: 'Çok kanallı kanal omurgası',
-    status: 'Hazırlık aşaması',
+    status: 'Canlı hazırlık aşaması',
     tone: 'info' as const,
     summary:
-      'WhatsApp ve ileride Facebook tarafı için stratejik merkez olacak. Tenant bağlantı modeli burada netleşecek.',
+      'WhatsApp aktivasyonu tamamlandığında çok kanallı omurganın ilk gerçek görünür katmanı olacak.',
     nextStep:
-      'WhatsApp hattı bağlanınca Meta Business görünürlüğü ve health mantığı bu ekranda güçlendirilecek.',
+      'Önce WhatsApp hattı oturtulmalı; ardından Meta health ve kanal görünürlüğü bu sayfada güçlendirilecek.',
   },
   {
-    name: 'Facebook',
-    category: 'Gelecek kanal adaptörü',
-    status: 'Planlandı',
+    name: 'FLAW Sandbox',
+    category: 'İkinci storefront / adapter deneme alanı',
+    status: 'Sonraki faz',
     tone: 'neutral' as const,
     summary:
-      'Meta ekosistemi içinde daha sonraki çok kanallı inbox genişlemesinde değerlendirilecek.',
+      'FLAW tenantı ayrı deneme alanı olarak korunmalı. İkinci website altyapısı burada test edilirse MIRELLE hattı karışmaz.',
     nextStep:
-      'WhatsApp hattı ve Meta Business akışı oturduktan sonra ikinci aşamada ele alınmalı.',
+      'MIRELLE canlı aktivasyonu geçtikten sonra WooCommerce ile ikinci storefront sandbox açılması en mantıklı ilk adım olur.',
   },
   {
-    name: 'Instagram',
-    category: 'Gelecek kanal adaptörü',
+    name: 'Facebook / Instagram',
+    category: 'Gelecek kanal adaptörleri',
     status: 'Planlandı',
     tone: 'neutral' as const,
     summary:
       'Çok kanallı mesaj merkezi vizyonunda yer alıyor ancak ilk satış sprintinde öncelik değil.',
     nextStep:
-      'WhatsApp merkezli sürüm sabitlendikten sonra sıraya alınacak.',
+      'Önce WhatsApp merkezli sürüm stabil olmalı, sonra ikinci kanal fazına geçilmeli.',
   },
   {
-    name: 'TikTok',
+    name: 'E-posta / TikTok',
     category: 'İleri kanal backlog',
     status: 'Roadmap',
     tone: 'neutral' as const,
     summary:
-      'Uzun vadeli kanal genişleme planında düşünülüyor. İlk dikey giyim ürünü satılabilir hale geldikten sonra değerlendirilmesi daha doğru.',
+      'Destek, dekont ve içerik tabanlı genişleme için değerli olabilir ama şu anki canlı önceliği etkilememeli.',
     nextStep:
-      'Meta ve çok kanallı inbox fazı oturduktan sonra ayrıca teknik/ürün uygunluğu analiz edilmeli.',
-  },
-  {
-    name: 'E-posta',
-    category: 'Destek ve operasyon kanalı',
-    status: 'Planlandı',
-    tone: 'neutral' as const,
-    summary:
-      'Dekont, sipariş ve destek süreçlerinde ikincil kanal olarak değerli olabilir.',
-    nextStep:
-      'Operasyon ve sipariş ekranları daha olgun hale geldiğinde ikinci faza alınmalı.',
+      'İlk canlı sprint ve storefront sandbox sonrası ayrıca değerlendirilmesi daha doğru.',
   },
 ];
 
@@ -207,6 +197,49 @@ function IntegrationCard({
   );
 }
 
+function ReadinessCard({
+  title,
+  detail,
+  tone,
+}: {
+  title: string;
+  detail: string;
+  tone: 'warning' | 'success' | 'neutral';
+}) {
+  const styles =
+    tone === 'warning'
+      ? {
+          border: '1px solid #fde68a',
+          background: '#fffbeb',
+          titleColor: '#92400e',
+        }
+      : tone === 'success'
+        ? {
+            border: '1px solid #bbf7d0',
+            background: '#f0fdf4',
+            titleColor: '#166534',
+          }
+        : {
+            border: '1px solid #e5e7eb',
+            background: '#ffffff',
+            titleColor: '#111827',
+          };
+
+  return (
+    <div
+      style={{
+        border: styles.border,
+        background: styles.background,
+        borderRadius: 14,
+        padding: 14,
+      }}
+    >
+      <div style={{ fontWeight: 800, color: styles.titleColor, marginBottom: 6 }}>{title}</div>
+      <div style={{ color: '#4b5563', lineHeight: 1.7 }}>{detail}</div>
+    </div>
+  );
+}
+
 export default function IntegrationsPage() {
   return (
     <AppShell>
@@ -233,9 +266,8 @@ export default function IntegrationsPage() {
               Entegrasyonlar
             </h1>
             <p style={{ color: '#4b5563', margin: 0, lineHeight: 1.7 }}>
-              Bu ekran müşteri firmanın hangi kanal ve platform bağlantılarının aktif,
-              hangilerinin eksik, hangilerinin sıradaki yatırım alanı olduğunu kolayca
-              anlaması için tasarlandı.
+              Bu ekran artık sadece hangi entegrasyon var bilgisini değil, canlıya çıkış için
+              neyin hazır olduğunu ve sıradaki adımın ne olduğunu da net şekilde gösterir.
             </p>
           </div>
 
@@ -246,14 +278,13 @@ export default function IntegrationsPage() {
               background: '#ffffff',
               padding: 14,
               color: '#6b7280',
-              maxWidth: 340,
+              maxWidth: 360,
               fontSize: 13,
               lineHeight: 1.6,
             }}
           >
-            İlk satış sprintinde öncelik WhatsApp + ikas + giyim operasyon paneli.
-            Meta Business, Facebook ve TikTok görünürlüğü bu yüzden burada stratejik
-            alan olarak yer alıyor.
+            Buradaki ana mantık: önce MIRELLE için WhatsApp aktivasyonu, sonra ilk canlı smoke test,
+            ondan sonra FLAW üzerinde ikinci storefront sandbox.
           </div>
         </div>
 
@@ -266,24 +297,24 @@ export default function IntegrationsPage() {
           }}
         >
           <MetricCard
-            label="Aktif Pilot"
-            value="2"
-            helper="ikas ve panel altyapısında görünür çalışan ana yüzeyler."
-          />
-          <MetricCard
-            label="Kurulum Bekleyen"
-            value="1"
-            helper="Canlı WhatsApp tenant bağlantısı henüz tamamlanmadı."
-          />
-          <MetricCard
-            label="Planlı Kanal"
-            value="3+"
-            helper="Meta Business, Facebook, Instagram, TikTok ve e-posta genişlemesi."
-          />
-          <MetricCard
-            label="Bu Mağaza İçin Sonraki Adım"
+            label="Canlı Öncelik"
             value="WhatsApp"
-            helper="Fiziksel hat + Meta doğrulaması + tenant eşleştirmesi."
+            helper="Şu anki en kritik aktivasyon alanı"
+          />
+          <MetricCard
+            label="Pilot Altyapı"
+            value="ikas"
+            helper="Mağaza ve panel görünümü aktif pilot"
+          />
+          <MetricCard
+            label="Hazırlık Modu"
+            value="Go-Live"
+            helper="Yarın tenant aktivasyonu ve smoke test odakta"
+          />
+          <MetricCard
+            label="Sonraki Sandbox"
+            value="FLAW"
+            helper="İkinci storefront / adapter test alanı"
           />
         </section>
 
@@ -338,60 +369,27 @@ export default function IntegrationsPage() {
               }}
             >
               <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
-                Bu Mağaza İçin Öncelikli Aksiyonlar
+                Canlıya Çıkış Hazırlığı
               </div>
 
               <div style={{ display: 'grid', gap: 12 }}>
-                <div
-                  style={{
-                    border: '1px solid #fde68a',
-                    borderRadius: 14,
-                    background: '#fffbeb',
-                    padding: 14,
-                  }}
-                >
-                  <div style={{ fontWeight: 800, color: '#92400e', marginBottom: 6 }}>
-                    1. WhatsApp hattını bağla
-                  </div>
-                  <div style={{ color: '#4b5563', lineHeight: 1.7 }}>
-                    Fiziksel hat geldikten sonra Meta doğrulaması yapılacak ve tenant
-                    seviyesinde canlı panel reply testine geçilecek.
-                  </div>
-                </div>
+                <ReadinessCard
+                  title="1. Numara doğru tenant’a bağlanmalı"
+                  detail="En kritik risk FLAW ve MIRELLE karışması. Bu yüzden önce tenant eşleşmesi doğrulanmalı."
+                  tone="warning"
+                />
 
-                <div
-                  style={{
-                    border: '1px solid #e5e7eb',
-                    borderRadius: 14,
-                    background: '#ffffff',
-                    padding: 14,
-                  }}
-                >
-                  <div style={{ fontWeight: 800, color: '#111827', marginBottom: 6 }}>
-                    2. Meta Business görünümünü netleştir
-                  </div>
-                  <div style={{ color: '#4b5563', lineHeight: 1.7 }}>
-                    WhatsApp hattı oturduktan sonra Meta Business katmanı bu sayfada daha
-                    görünür hale getirilecek.
-                  </div>
-                </div>
+                <ReadinessCard
+                  title="2. Reply alanı otomatik açılmalı"
+                  detail="WhatsApp hattı bağlandığında Mesajlar ve konuşma detail ekranında disabled state kalkmalı."
+                  tone="neutral"
+                />
 
-                <div
-                  style={{
-                    border: '1px solid #e5e7eb',
-                    borderRadius: 14,
-                    background: '#ffffff',
-                    padding: 14,
-                  }}
-                >
-                  <div style={{ fontWeight: 800, color: '#111827', marginBottom: 6 }}>
-                    3. Çok kanallı genişleme sırasını koru
-                  </div>
-                  <div style={{ color: '#4b5563', lineHeight: 1.7 }}>
-                    Önce WhatsApp ve giyim ürünü satılabilir hale gelecek. Facebook,
-                    Instagram, e-posta ve TikTok bundan sonra sıraya alınacak.
-                  </div>
-                </div>
+                <ReadinessCard
+                  title="3. İlk smoke test kısa ve kontrollü olmalı"
+                  detail="Önce merhaba / ürün sorusu / kargo / dekont gibi temel senaryolar test edilecek."
+                  tone="success"
+                />
               </div>
             </section>
 
@@ -404,17 +402,38 @@ export default function IntegrationsPage() {
               }}
             >
               <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
-                Kanal Stratejisi
+                Sonraki Sandbox Mantığı
               </div>
 
               <div style={{ display: 'grid', gap: 10, color: '#4b5563', lineHeight: 1.7 }}>
-                <div>• İlk öncelik: WhatsApp merkezli canlı operasyon</div>
-                <div>• Pilot mağaza yüzeyi: ikas embedded app</div>
-                <div>• Stratejik omurga: Meta Business görünürlüğü</div>
-                <div>• Sonraki genişleme: Facebook / Instagram / e-posta</div>
-                <div>• İleri roadmap: TikTok ve diğer kanal adaptörleri</div>
+                <div>• MIRELLE = canlıya yakın tenant</div>
+                <div>• FLAW = deney ve storefront sandbox tenantı</div>
+                <div>• İlk storefront sandbox adayı = WooCommerce</div>
+                <div>• Ticimax / IdeaSoft karşılaştırması ikinci aşamada daha doğru</div>
               </div>
             </section>
+          </div>
+        </section>
+
+        <section
+          style={{
+            border: '1px solid #e5e7eb',
+            borderRadius: 18,
+            background: '#ffffff',
+            padding: 18,
+            marginBottom: 16,
+          }}
+        >
+          <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
+            Yarın Numara Gelince Sıra Ne Olacak?
+          </div>
+
+          <div style={{ display: 'grid', gap: 10, color: '#4b5563', lineHeight: 1.7 }}>
+            <div>• Önce numara ve Meta bağlantısı doğrulanacak</div>
+            <div>• Sonra doğru tenant üzerinde WhatsApp alanı eşleştirilecek</div>
+            <div>• Sonra panelde no-whatsapp guard kalktı mı bakılacak</div>
+            <div>• Sonra inbound mesaj panelde görünüyor mu test edilecek</div>
+            <div>• Sonra manual reply ve operasyon/sipariş navigation zinciri test edilecek</div>
           </div>
         </section>
 
@@ -427,18 +446,17 @@ export default function IntegrationsPage() {
           }}
         >
           <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
-            Bu Sayfanın V1 Mantığı
+            Bu Sayfanın Paket 13B Mantığı
           </div>
 
           <div style={{ display: 'grid', gap: 10, color: '#4b5563', lineHeight: 1.7 }}>
             <div>
-              Bu ekran kullanıcıya sadece “hangi entegrasyon var” demiyor; aynı zamanda
-              “hangi entegrasyon şimdi önemli, hangisi daha sonra gelecek” mantığını da
-              anlatıyor.
+              Bu ekran artık sadece “hangi entegrasyon var” demiyor; aynı zamanda
+              “yarın canlıya en az sürprizle çıkmak için neye bakmalıyım” sorusuna cevap veriyor.
             </div>
             <div>
-              Böylece müşteri firma paneli açtığında teknik detaylara boğulmadan, mevcut
-              kapasiteyi ve sıradaki adımı sade şekilde anlayabiliyor.
+              Böylece müşteri firma teknik detaylar arasında kaybolmadan, mevcut hazırlık düzeyini
+              ve sıradaki doğru adımı sade biçimde anlayabiliyor.
             </div>
           </div>
         </section>
