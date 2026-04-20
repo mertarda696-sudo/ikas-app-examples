@@ -307,12 +307,11 @@ export default function OperationDetailPage() {
     </Link>
   </div>
 
-  <div style={{ color: '#6b7280', lineHeight: 1.7, fontSize: 13 }}>
+    <div style={{ color: '#6b7280', lineHeight: 1.7, fontSize: 13 }}>
     Bu vaka artık yalnız başına durmuyor; sipariş ve konuşma akışıyla birlikte
     yönetilecek şekilde konumlanıyor.
   </div>
 </section>
-        </section>
       </main>
     </AppShell>
   );
