@@ -197,11 +197,11 @@ export default function OperationDetailPage() {
           }}
         >
           <MetricCard label="Vaka Tipi" value={detail.type} />
-<MetricCard label="Müşteri" value={detail.customer} />
-<MetricCard label="Sipariş No" value={detail.orderId} />
-<MetricCard label="Öncelik" value={detail.priority} />
-<MetricCard label="Kanal" value={detail.channel} />
-<MetricCard label="Sonraki Aksiyon" value={detail.nextAction} />
+          <MetricCard label="Müşteri" value={detail.customer} />
+          <MetricCard label="Sipariş No" value={detail.orderId} />
+          <MetricCard label="Öncelik" value={detail.priority} />
+          <MetricCard label="Kanal" value={detail.channel} />
+          <MetricCard label="Sonraki Aksiyon" value={detail.nextAction} />
         </section>
 
         <section
@@ -248,13 +248,13 @@ export default function OperationDetailPage() {
           </div>
 
           <div style={{ display: 'grid', gap: 10, color: '#4b5563', lineHeight: 1.7 }}>
-  <div>• Müşteri konuşmasının gözden geçirilmesi</div>
-  <div>• İlgili siparişle vaka ilişkisinin kontrolü</div>
-  <div>• Medya / kanıt içeriğinin incelenmesi</div>
-  <div>• Operatör iç notu ve sorumlu takibi</div>
-  <div>• Öncelik ve durum güncellemesi</div>
-  <div>• Vaka çözümü sonrası kapanış akışı</div>
-</div>
+            <div>• Müşteri konuşmasının gözden geçirilmesi</div>
+            <div>• İlgili siparişle vaka ilişkisinin kontrolü</div>
+            <div>• Medya / kanıt içeriğinin incelenmesi</div>
+            <div>• Operatör iç notu ve sorumlu takibi</div>
+            <div>• Öncelik ve durum güncellemesi</div>
+            <div>• Vaka çözümü sonrası kapanış akışı</div>
+          </div>
         </section>
 
         <section
