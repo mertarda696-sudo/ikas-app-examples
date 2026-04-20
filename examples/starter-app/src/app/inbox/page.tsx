@@ -5,6 +5,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/apparel-panel/AppShell';
 import { TokenHelpers } from '@/helpers/token-helpers';
 import type { InboxListResponse } from '@/lib/apparel-panel/types';
+import {
+  inferLinkedCaseId,
+  inferLinkedOrderId,
+  inferPriorityLabel,
+  getConversationQueueHint,
+} from '@/lib/apparel-panel/panel-relations';
 
 function formatDate(value: string | null | undefined) {
   if (!value) return '-';
@@ -59,125 +65,6 @@ function statusColors(status: string | null | undefined) {
   return {
     background: '#eff6ff',
     color: '#1d4ed8',
-  };
-}
-
-function normalizeText(value: string | null | undefined) {
-  return String(value || '')
-    .toLocaleLowerCase('tr-TR')
-    .replace(/ı/g, 'i')
-    .trim();
-}
-
-function inferLinkedOrderId(
-  lastMessageText: string | null | undefined,
-  contextProductName: string | null | undefined,
-) {
-  const text = normalizeText(lastMessageText);
-  const product = normalizeText(contextProductName);
-
-  if (text.includes('dekont') || text.includes('odeme')) return 'SIP-10387';
-  if (text.includes('kargo')) return 'SIP-10412';
-  if (text.includes('iade') || text.includes('degisim')) return 'SIP-10374';
-  if (product) return 'SIP-10428';
-
-  return null;
-}
-
-function inferLinkedCaseId(lastMessageText: string | null | undefined) {
-  const text = normalizeText(lastMessageText);
-
-  if (text.includes('dekont') || text.includes('odeme')) return 'OP-303';
-  if (text.includes('kargo')) return 'OP-302';
-  if (text.includes('iade') || text.includes('degisim') || text.includes('beden'))
-    return 'OP-304';
-  if (text.includes('hasar') || text.includes('yirtik') || text.includes('kusur'))
-    return 'OP-301';
-
-  return null;
-}
-
-function inferPriorityLabel(lastMessageText: string | null | undefined) {
-  const text = normalizeText(lastMessageText);
-
-  if (text.includes('dekont') || text.includes('odeme')) return 'Finans öncelikli';
-  if (text.includes('kargo')) return 'Kargo takibi';
-  if (text.includes('iade') || text.includes('degisim')) return 'Operasyon adayı';
-  if (text.includes('hasar') || text.includes('kusur')) return 'Kanıt kontrolü';
-  return 'Genel takip';
-}
-
-function inferOperatorRecommendation(item: {
-  lastMessageText: string | null;
-  contextProductName: string | null;
-  lastMessageDirection: 'in' | 'out' | null;
-  status: string | null;
-}) {
-  const text = normalizeText(item.lastMessageText);
-  const hasProductContext = Boolean(item.contextProductName);
-  const customerWaiting =
-    String(item.status || '').toLowerCase() === 'open' &&
-    item.lastMessageDirection === 'in';
-
-  if (text.includes('dekont') || text.includes('odeme')) {
-    return {
-      title: 'Önce ödeme akışını kontrol et',
-      helper: 'Dekont veya ödeme sinyali var. Finans ve sipariş tarafı birlikte kontrol edilmeli.',
-      tone: 'warning' as const,
-      queueLabel: 'Finans akışı',
-    };
-  }
-
-  if (text.includes('kargo')) {
-    return {
-      title: 'Sipariş ve kargo durumuna bak',
-      helper: 'Teslimat / kargo ile ilgili konuşma görünüyor. Sipariş detail ekranı faydalı olur.',
-      tone: 'info' as const,
-      queueLabel: 'Kargo takibi',
-    };
-  }
-
-  if (text.includes('iade') || text.includes('degisim') || text.includes('beden')) {
-    return {
-      title: 'Operasyon ve sipariş kaydını birlikte aç',
-      helper: 'İade, değişim veya beden akışı olabilir. Operasyon tarafı kontrol edilmeli.',
-      tone: 'warning' as const,
-      queueLabel: 'Operasyon adayı',
-    };
-  }
-
-  if (text.includes('hasar') || text.includes('kusur') || text.includes('yirtik')) {
-    return {
-      title: 'Kanıt ve operasyon sinyalini kontrol et',
-      helper: 'Hasar/kusur dili geçtiği için vaka akışı üretmeye yakın olabilir.',
-      tone: 'warning' as const,
-      queueLabel: 'Kanıt kontrolü',
-    };
-  }
-
-  if (customerWaiting && hasProductContext) {
-    return {
-      title: 'Ürün bağlamıyla müşteriye cevap ver',
-      helper: 'Müşteri açık konuşmada bekliyor. Ürün bağlamı görünür olduğu için hızlı dönüş yapılabilir.',
-      tone: 'success' as const,
-      queueLabel: 'Müşteri bekliyor',
-    };
-  }
-
-  if (customerWaiting) {
-    return {
-      title: 'Müşteriye geri dönüş yap',
-      helper: 'Son mesaj müşteriden gelmiş görünüyor. Önce konuşma detail ekranı açılmalı.',
-      tone: 'warning' as const,
-      queueLabel: 'Açık konuşma',
-    };
-  }
-
-  return {
-    title: 'Genel takip',
-    helper: 'Bu konuşma şu an kritik görünmüyor ama kayıt bağı için detail ekranı açılabilir.',
-    tone: 'neutral' as const,
-    queueLabel: 'Rutin takip',
   };
 }
 
@@ -347,8 +234,8 @@ export default function InboxPage() {
               lineHeight: 1.6,
             }}
           >
-            Amaç, müşteri firmanın hangi konuşmayı önce açacağını, o konuşmanın sipariş
-            ve operasyon tarafıyla ilişkisini ilk bakışta anlamasını sağlamak.
+            Bu sürümde konuşma → sipariş → vaka ilişkileri ortak relation katmanından
+            okunur. Aynı ilişki mantığı artık ekranlar arasında dağınık değildir.
           </div>
         </div>
 
@@ -432,7 +319,7 @@ export default function InboxPage() {
                   );
                   const linkedCaseId = inferLinkedCaseId(item.lastMessageText);
                   const priorityLabel = inferPriorityLabel(item.lastMessageText);
-                  const recommendation = inferOperatorRecommendation(item);
+                  const recommendation = getConversationQueueHint(item);
 
                   const recommendationBoxStyle =
                     recommendation.tone === 'success'
@@ -629,7 +516,10 @@ export default function InboxPage() {
                               flexWrap: 'wrap',
                             }}
                           >
-                            <SmallBadge label={recommendation.queueLabel} tone={recommendation.tone} />
+                            <SmallBadge
+                              label={recommendation.queueLabel}
+                              tone={recommendation.tone}
+                            />
 
                             <div
                               style={{
