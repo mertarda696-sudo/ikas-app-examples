@@ -1,29 +1,75 @@
 import { AppShell } from '@/components/apparel-panel/AppShell';
 
-const INTEGRATION_ROWS = [
+const INTEGRATION_CARDS = [
   {
     name: 'WhatsApp',
-    role: 'Müşteri mesajlaşma ve otomatik yanıt hattı',
-    status: 'Kısmen hazır',
-    detail: 'n8n webhook ve panel reply zinciri hazır; tenant bazlı canlı hat bağlantıları tenant seviyesinde tamamlanacak.',
+    category: 'Canlı müşteri mesajlaşma hattı',
+    status: 'Kurulum gerekli',
+    tone: 'warning' as const,
+    summary:
+      'Panel reply ve otomasyon zinciri hazır. Tenant seviyesinde gerçek WhatsApp hattı bağlandığında canlı kullanım tamamlanacak.',
+    nextStep:
+      'MIRELLE için fiziksel hat + Meta doğrulaması + wa_phone_number_id eşleştirmesi yapılmalı.',
   },
   {
     name: 'ikas',
-    role: 'Mağaza / katalog / embedded app entegrasyonu',
+    category: 'Mağaza / katalog / embedded app entegrasyonu',
     status: 'Aktif pilot',
-    detail: 'MIRELLE üzerinde embedded app, dashboard ve panel görünümü çalışıyor.',
+    tone: 'success' as const,
+    summary:
+      'MIRELLE üzerinde embedded app, dashboard ve panel görünümü aktif pilot olarak çalışıyor.',
+    nextStep:
+      'Panel ekranları ürünleştirilirken katalog ve tenant görünümü bu entegrasyon üzerinden ilerliyor.',
+  },
+  {
+    name: 'Meta Business',
+    category: 'Çok kanallı kanal omurgası',
+    status: 'Hazırlık aşaması',
+    tone: 'info' as const,
+    summary:
+      'WhatsApp ve ileride Facebook tarafı için stratejik merkez olacak. Tenant bağlantı modeli burada netleşecek.',
+    nextStep:
+      'WhatsApp hattı bağlanınca Meta Business görünürlüğü ve health mantığı bu ekranda güçlendirilecek.',
+  },
+  {
+    name: 'Facebook',
+    category: 'Gelecek kanal adaptörü',
+    status: 'Planlandı',
+    tone: 'neutral' as const,
+    summary:
+      'Meta ekosistemi içinde daha sonraki çok kanallı inbox genişlemesinde değerlendirilecek.',
+    nextStep:
+      'WhatsApp hattı ve Meta Business akışı oturduktan sonra ikinci aşamada ele alınmalı.',
   },
   {
     name: 'Instagram',
-    role: 'Gelecek kanal adaptörü',
+    category: 'Gelecek kanal adaptörü',
     status: 'Planlandı',
-    detail: 'Çok kanallı inbox fazında ele alınacak.',
+    tone: 'neutral' as const,
+    summary:
+      'Çok kanallı mesaj merkezi vizyonunda yer alıyor ancak ilk satış sprintinde öncelik değil.',
+    nextStep:
+      'WhatsApp merkezli sürüm sabitlendikten sonra sıraya alınacak.',
+  },
+  {
+    name: 'TikTok',
+    category: 'İleri kanal backlog',
+    status: 'Roadmap',
+    tone: 'neutral' as const,
+    summary:
+      'Uzun vadeli kanal genişleme planında düşünülüyor. İlk dikey giyim ürünü satılabilir hale geldikten sonra değerlendirilmesi daha doğru.',
+    nextStep:
+      'Meta ve çok kanallı inbox fazı oturduktan sonra ayrıca teknik/ürün uygunluğu analiz edilmeli.',
   },
   {
     name: 'E-posta',
-    role: 'Müşteri iletişim ve destek hattı',
+    category: 'Destek ve operasyon kanalı',
     status: 'Planlandı',
-    detail: 'Operasyon ve dekont akışları büyüdüğünde ikinci kanal olarak değerlendirilecek.',
+    tone: 'neutral' as const,
+    summary:
+      'Dekont, sipariş ve destek süreçlerinde ikincil kanal olarak değerli olabilir.',
+    nextStep:
+      'Operasyon ve sipariş ekranları daha olgun hale geldiğinde ikinci faza alınmalı.',
   },
 ];
 
@@ -86,6 +132,81 @@ function MetricCard({
   );
 }
 
+function IntegrationCard({
+  name,
+  category,
+  status,
+  tone,
+  summary,
+  nextStep,
+}: {
+  name: string;
+  category: string;
+  status: string;
+  tone: 'success' | 'warning' | 'neutral' | 'info';
+  summary: string;
+  nextStep: string;
+}) {
+  return (
+    <div
+      style={{
+        border: '1px solid #e5e7eb',
+        borderRadius: 18,
+        background: '#ffffff',
+        padding: 18,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: 10,
+          alignItems: 'flex-start',
+          flexWrap: 'wrap',
+          marginBottom: 8,
+        }}
+      >
+        <div style={{ fontSize: 18, fontWeight: 800, color: '#111827' }}>{name}</div>
+        <Badge label={status} tone={tone} />
+      </div>
+
+      <div
+        style={{
+          fontSize: 13,
+          fontWeight: 700,
+          color: '#6b7280',
+          marginBottom: 10,
+        }}
+      >
+        {category}
+      </div>
+
+      <div
+        style={{
+          color: '#4b5563',
+          lineHeight: 1.7,
+          marginBottom: 12,
+          fontSize: 14,
+        }}
+      >
+        {summary}
+      </div>
+
+      <div
+        style={{
+          borderTop: '1px solid #f3f4f6',
+          paddingTop: 10,
+          color: '#374151',
+          fontSize: 13,
+          lineHeight: 1.7,
+        }}
+      >
+        <strong>Sonraki adım:</strong> {nextStep}
+      </div>
+    </div>
+  );
+}
+
 export default function IntegrationsPage() {
   return (
     <AppShell>
@@ -112,8 +233,9 @@ export default function IntegrationsPage() {
               Entegrasyonlar
             </h1>
             <p style={{ color: '#4b5563', margin: 0, lineHeight: 1.7 }}>
-              WhatsApp, ikas ve sonraki kanal/platform bağlantılarının tek merkezde
-              izlendiği entegrasyon görünümü v1.
+              Bu ekran müşteri firmanın hangi kanal ve platform bağlantılarının aktif,
+              hangilerinin eksik, hangilerinin sıradaki yatırım alanı olduğunu kolayca
+              anlaması için tasarlandı.
             </p>
           </div>
 
@@ -124,13 +246,14 @@ export default function IntegrationsPage() {
               background: '#ffffff',
               padding: 14,
               color: '#6b7280',
-              maxWidth: 320,
+              maxWidth: 340,
               fontSize: 13,
               lineHeight: 1.6,
             }}
           >
-            Bu ekran ilk aşamada ürünleşmiş bağlantı görünümünü oluşturur. Sonraki
-            fazda tenant bazlı gerçek bağlantı health bilgileri ve aksiyonlar eklenecek.
+            İlk satış sprintinde öncelik WhatsApp + ikas + giyim operasyon paneli.
+            Meta Business, Facebook ve TikTok görünürlüğü bu yüzden burada stratejik
+            alan olarak yer alıyor.
           </div>
         </div>
 
@@ -145,22 +268,22 @@ export default function IntegrationsPage() {
           <MetricCard
             label="Aktif Pilot"
             value="2"
-            helper="Şu an görünür ve çalışan ana bağlantı yüzeyleri."
+            helper="ikas ve panel altyapısında görünür çalışan ana yüzeyler."
+          />
+          <MetricCard
+            label="Kurulum Bekleyen"
+            value="1"
+            helper="Canlı WhatsApp tenant bağlantısı henüz tamamlanmadı."
           />
           <MetricCard
             label="Planlı Kanal"
-            value="2+"
-            helper="Sıradaki çok kanallı genişleme adayları."
+            value="3+"
+            helper="Meta Business, Facebook, Instagram, TikTok ve e-posta genişlemesi."
           />
           <MetricCard
-            label="Manuel Kurulum Gereken"
-            value="1"
-            helper="Tenant bazlı WhatsApp hat eşleştirmesi gerektiren alanlar."
-          />
-          <MetricCard
-            label="Entegrasyon Merkezi"
-            value="v1"
-            helper="Bağlantı health ve yönlendirme ekranının ilk sürümü."
+            label="Bu Mağaza İçin Sonraki Adım"
+            value="WhatsApp"
+            helper="Fiziksel hat + Meta doğrulaması + tenant eşleştirmesi."
           />
         </section>
 
@@ -177,68 +300,30 @@ export default function IntegrationsPage() {
               border: '1px solid #e5e7eb',
               borderRadius: 18,
               background: '#ffffff',
-              overflow: 'hidden',
+              padding: 18,
             }}
           >
-            <div
-              style={{
-                padding: 18,
-                borderBottom: '1px solid #e5e7eb',
-                fontSize: 18,
-                fontWeight: 800,
-              }}
-            >
-              Entegrasyon Durumu
+            <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 14 }}>
+              Entegrasyon Kartları
             </div>
 
-            <div style={{ display: 'grid' }}>
-              {INTEGRATION_ROWS.map((row) => (
-                <div
-                  key={row.name}
-                  style={{
-                    padding: 18,
-                    borderBottom: '1px solid #f3f4f6',
-                  }}
-                >
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      gap: 12,
-                      alignItems: 'flex-start',
-                      flexWrap: 'wrap',
-                      marginBottom: 8,
-                    }}
-                  >
-                    <div style={{ fontSize: 18, fontWeight: 800, color: '#111827' }}>
-                      {row.name}
-                    </div>
-
-                    <Badge
-                      label={row.status}
-                      tone={
-                        row.status === 'Aktif pilot'
-                          ? 'success'
-                          : row.status === 'Kısmen hazır'
-                            ? 'warning'
-                            : 'neutral'
-                      }
-                    />
-                  </div>
-
-                  <div
-                    style={{
-                      fontSize: 14,
-                      color: '#374151',
-                      fontWeight: 700,
-                      marginBottom: 8,
-                    }}
-                  >
-                    {row.role}
-                  </div>
-
-                  <div style={{ color: '#6b7280', lineHeight: 1.7 }}>{row.detail}</div>
-                </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+                gap: 12,
+              }}
+            >
+              {INTEGRATION_CARDS.map((item) => (
+                <IntegrationCard
+                  key={item.name}
+                  name={item.name}
+                  category={item.category}
+                  status={item.status}
+                  tone={item.tone}
+                  summary={item.summary}
+                  nextStep={item.nextStep}
+                />
               ))}
             </div>
           </div>
@@ -253,14 +338,60 @@ export default function IntegrationsPage() {
               }}
             >
               <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
-                V1 Entegrasyon Mantığı
+                Bu Mağaza İçin Öncelikli Aksiyonlar
               </div>
 
-              <div style={{ display: 'grid', gap: 10, color: '#4b5563', lineHeight: 1.7 }}>
-                <div>• Tenant bazlı WhatsApp bağlantı durumu görünür olacak</div>
-                <div>• ikas pilot entegrasyon yüzeyi burada izlenecek</div>
-                <div>• Sonraki fazda kanal health ve aksiyon blokları eklenecek</div>
-                <div>• Instagram / e-posta gibi kanallar burada sıraya alınacak</div>
+              <div style={{ display: 'grid', gap: 12 }}>
+                <div
+                  style={{
+                    border: '1px solid #fde68a',
+                    borderRadius: 14,
+                    background: '#fffbeb',
+                    padding: 14,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: '#92400e', marginBottom: 6 }}>
+                    1. WhatsApp hattını bağla
+                  </div>
+                  <div style={{ color: '#4b5563', lineHeight: 1.7 }}>
+                    Fiziksel hat geldikten sonra Meta doğrulaması yapılacak ve tenant
+                    seviyesinde canlı panel reply testine geçilecek.
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    border: '1px solid #e5e7eb',
+                    borderRadius: 14,
+                    background: '#ffffff',
+                    padding: 14,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: '#111827', marginBottom: 6 }}>
+                    2. Meta Business görünümünü netleştir
+                  </div>
+                  <div style={{ color: '#4b5563', lineHeight: 1.7 }}>
+                    WhatsApp hattı oturduktan sonra Meta Business katmanı bu sayfada daha
+                    görünür hale getirilecek.
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    border: '1px solid #e5e7eb',
+                    borderRadius: 14,
+                    background: '#ffffff',
+                    padding: 14,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: '#111827', marginBottom: 6 }}>
+                    3. Çok kanallı genişleme sırasını koru
+                  </div>
+                  <div style={{ color: '#4b5563', lineHeight: 1.7 }}>
+                    Önce WhatsApp ve giyim ürünü satılabilir hale gelecek. Facebook,
+                    Instagram, e-posta ve TikTok bundan sonra sıraya alınacak.
+                  </div>
+                </div>
               </div>
             </section>
 
@@ -273,15 +404,42 @@ export default function IntegrationsPage() {
               }}
             >
               <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
-                Kritik Not
+                Kanal Stratejisi
               </div>
 
-              <div style={{ color: '#4b5563', lineHeight: 1.7 }}>
-                MIRELLE için gerçek canlı panel reply testinin tamamlanması, tenant
-                seviyesinde WhatsApp hattı bağlanıp `wa_phone_number_id` alanı
-                doldurulduğunda mümkün olacak.
+              <div style={{ display: 'grid', gap: 10, color: '#4b5563', lineHeight: 1.7 }}>
+                <div>• İlk öncelik: WhatsApp merkezli canlı operasyon</div>
+                <div>• Pilot mağaza yüzeyi: ikas embedded app</div>
+                <div>• Stratejik omurga: Meta Business görünürlüğü</div>
+                <div>• Sonraki genişleme: Facebook / Instagram / e-posta</div>
+                <div>• İleri roadmap: TikTok ve diğer kanal adaptörleri</div>
               </div>
             </section>
+          </div>
+        </section>
+
+        <section
+          style={{
+            border: '1px solid #e5e7eb',
+            borderRadius: 18,
+            background: '#ffffff',
+            padding: 18,
+          }}
+        >
+          <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
+            Bu Sayfanın V1 Mantığı
+          </div>
+
+          <div style={{ display: 'grid', gap: 10, color: '#4b5563', lineHeight: 1.7 }}>
+            <div>
+              Bu ekran kullanıcıya sadece “hangi entegrasyon var” demiyor; aynı zamanda
+              “hangi entegrasyon şimdi önemli, hangisi daha sonra gelecek” mantığını da
+              anlatıyor.
+            </div>
+            <div>
+              Böylece müşteri firma paneli açtığında teknik detaylara boğulmadan, mevcut
+              kapasiteyi ve sıradaki adımı sade şekilde anlayabiliyor.
+            </div>
           </div>
         </section>
       </main>
