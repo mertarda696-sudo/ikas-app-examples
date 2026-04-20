@@ -17,6 +17,8 @@ const CASE_DETAIL_MAP: Record<
     media: string;
     updatedAt: string;
     summary: string;
+    nextAction: string;
+    channel: string;
   }
 > = {
   'OP-301': {
@@ -31,6 +33,8 @@ const CASE_DETAIL_MAP: Record<
     updatedAt: '15.04.2026 23:18',
     summary:
       'Bu kayıt hasarlı ürün vakalarının konuşma, sipariş ve medya/kanıt ile birlikte yönetileceği detail ekranını temsil eder.',
+    nextAction: 'Müşteriden gelen medya/kanıtı kontrol et ve siparişle eşleştir',
+    channel: 'WhatsApp',
   },
   'OP-302': {
     title: 'Teslimat gecikmesi şikayeti',
@@ -44,6 +48,8 @@ const CASE_DETAIL_MAP: Record<
     updatedAt: '15.04.2026 19:42',
     summary:
       'Bu kayıt kargo şikayetlerinde sipariş, konuşma geçmişi ve müşteri geri bildirimini tek yerde toplayacak yapıyı gösterir.',
+    nextAction: 'Müşteriye güncel kargo durumu paylaşılmalı',
+    channel: 'WhatsApp',
   },
   'OP-303': {
     title: 'Dekont doğrulama bekliyor',
@@ -57,6 +63,8 @@ const CASE_DETAIL_MAP: Record<
     updatedAt: '15.04.2026 14:09',
     summary:
       'Bu kayıt ödeme/dekont vakalarının finans kontrolü, müşteri konuşması ve sipariş bağlantısıyla yönetileceği detail ekranını temsil eder.',
+    nextAction: 'Dekont ve ödeme tutarı finans tarafından doğrulanmalı',
+    channel: 'WhatsApp',
   },
   'OP-304': {
     title: 'Beden değişim talebi',
@@ -70,6 +78,8 @@ const CASE_DETAIL_MAP: Record<
     updatedAt: '14.04.2026 16:27',
     summary:
       'Bu kayıt iade ve değişim süreçlerinde durum takibi, iç not, müşteri konuşması ve sipariş bağlantısı için hazırlanmıştır.',
+    nextAction: 'Beden değişim sonrası kapanış kontrolü yapılmalı',
+    channel: 'WhatsApp',
   },
 };
 
@@ -118,6 +128,8 @@ export default function OperationDetailPage() {
     media: 'Yok',
     updatedAt: '-',
     summary: 'Bu vaka için placeholder detail ekranı gösteriliyor.',
+    nextAction: 'Aksiyon bilgisi yok',
+    channel: 'Belirsiz',
   };
 
   return (
@@ -185,9 +197,11 @@ export default function OperationDetailPage() {
           }}
         >
           <MetricCard label="Vaka Tipi" value={detail.type} />
-          <MetricCard label="Müşteri" value={detail.customer} />
-          <MetricCard label="Sipariş No" value={detail.orderId} />
-          <MetricCard label="Öncelik" value={detail.priority} />
+<MetricCard label="Müşteri" value={detail.customer} />
+<MetricCard label="Sipariş No" value={detail.orderId} />
+<MetricCard label="Öncelik" value={detail.priority} />
+<MetricCard label="Kanal" value={detail.channel} />
+<MetricCard label="Sonraki Aksiyon" value={detail.nextAction} />
         </section>
 
         <section
@@ -230,17 +244,17 @@ export default function OperationDetailPage() {
           }}
         >
           <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
-            Sonraki Fazda Bu Ekrana Eklenecekler
+            Bu Vaka İçinde Operasyon Ekibi Ne Yönetecek?
           </div>
 
           <div style={{ display: 'grid', gap: 10, color: '#4b5563', lineHeight: 1.7 }}>
-            <div>• Müşteri konuşma zaman çizelgesi</div>
-            <div>• Sipariş detay bağlantısı</div>
-            <div>• Medya / kanıt galeri alanı</div>
-            <div>• İç not ve operatör yorumları</div>
-            <div>• Atama ve öncelik yönetimi</div>
-            <div>• Durum değişikliği ve kapanış akışı</div>
-          </div>
+  <div>• Müşteri konuşmasının gözden geçirilmesi</div>
+  <div>• İlgili siparişle vaka ilişkisinin kontrolü</div>
+  <div>• Medya / kanıt içeriğinin incelenmesi</div>
+  <div>• Operatör iç notu ve sorumlu takibi</div>
+  <div>• Öncelik ve durum güncellemesi</div>
+  <div>• Vaka çözümü sonrası kapanış akışı</div>
+</div>
         </section>
 
         <section
