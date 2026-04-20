@@ -33,6 +33,7 @@ const CASE_ROWS = [
     assignee: 'Operatör 1',
     media: 'Var',
     updatedAt: '15.04.2026 23:18',
+    note: 'Fotoğraf kontrolü gerekli',
   },
   {
     id: 'OP-302',
@@ -45,6 +46,7 @@ const CASE_ROWS = [
     assignee: 'Operatör 2',
     media: 'Yok',
     updatedAt: '15.04.2026 19:42',
+    note: 'Müşteri dönüşü bekleniyor',
   },
   {
     id: 'OP-303',
@@ -57,6 +59,7 @@ const CASE_ROWS = [
     assignee: 'Finans Kuyruğu',
     media: 'Var',
     updatedAt: '15.04.2026 14:09',
+    note: 'Finans öncelikli inceleme',
   },
   {
     id: 'OP-304',
@@ -69,6 +72,7 @@ const CASE_ROWS = [
     assignee: 'Operatör 1',
     media: 'Yok',
     updatedAt: '14.04.2026 16:27',
+    note: 'Kapanış sonrası kontrol',
   },
 ];
 
@@ -271,6 +275,62 @@ export default function OperationsPage() {
         </section>
 
         <section
+  style={{
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+    gap: 12,
+    marginBottom: 16,
+  }}
+>
+  <div
+    style={{
+      border: '1px solid #fde68a',
+      borderRadius: 16,
+      background: '#fffbeb',
+      padding: 14,
+    }}
+  >
+    <div style={{ fontWeight: 800, color: '#92400e', marginBottom: 6 }}>
+      Kritik / finans etkili vaka var
+    </div>
+    <div style={{ color: '#4b5563', lineHeight: 1.6 }}>
+      Dekont ve ödeme kaynaklı vakalar önce ele alınmalı.
+    </div>
+  </div>
+
+  <div
+    style={{
+      border: '1px solid #e5e7eb',
+      borderRadius: 16,
+      background: '#ffffff',
+      padding: 14,
+    }}
+  >
+    <div style={{ fontWeight: 800, color: '#111827', marginBottom: 6 }}>
+      Medya içeren vakalar görünür olmalı
+    </div>
+    <div style={{ color: '#4b5563', lineHeight: 1.6 }}>
+      Hasarlı ürün ve dekont akışlarında medya/kanıt iş akışını hızlandırır.
+    </div>
+  </div>
+
+  <div
+    style={{
+      border: '1px solid #e5e7eb',
+      borderRadius: 16,
+      background: '#ffffff',
+      padding: 14,
+    }}
+  >
+    <div style={{ fontWeight: 800, color: '#111827', marginBottom: 6 }}>
+      Müşteri bekleyen vakaları unutma
+    </div>
+    <div style={{ color: '#4b5563', lineHeight: 1.6 }}>
+      Açık ama müşteri cevabı bekleyen vakalar ayrıca takip edilmeli.
+    </div>
+  </div>
+</section>
+        <section
           style={{
             border: '1px solid #e5e7eb',
             borderRadius: 18,
@@ -340,16 +400,17 @@ export default function OperationsPage() {
                 <tr style={{ background: '#f9fafb' }}>
                   {[
                     'Vaka No',
-                    'Tip',
-                    'Başlık',
-                    'Müşteri',
-                    'Sipariş',
-                    'Öncelik',
-                    'Durum',
-                    'Sorumlu',
-                    'Medya',
-                    'Son Güncelleme',
-                    'Detay',
+  'Tip',
+  'Başlık',
+  'Müşteri',
+  'Sipariş',
+  'Öncelik',
+  'Durum',
+  'Sorumlu',
+  'Medya',
+  'İş Notu',
+  'Son Güncelleme',
+  'Detay',
                   ].map((header) => (
                     <th
                       key={header}
@@ -404,16 +465,19 @@ export default function OperationsPage() {
                     <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
                       {row.media}
                     </td>
-                    <td
-                      style={{
-                        padding: 14,
-                        borderBottom: '1px solid #f3f4f6',
-                        color: '#6b7280',
-                      }}
-                    >
-                      {row.updatedAt}
-                    </td>
                     <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
+  {row.note}
+</td>
+<td
+  style={{
+    padding: 14,
+    borderBottom: '1px solid #f3f4f6',
+    color: '#6b7280',
+  }}
+>
+  {row.updatedAt}
+</td>
+<td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
                       <Link
                         href={`/operations/${row.id}`}
                         style={{
@@ -431,7 +495,7 @@ export default function OperationsPage() {
                 {rows.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={11}
+                      colSpan={12}
                       style={{
                         padding: 18,
                         color: '#6b7280',
