@@ -3,190 +3,12 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { AppShell } from '@/components/apparel-panel/AppShell';
-
-type EvidenceType = 'image' | 'video' | 'audio' | 'document';
-type EvidenceStatus = 'İnceleme bekliyor' | 'Doğrulandı' | 'Arşiv' | 'Ek bilgi bekleniyor';
-
-type EvidenceItem = {
-  id: string;
-  type: EvidenceType;
-  title: string;
-  source: string;
-  relation: string;
-  uploadedAt: string;
-  status: EvidenceStatus;
-  note: string;
-};
-
-const CASE_DETAIL_MAP: Record<
-  string,
-  {
-    title: string;
-    type: string;
-    customer: string;
-    orderId: string;
-    priority: string;
-    status: string;
-    assignee: string;
-    updatedAt: string;
-    summary: string;
-    nextAction: string;
-    channel: string;
-    linkedOrderId: string | null;
-    evidenceCenterLabel: string;
-    reviewSummary: string;
-  }
-> = {
-  'OP-301': {
-    title: 'Kargo sonrası hasarlı ürün bildirimi',
-    type: 'Hasarlı Ürün',
-    customer: '905457464945',
-    orderId: 'SIP-10428',
-    priority: 'Yüksek',
-    status: 'İnceleniyor',
-    assignee: 'Operatör 1',
-    updatedAt: '15.04.2026 23:18',
-    summary:
-      'Bu kayıt hasarlı ürün vakalarının konuşma, sipariş ve müşteri kanıtları ile birlikte yönetileceği operasyon detail ekranını temsil eder.',
-    nextAction: 'Müşteriden gelen görselleri ve videoyu kontrol edip siparişle eşleştir',
-    channel: 'WhatsApp',
-    linkedOrderId: 'SIP-10428',
-    evidenceCenterLabel: 'Hasar kanıt paketi',
-    reviewSummary: 'Görsel ve video kanıtı operatör incelemesinde.',
-  },
-  'OP-302': {
-    title: 'Teslimat gecikmesi şikayeti',
-    type: 'Kargo Şikayeti',
-    customer: '905457464945',
-    orderId: 'SIP-10412',
-    priority: 'Normal',
-    status: 'Müşteri bekleniyor',
-    assignee: 'Operatör 2',
-    updatedAt: '15.04.2026 19:42',
-    summary:
-      'Bu kayıt kargo şikayetlerinde müşteri mesajı, sipariş durumu ve varsa destekleyici ekran görüntüsü ile birlikte ilerler.',
-    nextAction: 'Kargo durumunu doğrulayıp müşteriden gerekirse ek ekran görüntüsü talep et',
-    channel: 'WhatsApp',
-    linkedOrderId: 'SIP-10412',
-    evidenceCenterLabel: 'Teslimat destek materyali',
-    reviewSummary: 'Şu an ana ihtiyaç kargo yanıtı; güçlü medya paketi görünmüyor.',
-  },
-  'OP-303': {
-    title: 'Dekont doğrulama bekliyor',
-    type: 'Ödeme / Dekont',
-    customer: '9055•••',
-    orderId: 'SIP-10387',
-    priority: 'Kritik',
-    status: 'Yeni',
-    assignee: 'Finans Kuyruğu',
-    updatedAt: '15.04.2026 14:09',
-    summary:
-      'Bu kayıt ödeme/dekont vakalarının finans kontrolü, müşteri konuşması ve belge kanıtıyla yönetileceği merkezi temsil eder.',
-    nextAction: 'Dekont PDF ve ödeme ekran görüntüsünü doğrulayıp finans onayı ile ilerle',
-    channel: 'WhatsApp',
-    linkedOrderId: 'SIP-10387',
-    evidenceCenterLabel: 'Finans kanıt paketi',
-    reviewSummary: 'Belge ve ekran görüntüsü finans doğrulaması bekliyor.',
-  },
-  'OP-304': {
-    title: 'Beden değişim talebi',
-    type: 'İade / Değişim',
-    customer: '9055•••',
-    orderId: 'SIP-10374',
-    priority: 'Normal',
-    status: 'Çözüldü',
-    assignee: 'Operatör 1',
-    updatedAt: '14.04.2026 16:27',
-    summary:
-      'Bu kayıt değişim süreçlerinde müşteri notu, değişim formu ve kapanış sonrası arşiv mantığını gösterir.',
-    nextAction: 'Değişim sonrası notları arşivleyip konuşma ve sipariş kapanışını doğrula',
-    channel: 'WhatsApp',
-    linkedOrderId: 'SIP-10374',
-    evidenceCenterLabel: 'Değişim evrakı',
-    reviewSummary: 'Vaka çözülmüş, içerikler arşiv niteliğinde tutuluyor.',
-  },
-};
-
-const EVIDENCE_LIBRARY: Record<string, EvidenceItem[]> = {
-  'OP-301': [
-    {
-      id: 'EV-301-A',
-      type: 'image',
-      title: 'Hasarlı ürün ön yüz fotoğrafı',
-      source: 'Müşteri yüklemesi',
-      relation: 'Sipariş teslimatı sonrası',
-      uploadedAt: '15.04.2026 23:12',
-      status: 'İnceleme bekliyor',
-      note: 'Ön bölümde yırtık benzeri hasar görünüyor.',
-    },
-    {
-      id: 'EV-301-B',
-      type: 'image',
-      title: 'Paket içi yakın plan fotoğraf',
-      source: 'Müşteri yüklemesi',
-      relation: 'Kutu açılış anı',
-      uploadedAt: '15.04.2026 23:13',
-      status: 'İnceleme bekliyor',
-      note: 'Ürün kat izleri ve deformasyon kontrol edilmeli.',
-    },
-    {
-      id: 'EV-301-C',
-      type: 'video',
-      title: 'Kutudan çıkarma videosu',
-      source: 'Müşteri yüklemesi',
-      relation: 'Hasar kanıtı',
-      uploadedAt: '15.04.2026 23:14',
-      status: 'Ek bilgi bekleniyor',
-      note: 'Video süresi kısa; gerekirse ek açı istenebilir.',
-    },
-  ],
-  'OP-302': [
-    {
-      id: 'EV-302-A',
-      type: 'document',
-      title: 'Kargo takip notu',
-      source: 'Operatör kaydı',
-      relation: 'Takip inceleme notu',
-      uploadedAt: '15.04.2026 19:44',
-      status: 'Arşiv',
-      note: 'Bu vakada ana ihtiyaç teslimat akışını doğrulamak; güçlü medya bulunmuyor.',
-    },
-  ],
-  'OP-303': [
-    {
-      id: 'EV-303-A',
-      type: 'document',
-      title: 'Dekont PDF',
-      source: 'Müşteri yüklemesi',
-      relation: 'Ödeme kanıtı',
-      uploadedAt: '15.04.2026 14:02',
-      status: 'İnceleme bekliyor',
-      note: 'Belge üstündeki tutar sipariş toplamı ile karşılaştırılmalı.',
-    },
-    {
-      id: 'EV-303-B',
-      type: 'image',
-      title: 'Mobil bankacılık ekran görüntüsü',
-      source: 'Müşteri yüklemesi',
-      relation: 'Transfer kanıtı',
-      uploadedAt: '15.04.2026 14:03',
-      status: 'İnceleme bekliyor',
-      note: 'Saat ve alıcı bilgisi okunuyor; IBAN eşleşmesi kontrol edilmeli.',
-    },
-  ],
-  'OP-304': [
-    {
-      id: 'EV-304-A',
-      type: 'document',
-      title: 'Değişim formu özeti',
-      source: 'Operatör kaydı',
-      relation: 'Kapanış evrakı',
-      uploadedAt: '14.04.2026 16:10',
-      status: 'Arşiv',
-      note: 'Değişim işlemi tamamlanmış; yalnız kayıt amaçlı tutuluyor.',
-    },
-  ],
-};
+import {
+  getCaseDetail,
+  getCaseEvidence,
+  type PanelEvidenceStatus,
+  type PanelEvidenceType,
+} from '@/lib/apparel-panel/panel-relations';
 
 function MetricCard({
   label,
@@ -217,14 +39,14 @@ function MetricCard({
   );
 }
 
-function typeLabel(type: EvidenceType) {
+function typeLabel(type: PanelEvidenceType) {
   if (type === 'image') return 'Görsel';
   if (type === 'video') return 'Video';
   if (type === 'audio') return 'Ses';
   return 'Belge';
 }
 
-function typeStyles(type: EvidenceType) {
+function typeStyles(type: PanelEvidenceType) {
   if (type === 'image') {
     return { background: '#eff6ff', color: '#1d4ed8' };
   }
@@ -237,7 +59,7 @@ function typeStyles(type: EvidenceType) {
   return { background: '#f3f4f6', color: '#374151' };
 }
 
-function statusStyles(status: EvidenceStatus) {
+function statusStyles(status: PanelEvidenceStatus) {
   if (status === 'Doğrulandı') {
     return { background: '#ecfdf5', color: '#065f46' };
   }
@@ -255,24 +77,9 @@ export default function OperationDetailPage() {
   const rawCaseId = Array.isArray(params?.caseId) ? params.caseId[0] : params?.caseId;
   const caseId = rawCaseId || 'OP-301';
 
-  const detail = CASE_DETAIL_MAP[caseId] || {
-    title: 'Placeholder operasyon kaydı',
-    type: 'Genel Şikayet',
-    customer: 'Bilinmiyor',
-    orderId: '-',
-    priority: 'Normal',
-    status: 'Yeni',
-    assignee: 'Atanmadı',
-    updatedAt: '-',
-    summary: 'Bu vaka için placeholder detail ekranı gösteriliyor.',
-    nextAction: 'Aksiyon bilgisi yok',
-    channel: 'Belirsiz',
-    linkedOrderId: null,
-    evidenceCenterLabel: 'Kanıt bulunmuyor',
-    reviewSummary: 'İnceleme özeti yok.',
-  };
+  const detail = getCaseDetail(caseId);
+  const evidenceItems = getCaseEvidence(caseId);
 
-  const evidenceItems = EVIDENCE_LIBRARY[caseId] || [];
   const evidenceCount = evidenceItems.length;
   const customerUploadCount = evidenceItems.filter((item) =>
     item.source.toLocaleLowerCase('tr-TR').includes('müşteri'),
@@ -337,7 +144,7 @@ export default function OperationDetailPage() {
           >
             <div style={{ fontSize: 14, color: '#6b7280', marginBottom: 8 }}>Vaka No</div>
             <div style={{ fontSize: 28, fontWeight: 800, color: '#111827', marginBottom: 8 }}>
-              {caseId}
+              {detail.id}
             </div>
             <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', marginBottom: 8 }}>
               {detail.title}
@@ -388,8 +195,16 @@ export default function OperationDetailPage() {
           <MetricCard label="Müşteri" value={detail.customer} />
           <MetricCard label="Öncelik" value={detail.priority} />
           <MetricCard label="Kanal" value={detail.channel} />
-          <MetricCard label="Kanıt Sayısı" value={evidenceCount} helper="Bu vakaya bağlı medya / belge kaydı" />
-          <MetricCard label="İnceleme Bekleyen" value={pendingCount} helper="Önce bakılması gereken kanıt adedi" />
+          <MetricCard
+            label="Kanıt Sayısı"
+            value={evidenceCount}
+            helper="Bu vakaya bağlı medya / belge kaydı"
+          />
+          <MetricCard
+            label="İnceleme Bekleyen"
+            value={pendingCount}
+            helper="Önce bakılması gereken kanıt adedi"
+          />
         </section>
 
         <section
