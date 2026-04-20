@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { AppShell } from '@/components/apparel-panel/AppShell';
 import { TokenHelpers } from '@/helpers/token-helpers';
@@ -71,6 +71,140 @@ function statusColors(status: string | null | undefined) {
     background: '#eff6ff',
     color: '#1d4ed8',
   };
+}
+
+function normalizeText(value: string | null | undefined) {
+  return String(value || '')
+    .toLocaleLowerCase('tr-TR')
+    .replace(/ı/g, 'i')
+    .trim();
+}
+
+function inferFlowContext(conversation: ConversationDetailResponse['conversation']) {
+  if (!conversation) {
+    return {
+      orderId: null as string | null,
+      orderLabel: 'Henüz bağlanmadı',
+      caseId: null as string | null,
+      caseLabel: 'Henüz bağlanmadı',
+      summary: 'Konuşma bağı henüz oluşturulmadı.',
+    };
+  }
+
+  const allText = normalizeText(
+    conversation.messages.map((message) => message.textBody || '').join(' '),
+  );
+  const product = normalizeText(conversation.contextProductName);
+
+  if (allText.includes('dekont') || allText.includes('odeme')) {
+    return {
+      orderId: 'SIP-10387',
+      orderLabel: 'Dekont / ödeme ile ilişkili sipariş',
+      caseId: 'OP-303',
+      caseLabel: 'Ödeme / Dekont vakası',
+      summary: 'Bu konuşma finans ve dekont kontrolü gerektiren müşteri akışına benziyor.',
+    };
+  }
+
+  if (allText.includes('kargo')) {
+    return {
+      orderId: 'SIP-10412',
+      orderLabel: 'Kargo takibi olan sipariş',
+      caseId: 'OP-302',
+      caseLabel: 'Kargo şikayeti vakası',
+      summary: 'Bu konuşma daha çok teslimat ve kargo akışıyla ilişkili görünüyor.',
+    };
+  }
+
+  if (allText.includes('iade') || allText.includes('degisim') || allText.includes('beden')) {
+    return {
+      orderId: 'SIP-10374',
+      orderLabel: 'İade / değişim ilişkili sipariş',
+      caseId: 'OP-304',
+      caseLabel: 'İade / Değişim vakası',
+      summary: 'Bu konuşma değişim veya iade operasyonuna yakın görünüyor.',
+    };
+  }
+
+  if (
+    allText.includes('hasar') ||
+    allText.includes('kusur') ||
+    conversation.messages.some((message) => message.hasMediaLikePayload)
+  ) {
+    return {
+      orderId: 'SIP-10428',
+      orderLabel: 'Hasarlı ürün ilişkili sipariş',
+      caseId: 'OP-301',
+      caseLabel: 'Hasarlı Ürün vakası',
+      summary: 'Bu konuşmada medya veya hasar sinyali olduğu için operasyon bağı önemli olabilir.',
+    };
+  }
+
+  if (product) {
+    return {
+      orderId: 'SIP-10428',
+      orderLabel: 'Ürün bağlamına yakın sipariş',
+      caseId: null,
+      caseLabel: 'Şu an açık vaka görünmüyor',
+      summary: 'Konuşmada aktif ürün bağlamı var; sipariş ve ürün akışı birlikte düşünülmeli.',
+    };
+  }
+
+  return {
+    orderId: null,
+    orderLabel: 'Henüz bağlanmadı',
+    caseId: null,
+    caseLabel: 'Henüz bağlanmadı',
+    summary: 'Bu konuşma şu an genel yardım veya erken aşama müşteri akışı gibi görünüyor.',
+  };
+}
+
+function InfoCard({
+  title,
+  value,
+  helper,
+  href,
+  hrefLabel,
+}: {
+  title: string;
+  value: string;
+  helper: string;
+  href: string;
+  hrefLabel: string;
+}) {
+  return (
+    <div
+      style={{
+        border: '1px solid #e5e7eb',
+        borderRadius: 18,
+        background: '#ffffff',
+        padding: 18,
+      }}
+    >
+      <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>{title}</div>
+      <div style={{ fontSize: 20, fontWeight: 800, color: '#111827', marginBottom: 8 }}>
+        {value}
+      </div>
+      <div style={{ color: '#6b7280', lineHeight: 1.7, fontSize: 13, marginBottom: 12 }}>
+        {helper}
+      </div>
+      <Link
+        href={href}
+        style={{
+          textDecoration: 'none',
+          display: 'inline-flex',
+          borderRadius: 12,
+          padding: '9px 13px',
+          background: '#111827',
+          color: '#ffffff',
+          fontWeight: 700,
+          fontSize: 14,
+        }}
+      >
+        {hrefLabel}
+      </Link>
+    </div>
+  );
 }
 
 export default function ConversationDetailPage() {
@@ -147,6 +281,7 @@ export default function ConversationDetailPage() {
 
   const conversation = data?.conversation || null;
   const badge = statusColors(conversation?.status);
+  const flowContext = useMemo(() => inferFlowContext(conversation), [conversation]);
 
   const hasWhatsAppLine = Boolean(data?.tenant?.waPhoneNumberId);
   const replyDisabledReason = hasWhatsAppLine
@@ -249,8 +384,9 @@ export default function ConversationDetailPage() {
           <h1 style={{ fontSize: 30, fontWeight: 800, marginBottom: 8 }}>
             Konuşma Detayı
           </h1>
-          <p style={{ color: '#4b5563', margin: 0 }}>
-            Mesaj akışı, ürün bağlamı ve medya / kanıt görünümü burada yer alır.
+          <p style={{ color: '#4b5563', margin: 0, lineHeight: 1.7 }}>
+            Bu ekran artık yalnız mesaj akışı değil, müşteri olayı özeti gibi davranır.
+            Böylece sipariş ve operasyon tarafına geçiş daha kolay olur.
           </p>
         </div>
 
@@ -390,6 +526,38 @@ export default function ConversationDetailPage() {
                   </div>
                 </div>
               </div>
+            </section>
+
+            <section
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                gap: 12,
+              }}
+            >
+              <InfoCard
+                title="Bağlı Sipariş"
+                value={flowContext.orderLabel}
+                helper={flowContext.orderId ? `Önerilen sipariş: ${flowContext.orderId}` : 'Bu konuşma için net sipariş bağı henüz görünmüyor.'}
+                href={flowContext.orderId ? `/orders/${flowContext.orderId}` : '/orders'}
+                hrefLabel={flowContext.orderId ? 'Siparişe Git' : 'Siparişleri Aç'}
+              />
+
+              <InfoCard
+                title="Bağlı Operasyon"
+                value={flowContext.caseLabel}
+                helper={flowContext.caseId ? `Önerilen vaka: ${flowContext.caseId}` : 'Bu konuşma şu an doğrudan vaka üretmemiş olabilir.'}
+                href={flowContext.caseId ? `/operations/${flowContext.caseId}` : '/operations'}
+                hrefLabel={flowContext.caseId ? 'Vakaya Git' : 'Operasyonları Aç'}
+              />
+
+              <InfoCard
+                title="Müşteri Olay Özeti"
+                value="Özet"
+                helper={flowContext.summary}
+                href="/catalog"
+                hrefLabel="Kataloğu Aç"
+              />
             </section>
 
             <section
@@ -550,21 +718,53 @@ export default function ConversationDetailPage() {
                     : 'WhatsApp hattı bekleniyor'}
                 </div>
 
-                <button
-                  onClick={handleSendReply}
-                  disabled={sending || !hasWhatsAppLine}
-                  style={{
-                    border: 'none',
-                    borderRadius: 12,
-                    padding: '10px 16px',
-                    background: sending || !hasWhatsAppLine ? '#9ca3af' : '#111827',
-                    color: '#ffffff',
-                    fontWeight: 700,
-                    cursor: sending || !hasWhatsAppLine ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  {sending ? 'Gönderiliyor...' : 'Mesajı Gönder'}
-                </button>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <Link
+                    href={flowContext.orderId ? `/orders/${flowContext.orderId}` : '/orders'}
+                    style={{
+                      textDecoration: 'none',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: 12,
+                      padding: '10px 14px',
+                      background: '#ffffff',
+                      color: '#111827',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Siparişe Git
+                  </Link>
+
+                  <Link
+                    href={flowContext.caseId ? `/operations/${flowContext.caseId}` : '/operations'}
+                    style={{
+                      textDecoration: 'none',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: 12,
+                      padding: '10px 14px',
+                      background: '#ffffff',
+                      color: '#111827',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Operasyona Git
+                  </Link>
+
+                  <button
+                    onClick={handleSendReply}
+                    disabled={sending || !hasWhatsAppLine}
+                    style={{
+                      border: 'none',
+                      borderRadius: 12,
+                      padding: '10px 16px',
+                      background: sending || !hasWhatsAppLine ? '#9ca3af' : '#111827',
+                      color: '#ffffff',
+                      fontWeight: 700,
+                      cursor: sending || !hasWhatsAppLine ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {sending ? 'Gönderiliyor...' : 'Mesajı Gönder'}
+                  </button>
+                </div>
               </div>
 
               {actionError ? (
