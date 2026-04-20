@@ -19,6 +19,7 @@ const CASE_DETAIL_MAP: Record<
     summary: string;
     nextAction: string;
     channel: string;
+    linkedOrderId: string | null;
   }
 > = {
   'OP-301': {
@@ -35,6 +36,7 @@ const CASE_DETAIL_MAP: Record<
       'Bu kayıt hasarlı ürün vakalarının konuşma, sipariş ve medya/kanıt ile birlikte yönetileceği detail ekranını temsil eder.',
     nextAction: 'Müşteriden gelen medya/kanıtı kontrol et ve siparişle eşleştir',
     channel: 'WhatsApp',
+    linkedOrderId: 'SIP-10428',
   },
   'OP-302': {
     title: 'Teslimat gecikmesi şikayeti',
@@ -50,6 +52,7 @@ const CASE_DETAIL_MAP: Record<
       'Bu kayıt kargo şikayetlerinde sipariş, konuşma geçmişi ve müşteri geri bildirimini tek yerde toplayacak yapıyı gösterir.',
     nextAction: 'Müşteriye güncel kargo durumu paylaşılmalı',
     channel: 'WhatsApp',
+    linkedOrderId: 'SIP-10412',
   },
   'OP-303': {
     title: 'Dekont doğrulama bekliyor',
@@ -65,6 +68,7 @@ const CASE_DETAIL_MAP: Record<
       'Bu kayıt ödeme/dekont vakalarının finans kontrolü, müşteri konuşması ve sipariş bağlantısıyla yönetileceği detail ekranını temsil eder.',
     nextAction: 'Dekont ve ödeme tutarı finans tarafından doğrulanmalı',
     channel: 'WhatsApp',
+    linkedOrderId: 'SIP-10387',
   },
   'OP-304': {
     title: 'Beden değişim talebi',
@@ -80,6 +84,7 @@ const CASE_DETAIL_MAP: Record<
       'Bu kayıt iade ve değişim süreçlerinde durum takibi, iç not, müşteri konuşması ve sipariş bağlantısı için hazırlanmıştır.',
     nextAction: 'Beden değişim sonrası kapanış kontrolü yapılmalı',
     channel: 'WhatsApp',
+    linkedOrderId: 'SIP-10374',
   },
 };
 
@@ -130,6 +135,7 @@ export default function OperationDetailPage() {
     summary: 'Bu vaka için placeholder detail ekranı gösteriliyor.',
     nextAction: 'Aksiyon bilgisi yok',
     channel: 'Belirsiz',
+    linkedOrderId: null,
   };
 
   return (
@@ -258,48 +264,54 @@ export default function OperationDetailPage() {
         </section>
 
         <section
-          style={{
-            border: '1px solid #e5e7eb',
-            borderRadius: 18,
-            background: '#ffffff',
-            padding: 18,
-          }}
-        >
-          <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
-            Hızlı Geçişler
-          </div>
+  style={{
+    border: '1px solid #e5e7eb',
+    borderRadius: 18,
+    background: '#ffffff',
+    padding: 18,
+  }}
+>
+  <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
+    Hızlı Geçişler
+  </div>
 
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <Link
-              href="/orders"
-              style={{
-                textDecoration: 'none',
-                border: '1px solid #e5e7eb',
-                borderRadius: 12,
-                padding: '10px 14px',
-                background: '#ffffff',
-                color: '#111827',
-                fontWeight: 700,
-              }}
-            >
-              Siparişlere git
-            </Link>
+  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+    <Link
+      href={detail.linkedOrderId ? `/orders/${detail.linkedOrderId}` : '/orders'}
+      style={{
+        textDecoration: 'none',
+        border: '1px solid #e5e7eb',
+        borderRadius: 12,
+        padding: '10px 14px',
+        background: '#ffffff',
+        color: '#111827',
+        fontWeight: 700,
+      }}
+    >
+      Siparişe Git
+    </Link>
 
-            <Link
-              href="/inbox"
-              style={{
-                textDecoration: 'none',
-                border: '1px solid #e5e7eb',
-                borderRadius: 12,
-                padding: '10px 14px',
-                background: '#ffffff',
-                color: '#111827',
-                fontWeight: 700,
-              }}
-            >
-              Mesajlara git
-            </Link>
-          </div>
+    <Link
+      href="/inbox"
+      style={{
+        textDecoration: 'none',
+        border: '1px solid #e5e7eb',
+        borderRadius: 12,
+        padding: '10px 14px',
+        background: '#ffffff',
+        color: '#111827',
+        fontWeight: 700,
+      }}
+    >
+      Mesajlara Git
+    </Link>
+  </div>
+
+  <div style={{ color: '#6b7280', lineHeight: 1.7, fontSize: 13 }}>
+    Bu vaka artık yalnız başına durmuyor; sipariş ve konuşma akışıyla birlikte
+    yönetilecek şekilde konumlanıyor.
+  </div>
+</section>
         </section>
       </main>
     </AppShell>
