@@ -31,9 +31,9 @@ const CASE_ROWS = [
     priority: 'Yüksek',
     status: 'İnceleniyor',
     assignee: 'Operatör 1',
-    media: 'Var',
     updatedAt: '15.04.2026 23:18',
-    note: 'Fotoğraf kontrolü gerekli',
+    evidenceSummary: '2 görsel + 1 video',
+    evidenceState: 'Kanıt kontrolü gerekli',
   },
   {
     id: 'OP-302',
@@ -44,9 +44,9 @@ const CASE_ROWS = [
     priority: 'Normal',
     status: 'Müşteri bekleniyor',
     assignee: 'Operatör 2',
-    media: 'Yok',
     updatedAt: '15.04.2026 19:42',
-    note: 'Müşteri dönüşü bekleniyor',
+    evidenceSummary: 'Belge yok / konuşma bazlı',
+    evidenceState: 'Kargo yanıtı bekleniyor',
   },
   {
     id: 'OP-303',
@@ -57,9 +57,9 @@ const CASE_ROWS = [
     priority: 'Kritik',
     status: 'Yeni',
     assignee: 'Finans Kuyruğu',
-    media: 'Var',
     updatedAt: '15.04.2026 14:09',
-    note: 'Finans öncelikli inceleme',
+    evidenceSummary: '1 dekont PDF + 1 ekran görüntüsü',
+    evidenceState: 'Finans doğrulaması gerekli',
   },
   {
     id: 'OP-304',
@@ -70,9 +70,9 @@ const CASE_ROWS = [
     priority: 'Normal',
     status: 'Çözüldü',
     assignee: 'Operatör 1',
-    media: 'Yok',
     updatedAt: '14.04.2026 16:27',
-    note: 'Kapanış sonrası kontrol',
+    evidenceSummary: '1 form / 1 not',
+    evidenceState: 'Kapanış sonrası arşiv',
   },
 ];
 
@@ -144,6 +144,32 @@ function StatusPill({ label }: { label: string }) {
   );
 }
 
+function EvidencePill({ label }: { label: string }) {
+  const styles =
+    label.includes('gerekli')
+      ? { background: '#fffbeb', color: '#92400e' }
+      : label.includes('doğrulaması')
+        ? { background: '#fef2f2', color: '#991b1b' }
+        : label.includes('arşiv')
+          ? { background: '#ecfdf5', color: '#065f46' }
+          : { background: '#eff6ff', color: '#1d4ed8' };
+
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        borderRadius: 999,
+        padding: '5px 10px',
+        fontSize: 12,
+        fontWeight: 700,
+        ...styles,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
 function mapTypeLabel(type: OperationType) {
   if (type === 'damaged_product') return 'Hasarlı Ürün';
   if (type === 'shipping_issue') return 'Kargo Şikayeti';
@@ -187,7 +213,7 @@ export default function OperationsPage() {
             </h1>
             <p style={{ color: '#4b5563', margin: 0, lineHeight: 1.7 }}>
               Hasarlı ürün, kargo şikayeti, dekont ve diğer operasyon vakalarını tek
-              ekranda toplamak için hazırlanan v1 yapı.
+              ekranda toplamak için hazırlanan vaka merkezi.
             </p>
           </div>
 
@@ -198,14 +224,13 @@ export default function OperationsPage() {
               background: '#ffffff',
               padding: 14,
               color: '#6b7280',
-              maxWidth: 320,
+              maxWidth: 340,
               fontSize: 13,
               lineHeight: 1.6,
             }}
           >
-            Bu ekran ilk aşamada vaka merkezi mantığını göstermek için placeholder
-            veriyle çalışıyor. Sonraki fazda gerçek case modeli ve medya/kanıt
-            ilişkileri bağlanacak.
+            Bu sayfa artık sadece vaka listesi değil, aynı zamanda hangi kayıtta
+            kanıt/medya bulunduğunu ve operatörün nereye girmesi gerektiğini de özetler.
           </div>
         </div>
 
@@ -240,21 +265,7 @@ export default function OperationsPage() {
             }}
           >
             <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>
-              Kritik Öncelik
-            </div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: '#111827' }}>2</div>
-          </div>
-
-          <div
-            style={{
-              border: '1px solid #e5e7eb',
-              borderRadius: 18,
-              background: '#ffffff',
-              padding: 18,
-            }}
-          >
-            <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>
-              Medya / Kanıt İçeren
+              Kanıt İçeren
             </div>
             <div style={{ fontSize: 28, fontWeight: 800, color: '#111827' }}>6</div>
           </div>
@@ -268,68 +279,83 @@ export default function OperationsPage() {
             }}
           >
             <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>
-              Çözüm Bekleyen
+              Finans Öncelikli
             </div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: '#111827' }}>8</div>
+            <div style={{ fontSize: 28, fontWeight: 800, color: '#111827' }}>2</div>
+          </div>
+
+          <div
+            style={{
+              border: '1px solid #e5e7eb',
+              borderRadius: 18,
+              background: '#ffffff',
+              padding: 18,
+            }}
+          >
+            <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>
+              İnceleme Bekleyen
+            </div>
+            <div style={{ fontSize: 28, fontWeight: 800, color: '#111827' }}>4</div>
           </div>
         </section>
 
         <section
-  style={{
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-    gap: 12,
-    marginBottom: 16,
-  }}
->
-  <div
-    style={{
-      border: '1px solid #fde68a',
-      borderRadius: 16,
-      background: '#fffbeb',
-      padding: 14,
-    }}
-  >
-    <div style={{ fontWeight: 800, color: '#92400e', marginBottom: 6 }}>
-      Kritik / finans etkili vaka var
-    </div>
-    <div style={{ color: '#4b5563', lineHeight: 1.6 }}>
-      Dekont ve ödeme kaynaklı vakalar önce ele alınmalı.
-    </div>
-  </div>
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+            gap: 12,
+            marginBottom: 16,
+          }}
+        >
+          <div
+            style={{
+              border: '1px solid #fde68a',
+              borderRadius: 16,
+              background: '#fffbeb',
+              padding: 14,
+            }}
+          >
+            <div style={{ fontWeight: 800, color: '#92400e', marginBottom: 6 }}>
+              Hasarlı ürün vakalarında kanıtı önce aç
+            </div>
+            <div style={{ color: '#4b5563', lineHeight: 1.6 }}>
+              Fotoğraf ve video varsa operatör önce görsel/kanıt kontrolü yapmalı.
+            </div>
+          </div>
 
-  <div
-    style={{
-      border: '1px solid #e5e7eb',
-      borderRadius: 16,
-      background: '#ffffff',
-      padding: 14,
-    }}
-  >
-    <div style={{ fontWeight: 800, color: '#111827', marginBottom: 6 }}>
-      Medya içeren vakalar görünür olmalı
-    </div>
-    <div style={{ color: '#4b5563', lineHeight: 1.6 }}>
-      Hasarlı ürün ve dekont akışlarında medya/kanıt iş akışını hızlandırır.
-    </div>
-  </div>
+          <div
+            style={{
+              border: '1px solid #fecaca',
+              borderRadius: 16,
+              background: '#fef2f2',
+              padding: 14,
+            }}
+          >
+            <div style={{ fontWeight: 800, color: '#991b1b', marginBottom: 6 }}>
+              Dekont vakaları finans kuyruğuna yakın
+            </div>
+            <div style={{ color: '#4b5563', lineHeight: 1.6 }}>
+              PDF, ekran görüntüsü veya ödeme kanıtı varsa önce doğrulama durumu netleşmeli.
+            </div>
+          </div>
 
-  <div
-    style={{
-      border: '1px solid #e5e7eb',
-      borderRadius: 16,
-      background: '#ffffff',
-      padding: 14,
-    }}
-  >
-    <div style={{ fontWeight: 800, color: '#111827', marginBottom: 6 }}>
-      Müşteri bekleyen vakaları unutma
-    </div>
-    <div style={{ color: '#4b5563', lineHeight: 1.6 }}>
-      Açık ama müşteri cevabı bekleyen vakalar ayrıca takip edilmeli.
-    </div>
-  </div>
-</section>
+          <div
+            style={{
+              border: '1px solid #e5e7eb',
+              borderRadius: 16,
+              background: '#ffffff',
+              padding: 14,
+            }}
+          >
+            <div style={{ fontWeight: 800, color: '#111827', marginBottom: 6 }}>
+              Ana kanıt merkezi operasyon detail olacak
+            </div>
+            <div style={{ color: '#4b5563', lineHeight: 1.6 }}>
+              Medya ve belge detayları vaka ekranı içinde incelenir; diğer ekranlar bunu yalnız özetler.
+            </div>
+          </div>
+        </section>
+
         <section
           style={{
             border: '1px solid #e5e7eb',
@@ -393,24 +419,24 @@ export default function OperationsPage() {
               style={{
                 width: '100%',
                 borderCollapse: 'collapse',
-                minWidth: 1180,
+                minWidth: 1220,
               }}
             >
               <thead>
                 <tr style={{ background: '#f9fafb' }}>
                   {[
                     'Vaka No',
-  'Tip',
-  'Başlık',
-  'Müşteri',
-  'Sipariş',
-  'Öncelik',
-  'Durum',
-  'Sorumlu',
-  'Medya',
-  'İş Notu',
-  'Son Güncelleme',
-  'Detay',
+                    'Tip',
+                    'Başlık',
+                    'Müşteri',
+                    'Sipariş',
+                    'Öncelik',
+                    'Durum',
+                    'Sorumlu',
+                    'Kanıt Özeti',
+                    'Kanıt Durumu',
+                    'Son Güncelleme',
+                    'Detay',
                   ].map((header) => (
                     <th
                       key={header}
@@ -463,21 +489,21 @@ export default function OperationsPage() {
                       {row.assignee}
                     </td>
                     <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
-                      {row.media}
+                      {row.evidenceSummary}
                     </td>
                     <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
-  {row.note}
-</td>
-<td
-  style={{
-    padding: 14,
-    borderBottom: '1px solid #f3f4f6',
-    color: '#6b7280',
-  }}
->
-  {row.updatedAt}
-</td>
-<td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
+                      <EvidencePill label={row.evidenceState} />
+                    </td>
+                    <td
+                      style={{
+                        padding: 14,
+                        borderBottom: '1px solid #f3f4f6',
+                        color: '#6b7280',
+                      }}
+                    >
+                      {row.updatedAt}
+                    </td>
+                    <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
                       <Link
                         href={`/operations/${row.id}`}
                         style={{
