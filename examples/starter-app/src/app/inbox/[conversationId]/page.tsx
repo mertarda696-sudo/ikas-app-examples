@@ -1097,22 +1097,6 @@ export default function ConversationDetailPage() {
               </div>
             </section>
 
-            <section
-              style={{
-                border: '1px solid #e5e7eb',
-                borderRadius: 18,
-                padding: 18,
-                background: '#ffffff',
-              }}
-            >
-              <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 10 }}>
-                Medya ve Kanıt Alanı
-              </div>
-              <div style={{ color: '#4b5563', lineHeight: 1.7 }}>
-                Hasarlı ürün fotoğrafı, video, sesli mesaj, PDF ve diğer müşteri medya
-                kayıtları ilerleyen fazda bu alan üzerinden daha detaylı gösterilecek.
-              </div>
-            </section>
           </div>
         )}
       </main>
