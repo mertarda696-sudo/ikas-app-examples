@@ -166,11 +166,11 @@ export default function OrderDetailPage() {
           }}
         >
           <MetricCard label="Müşteri" value={detail.customer} />
-<MetricCard label="Sipariş Durumu" value={detail.orderStatus} />
-<MetricCard label="Ödeme Durumu" value={detail.paymentStatus} />
-<MetricCard label="Kargo Durumu" value={detail.shipmentStatus} />
-<MetricCard label="Sonraki Aksiyon" value={detail.action} />
-<MetricCard label="Risk Seviyesi" value={detail.risk} />
+          <MetricCard label="Sipariş Durumu" value={detail.orderStatus} />
+          <MetricCard label="Ödeme Durumu" value={detail.paymentStatus} />
+          <MetricCard label="Kargo Durumu" value={detail.shipmentStatus} />
+          <MetricCard label="Sonraki Aksiyon" value={detail.action} />
+          <MetricCard label="Risk Seviyesi" value={detail.risk} />
         </section>
 
         <section
@@ -212,13 +212,13 @@ export default function OrderDetailPage() {
           </div>
 
           <div style={{ display: 'grid', gap: 10, color: '#4b5563', lineHeight: 1.7 }}>
-  <div>• Ödeme / dekont doğrulaması</div>
-  <div>• Kargo ve teslimat takibi</div>
-  <div>• Bağlı müşteri konuşmasının gözden geçirilmesi</div>
-  <div>• Operasyon kaydı varsa onunla birlikte yönetim</div>
-  <div>• İç not ve sorumlu atama alanı</div>
-  <div>• Sipariş çözülene kadar aksiyon takibi</div>
-</div>
+            <div>• Ödeme / dekont doğrulaması</div>
+            <div>• Kargo ve teslimat takibi</div>
+            <div>• Bağlı müşteri konuşmasının gözden geçirilmesi</div>
+            <div>• Operasyon kaydı varsa onunla birlikte yönetim</div>
+            <div>• İç not ve sorumlu atama alanı</div>
+            <div>• Sipariş çözülene kadar aksiyon takibi</div>
+          </div>
         </section>
 
         <section
