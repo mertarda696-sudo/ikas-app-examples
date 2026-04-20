@@ -207,6 +207,82 @@ function WorkspaceCard({
   );
 }
 
+function ActivationStepCard({
+  step,
+  title,
+  detail,
+  tone = 'default',
+}: {
+  step: string;
+  title: string;
+  detail: string;
+  tone?: 'default' | 'warning' | 'success';
+}) {
+  const style =
+    tone === 'warning'
+      ? {
+          border: '1px solid #fde68a',
+          background: '#fffbeb',
+          stepColor: '#92400e',
+        }
+      : tone === 'success'
+        ? {
+            border: '1px solid #bbf7d0',
+            background: '#f0fdf4',
+            stepColor: '#166534',
+          }
+        : {
+            border: '1px solid #e5e7eb',
+            background: '#ffffff',
+            stepColor: '#111827',
+          };
+
+  return (
+    <div
+      style={{
+        border: style.border,
+        background: style.background,
+        borderRadius: 16,
+        padding: 16,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 12,
+          fontWeight: 800,
+          color: style.stepColor,
+          textTransform: 'uppercase',
+          letterSpacing: 0.35,
+          marginBottom: 8,
+        }}
+      >
+        {step}
+      </div>
+
+      <div
+        style={{
+          fontSize: 16,
+          fontWeight: 800,
+          color: '#111827',
+          marginBottom: 8,
+        }}
+      >
+        {title}
+      </div>
+
+      <div
+        style={{
+          color: '#4b5563',
+          lineHeight: 1.7,
+          fontSize: 14,
+        }}
+      >
+        {detail}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const [dashboard, setDashboard] = useState<DashboardSummaryResponse | null>(null);
   const [catalogHealth, setCatalogHealth] = useState<CatalogHealthResponse | null>(null);
@@ -492,27 +568,69 @@ export default function DashboardPage() {
     policiesContact?.error ||
     null;
 
+  const liveReadiness = useMemo(() => {
+    const hasWhatsApp = Boolean(tenant?.waPhoneNumberId);
+    const hasIkas = Boolean(dashboard?.ikasConnected);
+    const hasCriticalError = Boolean(topError);
+    const syncHealthy = (dashboard?.latestSync?.errorCount ?? 0) === 0;
+
+    if (hasWhatsApp && hasIkas && !hasCriticalError) {
+      return {
+        label: 'Canlı teste çok yakın',
+        tone: 'success' as const,
+        helper: 'Numara bağlıysa inbound/outbound smoke test aynı panel üstünden çalıştırılabilir.',
+      };
+    }
+
+    if (!hasWhatsApp && hasIkas && !hasCriticalError) {
+      return {
+        label: 'WhatsApp aktivasyonu bekleniyor',
+        tone: 'warning' as const,
+        helper: 'Panel ve ikas hattı hazır; ana eksik tenant seviyesinde canlı WhatsApp hattı.',
+      };
+    }
+
+    if (hasCriticalError || !syncHealthy) {
+      return {
+        label: 'Önce stabilite kontrolü',
+        tone: 'danger' as const,
+        helper: 'Canlı denemeden önce hata/uyarı tarafı temizlenmeli.',
+      };
+    }
+
+    return {
+      label: 'Hazırlık sürüyor',
+      tone: 'neutral' as const,
+      helper: 'Sistem parçaları görünür ancak canlı aktivasyon henüz tam değil.',
+    };
+  }, [
+    tenant?.waPhoneNumberId,
+    dashboard?.ikasConnected,
+    dashboard?.latestSync?.errorCount,
+    topError,
+  ]);
+
   const workspaceCards = useMemo(
     () => [
       {
         href: '/inbox',
         title: 'Mesajlar',
-        description: 'Müşteri konuşmalarını aç, operatör görünümünü kontrol et.',
+        description: 'Müşteri konuşmalarını aç, reply ve konuşma bağlarını kontrol et.',
         helper: tenant?.waPhoneNumberId
           ? 'WhatsApp hattı görünür durumda.'
-          : 'WhatsApp hattı eksikse manuel reply kapalı kalır.',
+          : 'WhatsApp hattı eksikse reply alanı kapalı kalır.',
       },
       {
         href: '/orders',
         title: 'Siparişler',
-        description: 'Sipariş, ödeme ve kargo tarafını tek yerden izle.',
-        helper: 'Sipariş detail ve operasyon bağı burada şekillenecek.',
+        description: 'Sipariş, ödeme ve kargo tarafını tek omurgada izle.',
+        helper: 'Canlı testte kargo / ödeme senaryoları burada doğrulanacak.',
       },
       {
         href: '/operations',
         title: 'Operasyonlar',
-        description: 'Şikayet, hasarlı ürün ve dekont vakalarını yönet.',
-        helper: 'Operasyon ekibinin ana çalışma alanı.',
+        description: 'Hasarlı ürün, dekont ve diğer vakaları kanıt merkeziyle birlikte yönet.',
+        helper: 'Medya ve kanıt akışının ana merkezi bu ekran.',
       },
     ],
     [tenant?.waPhoneNumberId],
@@ -523,29 +641,38 @@ export default function DashboardPage() {
 
     if (!tenant?.waPhoneNumberId) {
       items.push({
-        title: 'WhatsApp hattı eksik',
+        title: 'MIRELLE için canlı WhatsApp hattı bekleniyor',
         detail:
-          'Bu mağaza için tenant seviyesinde WhatsApp hattı henüz görünmüyor. Manuel yanıt bu yüzden kapalı kalır.',
+          'Panel tarafı hazır görünüyor. Yarın numara bağlandığında önce tenant eşleşmesi, sonra inbound/outbound smoke test yapılmalı.',
         href: '/integrations',
-        cta: 'Entegrasyonları Aç',
+        cta: 'Canlı Hazırlığı Aç',
         tone: 'warning',
+      });
+    } else {
+      items.push({
+        title: 'WhatsApp hattı görünür durumda',
+        detail:
+          'Tenant seviyesinde hat algılanıyor. Şimdi konuşma ve reply akışının canlı testi öncelikli olur.',
+        href: '/inbox',
+        cta: 'Mesajlara Git',
+        tone: 'success',
       });
     }
 
     if (!dashboard?.ikasConnected) {
       items.push({
-        title: 'ikas bağlantısı kontrol edilmeli',
+        title: 'ikas bağlantısı ayrıca kontrol edilmeli',
         detail:
-          'Mağaza bağlantısı pasif veya doğrulanmamış görünüyor. Katalog görünümü etkilenebilir.',
+          'Katalog ve storefront ilişkisi için ikas tarafı pasif görünürse canlı testten önce doğrulama gerekir.',
         href: '/integrations',
-        cta: 'Bağlantıyı İncele',
-        tone: 'warning',
+        cta: 'Entegrasyonları İncele',
+        tone: 'danger',
       });
     } else {
       items.push({
-        title: 'ikas pilot bağlantısı aktif',
+        title: 'ikas pilot hattı aktif görünüyor',
         detail:
-          'Mağaza ve katalog görünümü şu an aktif pilot bağlantı üstünden çalışıyor.',
+          'Storefront ve panel görünümü ikas tarafında çalışır durumda. WhatsApp hattı geldiğinde gerçek operasyon döngüsü test edilebilir.',
         href: '/catalog',
         cta: 'Kataloğu Aç',
         tone: 'info',
@@ -555,18 +682,16 @@ export default function DashboardPage() {
     if ((dashboard?.latestSync?.errorCount ?? 0) > 0) {
       items.push({
         title: 'Sync uyarısı var',
-        detail: `Son sync içinde ${dashboard?.latestSync?.errorCount ?? 0} hata kaydı görünüyor. Katalog tarafı gözden geçirilmeli.`,
+        detail: `Son sync içinde ${dashboard?.latestSync?.errorCount ?? 0} hata kaydı görünüyor. Canlı test öncesi katalog tarafı gözden geçirilmeli.`,
         href: '/catalog',
         cta: 'Kataloğu Kontrol Et',
         tone: 'warning',
       });
-    }
-
-    if (items.length === 0) {
+    } else {
       items.push({
-        title: 'Ana sistem dengeli görünüyor',
+        title: 'Katalog sağlığı kritik alarm üretmiyor',
         detail:
-          'Bağlantılar ve temel katalog sağlığı şu an kritik uyarı üretmiyor.',
+          'Ürün ve varyant tarafı şu an ciddi sync uyarısı göstermiyor. Yarınki temel aktivasyon için iyi bir zemin.',
         href: '/dashboard',
         cta: 'Dashboard’da Kal',
         tone: 'success',
@@ -615,7 +740,7 @@ export default function DashboardPage() {
                   marginBottom: 8,
                 }}
               >
-                Ana Kontrol Merkezi
+                Go-Live Merkezi
               </div>
 
               <div
@@ -638,13 +763,30 @@ export default function DashboardPage() {
                   marginBottom: 14,
                 }}
               >
-                Müşteri firmanın uygulamayı açtığında en hızlı şekilde yönünü bulacağı,
-                mesaj, sipariş, operasyon ve bağlantı sağlığını tek yerden göreceği ana ekran.
+                Bu ekran artık yalnız genel özet değil; yarınki WhatsApp aktivasyonu öncesi
+                sistemin ne kadar hazır olduğunu, hangi şeylerin sabit kaldığını ve ilk canlı
+                adımın ne olacağını tek bakışta gösterir.
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+                <StatusBadge label={liveReadiness.label} tone={liveReadiness.tone} />
+                <StatusBadge
+                  label={tenant?.waPhoneNumberId ? 'WhatsApp tenantta görünür' : 'WhatsApp tenantta henüz görünmüyor'}
+                  tone={tenant?.waPhoneNumberId ? 'success' : 'warning'}
+                />
+                <StatusBadge
+                  label={dashboard?.ikasConnected ? 'ikas pilot aktif' : 'ikas kontrol edilmeli'}
+                  tone={dashboard?.ikasConnected ? 'success' : 'warning'}
+                />
+              </div>
+
+              <div style={{ color: '#6b7280', lineHeight: 1.7, fontSize: 14, marginBottom: 14 }}>
+                {liveReadiness.helper}
               </div>
 
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 <Link
-                  href="/inbox"
+                  href="/integrations"
                   style={{
                     textDecoration: 'none',
                     borderRadius: 12,
@@ -654,11 +796,11 @@ export default function DashboardPage() {
                     fontWeight: 700,
                   }}
                 >
-                  Mesajlara Git
+                  Canlı Hazırlığı Aç
                 </Link>
 
                 <Link
-                  href="/orders"
+                  href="/inbox"
                   style={{
                     textDecoration: 'none',
                     borderRadius: 12,
@@ -669,7 +811,7 @@ export default function DashboardPage() {
                     fontWeight: 700,
                   }}
                 >
-                  Siparişleri Aç
+                  Mesajlara Git
                 </Link>
 
                 <Link
@@ -708,8 +850,8 @@ export default function DashboardPage() {
             ) : null}
 
             <SectionCard
-              title="Hızlı Bağlantı Özeti"
-              subtitle="Tenant ve mağaza seviyesindeki en kritik bağlantı görünümü."
+              title="Canlı Hazırlık Durumu"
+              subtitle="Yarınki aktivasyondan önce kritik hazırlık yüzeyi."
             >
               <div
                 style={{
@@ -719,41 +861,97 @@ export default function DashboardPage() {
                 }}
               >
                 <MetricCard
-                  label="WhatsApp"
+                  label="WhatsApp Hazırlığı"
                   value={
                     <StatusBadge
-                      label={tenant?.waPhoneNumberId ? 'Bağlı' : 'Eksik'}
-                      tone={tenant?.waPhoneNumberId ? 'success' : 'danger'}
+                      label={tenant?.waPhoneNumberId ? 'Hazır' : 'Bekleniyor'}
+                      tone={tenant?.waPhoneNumberId ? 'success' : 'warning'}
                     />
                   }
+                  helper={
+                    tenant?.waPhoneNumberId
+                      ? 'Tenant seviyesinde hat görünür.'
+                      : 'Fiziksel hat + Meta doğrulaması + tenant eşleştirmesi bekleniyor.'
+                  }
+                  tone={tenant?.waPhoneNumberId ? 'success' : 'warning'}
                 />
+
                 <MetricCard
-                  label="ikas"
+                  label="ikas Hazırlığı"
                   value={
                     <StatusBadge
                       label={mapConnectionLabel(Boolean(dashboard?.ikasConnected))}
                       tone={getBoolTone(Boolean(dashboard?.ikasConnected))}
                     />
                   }
+                  helper="Storefront ve katalog görünümünün temel pilot bağlantısı."
+                  tone={dashboard?.ikasConnected ? 'success' : 'danger'}
                 />
+
                 <MetricCard
-                  label="Son Sync"
+                  label="Panel Sağlığı"
                   value={
                     <StatusBadge
-                      label={
-                        dashboard?.latestSync?.status
-                          ? mapSyncStatusLabel(dashboard.latestSync.status)
-                          : 'Bilinmiyor'
-                      }
-                      tone={getSyncTone(dashboard?.latestSync?.status)}
+                      label={topError ? 'Kontrol gerekli' : 'Stabil görünüyor'}
+                      tone={topError ? 'danger' : 'success'}
                     />
                   }
-                  helper={formatDate(dashboard?.latestSync?.finishedAt)}
+                  helper={
+                    topError
+                      ? 'Canlı öncesi hata yüzeyi temizlenmeli.'
+                      : 'Büyük panel akışlarında kritik kırılma görünmüyor.'
+                  }
+                  tone={topError ? 'danger' : 'success'}
                 />
+
                 <MetricCard
-                  label="Marka"
-                  value={tenant?.brandName || '-'}
-                  helper={tenant?.merchantId || '-'}
+                  label="Sıradaki Ana Adım"
+                  value={tenant?.waPhoneNumberId ? 'Smoke Test' : 'Aktivasyon'}
+                  helper={
+                    tenant?.waPhoneNumberId
+                      ? 'Şimdi inbound / outbound doğrulama yapılmalı.'
+                      : 'Önce WhatsApp hattı doğru tenant ile bağlanmalı.'
+                  }
+                  tone={tenant?.waPhoneNumberId ? 'success' : 'warning'}
+                />
+              </div>
+            </SectionCard>
+
+            <SectionCard
+              title="Yarın Aktivasyon Sırası"
+              subtitle="Numara geldiği anda dağılmadan aynı sırayla ilerle."
+            >
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                  gap: 12,
+                }}
+              >
+                <ActivationStepCard
+                  step="Adım 1"
+                  title="Numara ve tenant eşleşmesini doğrula"
+                  detail="Önce numaranın doğru tenant için bağlandığını doğrula. FLAW ve MIRELLE karışmamalı."
+                  tone="warning"
+                />
+
+                <ActivationStepCard
+                  step="Adım 2"
+                  title="Panel disable state kalktı mı kontrol et"
+                  detail="Mesajlar ve konuşma detail ekranında reply alanı hâlâ kapalı mı değil mi bunu doğrula."
+                />
+
+                <ActivationStepCard
+                  step="Adım 3"
+                  title="İlk inbound / outbound smoke test"
+                  detail="Önce dışarıdan mesaj gönder, sonra panelden manual reply at. Temel zincirin ayakta olduğunu gör."
+                  tone="success"
+                />
+
+                <ActivationStepCard
+                  step="Adım 4"
+                  title="Mesaj → Sipariş → Operasyon zincirini test et"
+                  detail="Kargo, dekont ve hasarlı ürün gibi örnek senaryolarla panelin bağlarını doğrula."
                 />
               </div>
             </SectionCard>
@@ -783,7 +981,7 @@ export default function DashboardPage() {
 
             <SectionCard
               title="Bugün Öncelikli Konular"
-              subtitle="Sistemin durumuna göre ilk bakılacak alanları özetler."
+              subtitle="Şu an sistemin verdiği en önemli hazırlık sinyalleri."
             >
               <div
                 style={{
@@ -800,7 +998,7 @@ export default function DashboardPage() {
 
             <SectionCard
               title="Hızlı Sağlık Özeti"
-              subtitle="Katalog ve policy tarafının en temel metrikleri."
+              subtitle="Katalog ve policy tarafının canlı test öncesi temel görünümü."
             >
               <div
                 style={{
@@ -967,8 +1165,8 @@ export default function DashboardPage() {
               </SectionCard>
 
               <SectionCard
-                title="Paneli Nasıl Kullanırım?"
-                subtitle="İlk kez giren kullanıcı için kısa rehber."
+                title="Bugün Paneli Nasıl Kullanırım?"
+                subtitle="Numara gelmeden önce en doğru çalışma sırası."
               >
                 <div style={{ display: 'grid', gap: 12 }}>
                   <div
@@ -979,9 +1177,9 @@ export default function DashboardPage() {
                       background: '#ffffff',
                     }}
                   >
-                    <div style={{ fontWeight: 800, marginBottom: 6 }}>1. Mesajlar ile başla</div>
+                    <div style={{ fontWeight: 800, marginBottom: 6 }}>1. Entegrasyonları kontrol et</div>
                     <div style={{ color: '#6b7280', lineHeight: 1.7 }}>
-                      Müşteri konuşmalarını aç, gerekli durumlarda operatör görünümünü kullan.
+                      WhatsApp gerçekten eksik mi, ikas aktif mi, yarınki ana adım ne; önce bunu netleştir.
                     </div>
                   </div>
 
@@ -993,25 +1191,9 @@ export default function DashboardPage() {
                       background: '#ffffff',
                     }}
                   >
-                    <div style={{ fontWeight: 800, marginBottom: 6 }}>2. Siparişleri kontrol et</div>
+                    <div style={{ fontWeight: 800, marginBottom: 6 }}>2. Mesajlar ekranını hazır tut</div>
                     <div style={{ color: '#6b7280', lineHeight: 1.7 }}>
-                      Ödeme, kargo ve sipariş takibini aynı omurgada izle.
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      border: '1px solid #e5e7eb',
-                      borderRadius: 14,
-                      padding: 14,
-                      background: '#ffffff',
-                    }}
-                  >
-                    <div style={{ fontWeight: 800, marginBottom: 6 }}>
-                      3. Operasyon kayıtlarını yönet
-                    </div>
-                    <div style={{ color: '#6b7280', lineHeight: 1.7 }}>
-                      Şikayet, hasarlı ürün ve dekont gibi vakaları operasyon merkezinde takip et.
+                      Numara bağlanınca önce konuşma oluşumu ve reply alanı burada test edilecek.
                     </div>
                   </div>
 
@@ -1024,10 +1206,26 @@ export default function DashboardPage() {
                     }}
                   >
                     <div style={{ fontWeight: 800, marginBottom: 6 }}>
-                      4. Katalog ve policy tarafını güncel tut
+                      3. Sipariş ve operasyon akışını bozmadan koru
                     </div>
                     <div style={{ color: '#6b7280', lineHeight: 1.7 }}>
-                      Ürün, varyant ve policy bilgileri güncel oldukça müşteri deneyimi güçlenir.
+                      Yarın kargo, dekont ve hasarlı ürün gibi ilk senaryolar bu iki ekranda doğrulanacak.
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      border: '1px solid #e5e7eb',
+                      borderRadius: 14,
+                      padding: 14,
+                      background: '#ffffff',
+                    }}
+                  >
+                    <div style={{ fontWeight: 800, marginBottom: 6 }}>
+                      4. Teknik aracı sadece gerektiğinde kullan
+                    </div>
+                    <div style={{ color: '#6b7280', lineHeight: 1.7 }}>
+                      Teknik kuyruk testi ayrı dursun; canlı aktivasyonla karışmasın.
                     </div>
                   </div>
                 </div>
@@ -1036,7 +1234,7 @@ export default function DashboardPage() {
 
             <SectionCard
               title="Policy ve İletişim Özeti"
-              subtitle="Tam detay yerine kısa görünüm."
+              subtitle="Canlı testte referans olarak kullanılacak kısa görünüm."
             >
               <div
                 style={{
