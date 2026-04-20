@@ -15,6 +15,8 @@ const ORDER_DETAIL_MAP: Record<
     linkedConversation: string;
     linkedCase: string;
     note: string;
+    action: string;
+    risk: string;
   }
 > = {
   'SIP-10428': {
@@ -26,6 +28,8 @@ const ORDER_DETAIL_MAP: Record<
     linkedConversation: 'Aktif konuşma mevcut',
     linkedCase: 'Açık vaka yok',
     note: 'Bu sipariş detail ekranı ileride ödeme, kargo, konuşma ve operasyon kayıtlarını tek noktada toplayacak.',
+    action: 'Kargoya hazırlık ve müşteri konuşma takibi',
+    risk: 'Düşük',
   },
   'SIP-10412': {
     customer: '905457464945',
@@ -36,6 +40,8 @@ const ORDER_DETAIL_MAP: Record<
     linkedConversation: 'Bağlı konuşma var',
     linkedCase: 'Kargo şikayeti',
     note: 'Teslim edilmiş siparişlerde müşteri memnuniyeti, kargo şikayeti ve son konuşmalar birlikte görülebilecek.',
+    action: 'Kargo şikayeti ve müşteri memnuniyet kontrolü',
+    risk: 'Orta',
   },
   'SIP-10387': {
     customer: '9055•••',
@@ -46,6 +52,8 @@ const ORDER_DETAIL_MAP: Record<
     linkedConversation: 'Bağlı konuşma var',
     linkedCase: 'Ödeme / Dekont',
     note: 'Dekont kontrolü bekleyen siparişlerde finans doğrulama, operasyon kaydı ve müşteri konuşması aynı ekran altında bağlanacak.',
+    action: 'Finans doğrulama ve dekont incelemesi',
+    risk: 'Yüksek',
   },
 };
 
@@ -92,6 +100,8 @@ export default function OrderDetailPage() {
     linkedConversation: 'Bağlı konuşma bilgisi yok',
     linkedCase: 'Bağlı vaka bilgisi yok',
     note: 'Bu sipariş için placeholder detail ekranı gösteriliyor.',
+    action: 'Aksiyon bilgisi yok',
+    risk: 'Belirsiz',
   };
 
   return (
@@ -156,9 +166,11 @@ export default function OrderDetailPage() {
           }}
         >
           <MetricCard label="Müşteri" value={detail.customer} />
-          <MetricCard label="Sipariş Durumu" value={detail.orderStatus} />
-          <MetricCard label="Ödeme Durumu" value={detail.paymentStatus} />
-          <MetricCard label="Kargo Durumu" value={detail.shipmentStatus} />
+<MetricCard label="Sipariş Durumu" value={detail.orderStatus} />
+<MetricCard label="Ödeme Durumu" value={detail.paymentStatus} />
+<MetricCard label="Kargo Durumu" value={detail.shipmentStatus} />
+<MetricCard label="Sonraki Aksiyon" value={detail.action} />
+<MetricCard label="Risk Seviyesi" value={detail.risk} />
         </section>
 
         <section
@@ -196,17 +208,17 @@ export default function OrderDetailPage() {
           }}
         >
           <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
-            Detail Ekranda Sonraki Fazda Ne Olacak?
+            Bu Siparişte Operasyon Ekibi Ne Yönetecek?
           </div>
 
           <div style={{ display: 'grid', gap: 10, color: '#4b5563', lineHeight: 1.7 }}>
-            <div>• Gerçek sipariş satırı ve ürün listesi</div>
-            <div>• Ödeme / dekont doğrulama alanı</div>
-            <div>• Kargo ve takip bilgisi</div>
-            <div>• Bağlı müşteri konuşmaları</div>
-            <div>• Açık operasyon vakaları</div>
-            <div>• İç notlar ve sorumlu atama</div>
-          </div>
+  <div>• Ödeme / dekont doğrulaması</div>
+  <div>• Kargo ve teslimat takibi</div>
+  <div>• Bağlı müşteri konuşmasının gözden geçirilmesi</div>
+  <div>• Operasyon kaydı varsa onunla birlikte yönetim</div>
+  <div>• İç not ve sorumlu atama alanı</div>
+  <div>• Sipariş çözülene kadar aksiyon takibi</div>
+</div>
         </section>
 
         <section
