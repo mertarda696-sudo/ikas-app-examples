@@ -1,75 +1,20 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/apparel-panel/AppShell';
+import { TokenHelpers } from '@/helpers/token-helpers';
+import type { CatalogHealthResponse, DashboardSummaryResponse } from '@/lib/apparel-panel/types';
 
-const INTEGRATION_CARDS = [
-  {
-    name: 'WhatsApp',
-    category: 'Canlı müşteri mesajlaşma hattı',
-    status: 'Aktivasyon bekleniyor',
-    tone: 'warning' as const,
-    summary:
-      'Panel reply, konuşma, sipariş ve operasyon yüzeyi hazır. Eksik halka tenant seviyesinde gerçek WhatsApp hattının bağlanması.',
-    nextStep:
-      'MIRELLE için fiziksel hat + Meta doğrulaması + doğru wa_phone_number_id eşleştirmesi yapılmalı.',
-  },
-  {
-    name: 'ikas',
-    category: 'Mağaza / katalog / embedded app entegrasyonu',
-    status: 'Aktif pilot',
-    tone: 'success' as const,
-    summary:
-      'MIRELLE üzerinde embedded app, dashboard ve panel görünümü aktif pilot olarak çalışıyor.',
-    nextStep:
-      'WhatsApp hattı geldiğinde storefront + panel + konuşma akışı canlıya yakın doğrulanacak.',
-  },
-  {
-    name: 'Meta Business',
-    category: 'Çok kanallı kanal omurgası',
-    status: 'Canlı hazırlık aşaması',
-    tone: 'info' as const,
-    summary:
-      'WhatsApp aktivasyonu tamamlandığında çok kanallı omurganın ilk gerçek görünür katmanı olacak.',
-    nextStep:
-      'Önce WhatsApp hattı oturtulmalı; ardından Meta health ve kanal görünürlüğü bu sayfada güçlendirilecek.',
-  },
-  {
-    name: 'FLAW Sandbox',
-    category: 'İkinci storefront / adapter deneme alanı',
-    status: 'Sonraki faz',
-    tone: 'neutral' as const,
-    summary:
-      'FLAW tenantı ayrı deneme alanı olarak korunmalı. İkinci website altyapısı burada test edilirse MIRELLE hattı karışmaz.',
-    nextStep:
-      'MIRELLE canlı aktivasyonu geçtikten sonra WooCommerce ile ikinci storefront sandbox açılması en mantıklı ilk adım olur.',
-  },
-  {
-    name: 'Facebook / Instagram',
-    category: 'Gelecek kanal adaptörleri',
-    status: 'Planlandı',
-    tone: 'neutral' as const,
-    summary:
-      'Çok kanallı mesaj merkezi vizyonunda yer alıyor ancak ilk satış sprintinde öncelik değil.',
-    nextStep:
-      'Önce WhatsApp merkezli sürüm stabil olmalı, sonra ikinci kanal fazına geçilmeli.',
-  },
-  {
-    name: 'E-posta / TikTok',
-    category: 'İleri kanal backlog',
-    status: 'Roadmap',
-    tone: 'neutral' as const,
-    summary:
-      'Destek, dekont ve içerik tabanlı genişleme için değerli olabilir ama şu anki canlı önceliği etkilememeli.',
-    nextStep:
-      'İlk canlı sprint ve storefront sandbox sonrası ayrıca değerlendirilmesi daha doğru.',
-  },
-];
+function formatDate(value: string | null | undefined) {
+  if (!value) return '-';
+  try {
+    return new Date(value).toLocaleString('tr-TR');
+  } catch {
+    return value;
+  }
+}
 
-function Badge({
-  label,
-  tone,
-}: {
-  label: string;
-  tone: 'success' | 'warning' | 'neutral' | 'info';
-}) {
+function Badge({ label, tone }: { label: string; tone: 'success' | 'warning' | 'neutral' | 'info' | 'danger' }) {
   const styles =
     tone === 'success'
       ? { background: '#ecfdf5', color: '#065f46' }
@@ -77,7 +22,9 @@ function Badge({
         ? { background: '#fffbeb', color: '#92400e' }
         : tone === 'info'
           ? { background: '#eff6ff', color: '#1d4ed8' }
-          : { background: '#f3f4f6', color: '#374151' };
+          : tone === 'danger'
+            ? { background: '#fef2f2', color: '#991b1b' }
+            : { background: '#f3f4f6', color: '#374151' };
 
   return (
     <span
@@ -95,371 +42,285 @@ function Badge({
   );
 }
 
-function MetricCard({
-  label,
-  value,
-  helper,
-}: {
-  label: string;
-  value: string;
-  helper: string;
-}) {
+function MetricCard({ label, value, helper }: { label: string; value: string | number; helper: string }) {
   return (
-    <div
-      style={{
-        border: '1px solid #e5e7eb',
-        borderRadius: 18,
-        background: '#ffffff',
-        padding: 18,
-      }}
-    >
+    <div style={{ border: '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', padding: 18 }}>
       <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>{label}</div>
       <div style={{ fontSize: 28, fontWeight: 800, color: '#111827' }}>{value}</div>
-      <div style={{ marginTop: 8, fontSize: 13, color: '#6b7280', lineHeight: 1.6 }}>
-        {helper}
-      </div>
+      <div style={{ marginTop: 8, fontSize: 13, color: '#6b7280', lineHeight: 1.6 }}>{helper}</div>
     </div>
   );
+}
+
+function getSyncTone(status: string | null | undefined, errorCount?: number | null): 'success' | 'warning' | 'neutral' | 'info' | 'danger' {
+  const normalized = String(status || '').toLowerCase();
+  if ((errorCount ?? 0) > 0) return 'warning';
+  if (normalized === 'success') return 'success';
+  if (normalized === 'running' || normalized === 'processing') return 'info';
+  if (normalized === 'failed' || normalized === 'error' || normalized === 'cancelled') return 'danger';
+  return 'neutral';
+}
+
+function getSyncLabel(status: string | null | undefined, errorCount?: number | null) {
+  const normalized = String(status || '').toLowerCase();
+  if ((errorCount ?? 0) > 0) return `Uyarı (${errorCount})`;
+  if (normalized === 'success') return 'Güncel';
+  if (normalized === 'running' || normalized === 'processing') return 'Çalışıyor';
+  if (normalized === 'failed' || normalized === 'error' || normalized === 'cancelled') return 'Hata';
+  return status || 'Bilinmiyor';
 }
 
 function IntegrationCard({
-  name,
-  category,
-  status,
-  tone,
-  summary,
-  nextStep,
-}: {
-  name: string;
-  category: string;
-  status: string;
-  tone: 'success' | 'warning' | 'neutral' | 'info';
-  summary: string;
-  nextStep: string;
-}) {
-  return (
-    <div
-      style={{
-        border: '1px solid #e5e7eb',
-        borderRadius: 18,
-        background: '#ffffff',
-        padding: 18,
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          gap: 10,
-          alignItems: 'flex-start',
-          flexWrap: 'wrap',
-          marginBottom: 8,
-        }}
-      >
-        <div style={{ fontSize: 18, fontWeight: 800, color: '#111827' }}>{name}</div>
-        <Badge label={status} tone={tone} />
-      </div>
-
-      <div
-        style={{
-          fontSize: 13,
-          fontWeight: 700,
-          color: '#6b7280',
-          marginBottom: 10,
-        }}
-      >
-        {category}
-      </div>
-
-      <div
-        style={{
-          color: '#4b5563',
-          lineHeight: 1.7,
-          marginBottom: 12,
-          fontSize: 14,
-        }}
-      >
-        {summary}
-      </div>
-
-      <div
-        style={{
-          borderTop: '1px solid #f3f4f6',
-          paddingTop: 10,
-          color: '#374151',
-          fontSize: 13,
-          lineHeight: 1.7,
-        }}
-      >
-        <strong>Sonraki adım:</strong> {nextStep}
-      </div>
-    </div>
-  );
-}
-
-function ReadinessCard({
   title,
-  detail,
+  subtitle,
+  statusLabel,
   tone,
+  rows,
 }: {
   title: string;
-  detail: string;
-  tone: 'warning' | 'success' | 'neutral';
+  subtitle: string;
+  statusLabel: string;
+  tone: 'success' | 'warning' | 'neutral' | 'info' | 'danger';
+  rows: Array<{ label: string; value: string | number }>;
 }) {
-  const styles =
-    tone === 'warning'
-      ? {
-          border: '1px solid #fde68a',
-          background: '#fffbeb',
-          titleColor: '#92400e',
-        }
-      : tone === 'success'
-        ? {
-            border: '1px solid #bbf7d0',
-            background: '#f0fdf4',
-            titleColor: '#166534',
-          }
-        : {
-            border: '1px solid #e5e7eb',
-            background: '#ffffff',
-            titleColor: '#111827',
-          };
-
   return (
-    <div
-      style={{
-        border: styles.border,
-        background: styles.background,
-        borderRadius: 14,
-        padding: 14,
-      }}
-    >
-      <div style={{ fontWeight: 800, color: styles.titleColor, marginBottom: 6 }}>{title}</div>
-      <div style={{ color: '#4b5563', lineHeight: 1.7 }}>{detail}</div>
-    </div>
+    <section style={{ border: '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', padding: 18 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 10 }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: '#111827', marginBottom: 4 }}>{title}</div>
+          <div style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.6 }}>{subtitle}</div>
+        </div>
+        <Badge label={statusLabel} tone={tone} />
+      </div>
+
+      <div style={{ display: 'grid', gap: 8, marginTop: 14 }}>
+        {rows.map((row) => (
+          <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, borderTop: '1px solid #f3f4f6', paddingTop: 8 }}>
+            <div style={{ color: '#6b7280', fontSize: 13 }}>{row.label}</div>
+            <div style={{ color: '#111827', fontSize: 13, fontWeight: 700, textAlign: 'right' }}>{row.value || '-'}</div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
 export default function IntegrationsPage() {
+  const [dashboard, setDashboard] = useState<DashboardSummaryResponse | null>(null);
+  const [catalogHealth, setCatalogHealth] = useState<CatalogHealthResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const run = async () => {
+      try {
+        const token = await TokenHelpers.getTokenForIframeApp();
+
+        if (!token) {
+          const fetchedAt = new Date().toISOString();
+          setDashboard({
+            ok: false,
+            fetchedAt,
+            tenant: null,
+            ikasConnected: false,
+            productCount: 0,
+            variantCount: 0,
+            policyCount: 0,
+            contactChannelCount: 0,
+            latestSync: null,
+            error: 'iFrame JWT token alınamadı.',
+          });
+          setCatalogHealth({
+            ok: false,
+            fetchedAt,
+            tenant: null,
+            productCountTotal: 0,
+            productCountActive: 0,
+            variantCountTotal: 0,
+            variantCountInStock: 0,
+            variantCountPriced: 0,
+            latestSync: null,
+            error: 'iFrame JWT token alınamadı.',
+          });
+          return;
+        }
+
+        const headers = { Authorization: 'JWT ' + token };
+        const [dashboardRes, catalogHealthRes] = await Promise.all([
+          fetch('/api/apparel/dashboard-summary', { cache: 'no-store', headers }),
+          fetch('/api/apparel/catalog-health', { cache: 'no-store', headers }),
+        ]);
+
+        const [dashboardRaw, catalogHealthRaw] = await Promise.all([
+          dashboardRes.json(),
+          catalogHealthRes.json(),
+        ]);
+
+        setDashboard(dashboardRaw);
+        setCatalogHealth(catalogHealthRaw);
+      } catch (error) {
+        const fetchedAt = new Date().toISOString();
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        setDashboard({
+          ok: false,
+          fetchedAt,
+          tenant: null,
+          ikasConnected: false,
+          productCount: 0,
+          variantCount: 0,
+          policyCount: 0,
+          contactChannelCount: 0,
+          latestSync: null,
+          error: message,
+        });
+        setCatalogHealth({
+          ok: false,
+          fetchedAt,
+          tenant: null,
+          productCountTotal: 0,
+          productCountActive: 0,
+          variantCountTotal: 0,
+          variantCountInStock: 0,
+          variantCountPriced: 0,
+          latestSync: null,
+          error: message,
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    run();
+  }, []);
+
+  const tenant = dashboard?.tenant || catalogHealth?.tenant || null;
+  const topError = dashboard?.error || catalogHealth?.error || null;
+  const latestSync = catalogHealth?.latestSync || dashboard?.latestSync || null;
+  const ikasConnected = Boolean(dashboard?.ikasConnected);
+  const hasWhatsAppTenant = Boolean(tenant?.waPhoneNumberId);
+
+  const readiness = useMemo(() => {
+    if (topError) {
+      return { label: 'Kontrol gerekli', tone: 'danger' as const, helper: topError };
+    }
+    if (ikasConnected && hasWhatsAppTenant && (latestSync?.errorCount ?? 0) === 0) {
+      return {
+        label: 'Canlı teste hazır',
+        tone: 'success' as const,
+        helper: 'ikas, katalog, policy ve WhatsApp tenant bilgisi panelde görünür durumda.',
+      };
+    }
+    if (ikasConnected && (latestSync?.errorCount ?? 0) === 0) {
+      return {
+        label: 'Katalog hazır',
+        tone: 'warning' as const,
+        helper: 'ikas ve katalog sağlıklı görünüyor; canlı WhatsApp smoke test ayrıca doğrulanmalı.',
+      };
+    }
+    return {
+      label: 'Hazırlık sürüyor',
+      tone: 'neutral' as const,
+      helper: 'Canlı öncesi entegrasyon durumu izleniyor.',
+    };
+  }, [topError, ikasConnected, hasWhatsAppTenant, latestSync?.errorCount]);
+
   return (
     <AppShell>
-      <main
-        style={{
-          maxWidth: 1280,
-          margin: '0 auto',
-          padding: 24,
-          minHeight: '100vh',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            gap: 16,
-            alignItems: 'flex-start',
-            flexWrap: 'wrap',
-            marginBottom: 20,
-          }}
-        >
+      <main style={{ maxWidth: 1280, margin: '0 auto', padding: 24, minHeight: '100vh' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 20 }}>
           <div>
-            <h1 style={{ fontSize: 30, fontWeight: 800, marginBottom: 8 }}>
-              Entegrasyonlar
-            </h1>
+            <h1 style={{ fontSize: 30, fontWeight: 800, marginBottom: 8 }}>Entegrasyonlar</h1>
             <p style={{ color: '#4b5563', margin: 0, lineHeight: 1.7 }}>
-              Bu ekran artık sadece hangi entegrasyon var bilgisini değil, canlıya çıkış için
-              neyin hazır olduğunu ve sıradaki adımın ne olduğunu da net şekilde gösterir.
+              ikas bağlantısı, katalog sync sağlığı, WhatsApp tenant durumu ve canlı hazırlık metriklerini tek ekranda izleyin.
             </p>
           </div>
 
-          <div
-            style={{
-              border: '1px dashed #d1d5db',
-              borderRadius: 16,
-              background: '#ffffff',
-              padding: 14,
-              color: '#6b7280',
-              maxWidth: 360,
-              fontSize: 13,
-              lineHeight: 1.6,
-            }}
-          >
-            Buradaki ana mantık: önce MIRELLE için WhatsApp aktivasyonu, sonra ilk canlı smoke test,
-            ondan sonra FLAW üzerinde ikinci storefront sandbox.
+          <div style={{ border: '1px dashed #d1d5db', borderRadius: 16, background: '#ffffff', padding: 14, color: '#6b7280', maxWidth: 380, fontSize: 13, lineHeight: 1.6 }}>
+            {tenant?.brandName || tenant?.storeName || 'Tenant'} için entegrasyon durumu canlı API verilerinden hesaplanır. Statik/placeholder entegrasyon listesi kaldırıldı.
           </div>
         </div>
 
-        <section
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: 12,
-            marginBottom: 16,
-          }}
-        >
-          <MetricCard
-            label="Canlı Öncelik"
-            value="WhatsApp"
-            helper="Şu anki en kritik aktivasyon alanı"
-          />
-          <MetricCard
-            label="Pilot Altyapı"
-            value="ikas"
-            helper="Mağaza ve panel görünümü aktif pilot"
-          />
-          <MetricCard
-            label="Hazırlık Modu"
-            value="Go-Live"
-            helper="Yarın tenant aktivasyonu ve smoke test odakta"
-          />
-          <MetricCard
-            label="Sonraki Sandbox"
-            value="FLAW"
-            helper="İkinci storefront / adapter test alanı"
-          />
-        </section>
-
-        <section
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1.7fr) minmax(320px, 1fr)',
-            gap: 16,
-            marginBottom: 16,
-          }}
-        >
-          <div
-            style={{
-              border: '1px solid #e5e7eb',
-              borderRadius: 18,
-              background: '#ffffff',
-              padding: 18,
-            }}
-          >
-            <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 14 }}>
-              Entegrasyon Kartları
-            </div>
-
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-                gap: 12,
-              }}
-            >
-              {INTEGRATION_CARDS.map((item) => (
-                <IntegrationCard
-                  key={item.name}
-                  name={item.name}
-                  category={item.category}
-                  status={item.status}
-                  tone={item.tone}
-                  summary={item.summary}
-                  nextStep={item.nextStep}
-                />
-              ))}
-            </div>
+        {loading ? (
+          <div>Yükleniyor...</div>
+        ) : topError ? (
+          <div style={{ border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b', borderRadius: 14, padding: 16, fontWeight: 600, marginBottom: 16 }}>
+            {topError}
           </div>
-
-          <div style={{ display: 'grid', gap: 16 }}>
-            <section
-              style={{
-                border: '1px solid #e5e7eb',
-                borderRadius: 18,
-                background: '#ffffff',
-                padding: 18,
-              }}
-            >
-              <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
-                Canlıya Çıkış Hazırlığı
-              </div>
-
-              <div style={{ display: 'grid', gap: 12 }}>
-                <ReadinessCard
-                  title="1. Numara doğru tenant’a bağlanmalı"
-                  detail="En kritik risk FLAW ve MIRELLE karışması. Bu yüzden önce tenant eşleşmesi doğrulanmalı."
-                  tone="warning"
-                />
-
-                <ReadinessCard
-                  title="2. Reply alanı otomatik açılmalı"
-                  detail="WhatsApp hattı bağlandığında Mesajlar ve konuşma detail ekranında disabled state kalkmalı."
-                  tone="neutral"
-                />
-
-                <ReadinessCard
-                  title="3. İlk smoke test kısa ve kontrollü olmalı"
-                  detail="Önce merhaba / ürün sorusu / kargo / dekont gibi temel senaryolar test edilecek."
-                  tone="success"
-                />
-              </div>
+        ) : (
+          <>
+            <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 16 }}>
+              <MetricCard label="Genel Durum" value={readiness.label} helper={readiness.helper} />
+              <MetricCard label="ikas" value={ikasConnected ? 'Bağlı' : 'Bağlı değil'} helper="Merchant, katalog ve panel bağlamı." />
+              <MetricCard label="WhatsApp Tenant" value={hasWhatsAppTenant ? 'Görünüyor' : 'Eksik'} helper={tenant?.waPhoneNumberId || 'wa_phone_number_id bulunamadı.'} />
+              <MetricCard label="Son Sync" value={getSyncLabel(latestSync?.status, latestSync?.errorCount)} helper={latestSync?.finishedAt ? `Son bitiş: ${formatDate(latestSync.finishedAt)}` : 'Henüz sync kaydı yok.'} />
             </section>
 
-            <section
-              style={{
-                border: '1px solid #e5e7eb',
-                borderRadius: 18,
-                background: '#ffffff',
-                padding: 18,
-              }}
-            >
-              <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
-                Sonraki Sandbox Mantığı
-              </div>
+            <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginBottom: 16 }}>
+              <IntegrationCard
+                title="ikas Catalog"
+                subtitle="Mağaza, ürün, varyant, fiyat ve stok verisi."
+                statusLabel={ikasConnected ? 'Bağlı' : 'Bağlı değil'}
+                tone={ikasConnected ? 'success' : 'danger'}
+                rows={[
+                  { label: 'Store', value: tenant?.storeName || '-' },
+                  { label: 'Merchant ID', value: tenant?.merchantId || '-' },
+                  { label: 'Ürün', value: catalogHealth?.productCountTotal ?? 0 },
+                  { label: 'Aktif Ürün', value: catalogHealth?.productCountActive ?? 0 },
+                  { label: 'Varyant', value: catalogHealth?.variantCountTotal ?? 0 },
+                  { label: 'Stokta Varyant', value: catalogHealth?.variantCountInStock ?? 0 },
+                  { label: 'Fiyatlı Varyant', value: catalogHealth?.variantCountPriced ?? 0 },
+                ]}
+              />
 
+              <IntegrationCard
+                title="Catalog Sync"
+                subtitle="Son sync run sağlığı ve katalog güncelliği."
+                statusLabel={getSyncLabel(latestSync?.status, latestSync?.errorCount)}
+                tone={getSyncTone(latestSync?.status, latestSync?.errorCount)}
+                rows={[
+                  { label: 'Status', value: latestSync?.status || '-' },
+                  { label: 'Error Count', value: latestSync?.errorCount ?? 0 },
+                  { label: 'Finished At', value: formatDate(latestSync?.finishedAt) },
+                  { label: 'Kaynak', value: 'Supabase catalog_sync_runs' },
+                ]}
+              />
+
+              <IntegrationCard
+                title="WhatsApp / Meta"
+                subtitle="Tenant seviyesinde WhatsApp numara eşleşmesi."
+                statusLabel={hasWhatsAppTenant ? 'Tenantta görünür' : 'Eksik'}
+                tone={hasWhatsAppTenant ? 'success' : 'warning'}
+                rows={[
+                  { label: 'wa_phone_number_id', value: tenant?.waPhoneNumberId || '-' },
+                  { label: 'Channel', value: tenant?.channel || 'whatsapp' },
+                  { label: 'Sonraki Test', value: 'Inbound + manual reply smoke' },
+                ]}
+              />
+
+              <IntegrationCard
+                title="Panel Backend"
+                subtitle="Dashboard, catalog-health ve policy API bağlantıları."
+                statusLabel="Aktif"
+                tone="success"
+                rows={[
+                  { label: 'Dashboard API', value: dashboard?.ok ? 'OK' : 'Kontrol' },
+                  { label: 'Catalog Health API', value: catalogHealth?.ok ? 'OK' : 'Kontrol' },
+                  { label: 'Policy API', value: 'OK' },
+                  { label: 'Panel Kaynağı', value: 'Vercel / Next.js' },
+                ]}
+              />
+            </section>
+
+            <section style={{ border: '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', padding: 18 }}>
+              <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>Sıradaki Doğru Kontrol</div>
               <div style={{ display: 'grid', gap: 10, color: '#4b5563', lineHeight: 1.7 }}>
-                <div>• MIRELLE = canlıya yakın tenant</div>
-                <div>• FLAW = deney ve storefront sandbox tenantı</div>
-                <div>• İlk storefront sandbox adayı = WooCommerce</div>
-                <div>• Ticimax / IdeaSoft karşılaştırması ikinci aşamada daha doğru</div>
+                <div>• Entegrasyonlar ekranında ikas = Bağlı görünmeli.</div>
+                <div>• Ürün/varyant/stok/fiyat metrikleri katalog sayfasıyla aynı sayıları vermeli.</div>
+                <div>• Son Sync = Güncel ve error count = 0 olmalı.</div>
+                <div>• WhatsApp tenant alanı görünüyorsa sonraki adım inbox/manual reply smoke test olur.</div>
               </div>
             </section>
-          </div>
-        </section>
-
-        <section
-          style={{
-            border: '1px solid #e5e7eb',
-            borderRadius: 18,
-            background: '#ffffff',
-            padding: 18,
-            marginBottom: 16,
-          }}
-        >
-          <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
-            Yarın Numara Gelince Sıra Ne Olacak?
-          </div>
-
-          <div style={{ display: 'grid', gap: 10, color: '#4b5563', lineHeight: 1.7 }}>
-            <div>• Önce numara ve Meta bağlantısı doğrulanacak</div>
-            <div>• Sonra doğru tenant üzerinde WhatsApp alanı eşleştirilecek</div>
-            <div>• Sonra panelde no-whatsapp guard kalktı mı bakılacak</div>
-            <div>• Sonra inbound mesaj panelde görünüyor mu test edilecek</div>
-            <div>• Sonra manual reply ve operasyon/sipariş navigation zinciri test edilecek</div>
-          </div>
-        </section>
-
-        <section
-          style={{
-            border: '1px solid #e5e7eb',
-            borderRadius: 18,
-            background: '#ffffff',
-            padding: 18,
-          }}
-        >
-          <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
-            Bu Sayfanın Paket 13B Mantığı
-          </div>
-
-          <div style={{ display: 'grid', gap: 10, color: '#4b5563', lineHeight: 1.7 }}>
-            <div>
-              Bu ekran artık sadece “hangi entegrasyon var” demiyor; aynı zamanda
-              “yarın canlıya en az sürprizle çıkmak için neye bakmalıyım” sorusuna cevap veriyor.
-            </div>
-            <div>
-              Böylece müşteri firma teknik detaylar arasında kaybolmadan, mevcut hazırlık düzeyini
-              ve sıradaki doğru adımı sade biçimde anlayabiliyor.
-            </div>
-          </div>
-        </section>
+          </>
+        )}
       </main>
     </AppShell>
   );
