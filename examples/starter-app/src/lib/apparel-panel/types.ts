@@ -126,7 +126,10 @@ export type InboxConversationItem = {
   isOpen: boolean;
   lastMessageText: string | null;
   lastMessageDirection: 'in' | 'out' | null;
+  lastMessageSenderType: 'customer' | 'ai' | 'operator' | 'system' | null;
   lastMessageAt: string | null;
+  lastCustomerMessageAt: string | null;
+  lastOperatorMessageAt: string | null;
   contextProductName: string | null;
 };
 
@@ -141,6 +144,7 @@ export type InboxListResponse = {
 export type ConversationMessageItem = {
   id: string;
   direction: 'in' | 'out' | null;
+  senderType: 'customer' | 'ai' | 'operator' | 'system' | null;
   msgType: string | null;
   textBody: string | null;
   createdAt: string | null;
@@ -156,6 +160,8 @@ export type ConversationDetailItem = {
   status: string | null;
   isOpen: boolean;
   lastMessageAt: string | null;
+  lastCustomerMessageAt: string | null;
+  lastOperatorMessageAt: string | null;
   contextProductName: string | null;
   messages: ConversationMessageItem[];
 };
