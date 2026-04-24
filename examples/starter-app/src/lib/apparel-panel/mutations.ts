@@ -32,6 +32,23 @@ type OperatorReviewRow = {
   operator_review_note: string | null;
 };
 
+type ConversationStatusAction = "close" | "reopen";
+
+type ConversationStatusRow = {
+  conversation_id: string;
+  status: string | null;
+  closed_at: Date | string | null;
+  close_reason: string | null;
+  reopened_at: Date | string | null;
+  reopened_from_status: string | null;
+};
+
+function toIso(value: Date | string | null | undefined): string | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 export async function getConversationSendContextByMerchantId(
   merchantId: string,
   conversationId: string,
@@ -117,6 +134,74 @@ export async function markConversationReviewedByMerchantId(
   };
 }
 
+export async function updateConversationStatusByMerchantId(
+  merchantId: string,
+  conversationId: string,
+  action: ConversationStatusAction,
+) {
+  const tenant = await getTenantPanelContextByMerchantId(merchantId);
+
+  if (!tenant) {
+    throw new Error("Tenant not found for merchant");
+  }
+
+  let rows: ConversationStatusRow[] = [];
+
+  if (action === "close") {
+    rows = await prisma.$queryRaw<ConversationStatusRow[]>`
+      update public.conversations
+      set
+        status = 'closed',
+        closed_at = now(),
+        close_reason = 'operator_closed'
+      where id = CAST(${conversationId} AS uuid)
+        and tenant_id = CAST(${tenant.tenantId} AS uuid)
+      returning
+        id as conversation_id,
+        status,
+        closed_at,
+        close_reason,
+        reopened_at,
+        reopened_from_status
+    `;
+  }
+
+  if (action === "reopen") {
+    rows = await prisma.$queryRaw<ConversationStatusRow[]>`
+      update public.conversations
+      set
+        status = 'open',
+        reopened_at = now(),
+        reopened_from_status = coalesce(status, 'closed'),
+        closed_at = null,
+        close_reason = null
+      where id = CAST(${conversationId} AS uuid)
+        and tenant_id = CAST(${tenant.tenantId} AS uuid)
+      returning
+        id as conversation_id,
+        status,
+        closed_at,
+        close_reason,
+        reopened_at,
+        reopened_from_status
+    `;
+  }
+
+  const row = rows[0];
+
+  if (!row) {
+    throw new Error("Conversation not found for merchant");
+  }
+
+  return {
+    conversationId: row.conversation_id,
+    status: row.status,
+    closedAt: toIso(row.closed_at),
+    closeReason: row.close_reason,
+    reopenedAt: toIso(row.reopened_at),
+    reopenedFromStatus: row.reopened_from_status,
+  };
+}
 export async function sendOperatorReplyViaN8n(
   input: OperatorReplyWebhookInput,
 ): Promise<OperatorReplyWebhookResult> {
