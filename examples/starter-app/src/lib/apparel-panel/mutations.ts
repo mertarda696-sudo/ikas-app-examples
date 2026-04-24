@@ -25,6 +25,13 @@ type OperatorReplyWebhookResult = {
   raw?: unknown;
 };
 
+type OperatorReviewRow = {
+  conversation_id: string;
+  operator_reviewed_at: Date | string | null;
+  operator_reviewed_by: string | null;
+  operator_review_note: string | null;
+};
+
 export async function getConversationSendContextByMerchantId(
   merchantId: string,
   conversationId: string,
@@ -53,17 +60,9 @@ export async function getConversationSendContextByMerchantId(
 
   const row = rows[0];
 
-  if (!row) {
-    throw new Error("Conversation not found for merchant");
-  }
-
-  if (!row.customer_id) {
-    throw new Error("Conversation customer wa_user_id not found");
-  }
-
-  if (!row.phone_number_id) {
-    throw new Error("Tenant wa_phone_number_id not found");
-  }
+  if (!row) throw new Error("Conversation not found for merchant");
+  if (!row.customer_id) throw new Error("Conversation customer wa_user_id not found");
+  if (!row.phone_number_id) throw new Error("Tenant wa_phone_number_id not found");
 
   return {
     conversationId: row.conversation_id,
@@ -73,19 +72,59 @@ export async function getConversationSendContextByMerchantId(
   };
 }
 
+export async function markConversationReviewedByMerchantId(
+  merchantId: string,
+  conversationId: string,
+  note?: string,
+) {
+  const tenant = await getTenantPanelContextByMerchantId(merchantId);
+
+  if (!tenant) {
+    throw new Error("Tenant not found for merchant");
+  }
+
+  const normalizedNote = String(note || "").trim() || null;
+
+  const rows = await prisma.$queryRaw<OperatorReviewRow[]>`
+    update public.conversations
+    set
+      operator_reviewed_at = now(),
+      operator_reviewed_by = ${merchantId},
+      operator_review_note = ${normalizedNote}
+    where id = CAST(${conversationId} AS uuid)
+      and tenant_id = CAST(${tenant.tenantId} AS uuid)
+    returning
+      id as conversation_id,
+      operator_reviewed_at,
+      operator_reviewed_by,
+      operator_review_note
+  `;
+
+  const row = rows[0];
+
+  if (!row) {
+    throw new Error("Conversation not found for merchant");
+  }
+
+  return {
+    conversationId: row.conversation_id,
+    operatorReviewedAt:
+      row.operator_reviewed_at instanceof Date
+        ? row.operator_reviewed_at.toISOString()
+        : row.operator_reviewed_at,
+    operatorReviewedBy: row.operator_reviewed_by,
+    operatorReviewNote: row.operator_review_note,
+  };
+}
+
 export async function sendOperatorReplyViaN8n(
   input: OperatorReplyWebhookInput,
 ): Promise<OperatorReplyWebhookResult> {
   const webhookUrl = process.env.N8N_PANEL_REPLY_WEBHOOK_URL;
   const webhookSecret = process.env.N8N_PANEL_REPLY_WEBHOOK_SECRET;
 
-  if (!webhookUrl) {
-    throw new Error("N8N_PANEL_REPLY_WEBHOOK_URL is not configured");
-  }
-
-  if (!webhookSecret) {
-    throw new Error("N8N_PANEL_REPLY_WEBHOOK_SECRET is not configured");
-  }
+  if (!webhookUrl) throw new Error("N8N_PANEL_REPLY_WEBHOOK_URL is not configured");
+  if (!webhookSecret) throw new Error("N8N_PANEL_REPLY_WEBHOOK_SECRET is not configured");
 
   const response = await fetch(webhookUrl, {
     method: "POST",
