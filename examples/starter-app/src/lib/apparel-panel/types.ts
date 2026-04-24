@@ -116,6 +116,17 @@ export type PoliciesContactResponse = {
   error?: string;
 };
 
+export type LinkedOperationCaseSummary = {
+  id: string;
+  caseNo: string | null;
+  caseType: string | null;
+  title: string | null;
+  priority: string | null;
+  status: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
 export type InboxConversationItem = {
   id: string;
   memberId: string | null;
@@ -137,6 +148,8 @@ export type InboxConversationItem = {
   operatorTag: string | null;
   operatorPriority: string | null;
   operatorNoteUpdatedAt: string | null;
+  linkedOperationCaseCount: number;
+  latestOperationCase: LinkedOperationCaseSummary | null;
   contextProductName: string | null;
 };
 
@@ -176,6 +189,7 @@ export type ConversationDetailItem = {
   operatorTag: string | null;
   operatorPriority: string | null;
   operatorNoteUpdatedAt: string | null;
+  linkedOperationCases: LinkedOperationCaseSummary[];
   contextProductName: string | null;
   messages: ConversationMessageItem[];
 };
