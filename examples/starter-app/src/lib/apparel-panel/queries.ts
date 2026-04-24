@@ -94,6 +94,9 @@ type InboxConversationRow = {
   last_message_sender_type: SenderType;
   last_customer_message_at: Date | string | null;
   last_operator_message_at: Date | string | null;
+  operator_reviewed_at: Date | string | null;
+  operator_reviewed_by: string | null;
+  operator_review_note: string | null;
 };
 
 type ConversationHeaderRow = {
@@ -106,6 +109,9 @@ type ConversationHeaderRow = {
   last_message_at: Date | string | null;
   last_customer_message_at: Date | string | null;
   last_operator_message_at: Date | string | null;
+  operator_reviewed_at: Date | string | null;
+  operator_reviewed_by: string | null;
+  operator_review_note: string | null;
 };
 
 type ConversationMessageRow = {
@@ -184,9 +190,7 @@ async function getLatestSyncSummary(tenantId: string): Promise<LatestSyncSummary
 export async function getDashboardSummaryByMerchantId(merchantId: string): Promise<DashboardSummaryResponse> {
   try {
     const tenant = await getTenantPanelContextByMerchantId(merchantId);
-    if (!tenant) {
-      return { ok: false, fetchedAt: new Date().toISOString(), tenant: null, ikasConnected: false, productCount: 0, variantCount: 0, policyCount: 0, contactChannelCount: 0, latestSync: null, error: "Tenant not found for merchant" };
-    }
+    if (!tenant) return { ok: false, fetchedAt: new Date().toISOString(), tenant: null, ikasConnected: false, productCount: 0, variantCount: 0, policyCount: 0, contactChannelCount: 0, latestSync: null, error: "Tenant not found for merchant" };
 
     const [productCountRows, variantCountRows, policyCountRows, contactCountRows, latestSync] = await Promise.all([
       prisma.$queryRaw<CountRow[]>`select count(*)::int as count from public.products where tenant_id = CAST(${tenant.tenantId} AS uuid)`,
@@ -196,17 +200,7 @@ export async function getDashboardSummaryByMerchantId(merchantId: string): Promi
       getLatestSyncSummary(tenant.tenantId),
     ]);
 
-    return {
-      ok: true,
-      fetchedAt: new Date().toISOString(),
-      tenant,
-      ikasConnected: tenant.sourcePlatform === "ikas",
-      productCount: toNumber(productCountRows[0]?.count),
-      variantCount: toNumber(variantCountRows[0]?.count),
-      policyCount: toNumber(policyCountRows[0]?.count),
-      contactChannelCount: toNumber(contactCountRows[0]?.count),
-      latestSync,
-    };
+    return { ok: true, fetchedAt: new Date().toISOString(), tenant, ikasConnected: tenant.sourcePlatform === "ikas", productCount: toNumber(productCountRows[0]?.count), variantCount: toNumber(variantCountRows[0]?.count), policyCount: toNumber(policyCountRows[0]?.count), contactChannelCount: toNumber(contactCountRows[0]?.count), latestSync };
   } catch (error) {
     return { ok: false, fetchedAt: new Date().toISOString(), tenant: null, ikasConnected: false, productCount: 0, variantCount: 0, policyCount: 0, contactChannelCount: 0, latestSync: null, error: error instanceof Error ? error.message : "Unknown error" };
   }
@@ -215,9 +209,7 @@ export async function getDashboardSummaryByMerchantId(merchantId: string): Promi
 export async function getCatalogHealthByMerchantId(merchantId: string): Promise<CatalogHealthResponse> {
   try {
     const tenant = await getTenantPanelContextByMerchantId(merchantId);
-    if (!tenant) {
-      return { ok: false, fetchedAt: new Date().toISOString(), tenant: null, productCountTotal: 0, productCountActive: 0, variantCountTotal: 0, variantCountInStock: 0, variantCountPriced: 0, latestSync: null, error: "Tenant not found for merchant" };
-    }
+    if (!tenant) return { ok: false, fetchedAt: new Date().toISOString(), tenant: null, productCountTotal: 0, productCountActive: 0, variantCountTotal: 0, variantCountInStock: 0, variantCountPriced: 0, latestSync: null, error: "Tenant not found for merchant" };
 
     const [productTotalRows, productActiveRows, variantTotalRows, variantInStockRows, variantPricedRows, latestSync] = await Promise.all([
       prisma.$queryRaw<CountRow[]>`select count(*)::int as count from public.products where tenant_id = CAST(${tenant.tenantId} AS uuid)`,
@@ -228,17 +220,7 @@ export async function getCatalogHealthByMerchantId(merchantId: string): Promise<
       getLatestSyncSummary(tenant.tenantId),
     ]);
 
-    return {
-      ok: true,
-      fetchedAt: new Date().toISOString(),
-      tenant,
-      productCountTotal: toNumber(productTotalRows[0]?.count),
-      productCountActive: toNumber(productActiveRows[0]?.count),
-      variantCountTotal: toNumber(variantTotalRows[0]?.count),
-      variantCountInStock: toNumber(variantInStockRows[0]?.count),
-      variantCountPriced: toNumber(variantPricedRows[0]?.count),
-      latestSync,
-    };
+    return { ok: true, fetchedAt: new Date().toISOString(), tenant, productCountTotal: toNumber(productTotalRows[0]?.count), productCountActive: toNumber(productActiveRows[0]?.count), variantCountTotal: toNumber(variantTotalRows[0]?.count), variantCountInStock: toNumber(variantInStockRows[0]?.count), variantCountPriced: toNumber(variantPricedRows[0]?.count), latestSync };
   } catch (error) {
     return { ok: false, fetchedAt: new Date().toISOString(), tenant: null, productCountTotal: 0, productCountActive: 0, variantCountTotal: 0, variantCountInStock: 0, variantCountPriced: 0, latestSync: null, error: error instanceof Error ? error.message : "Unknown error" };
   }
@@ -259,21 +241,7 @@ export async function getProductsListByMerchantId(merchantId: string): Promise<P
       limit 50
     `;
 
-    const items: ProductListItem[] = rows.map((row) => ({
-      id: row.id,
-      name: row.name || "-",
-      handle: row.handle,
-      category: row.category,
-      subcategory: row.subcategory,
-      basePrice: toNullableNumber(row.display_price),
-      currency: row.currency,
-      stockStatus: row.stock_status,
-      isActive: Boolean(row.is_active),
-      shortDescription: row.short_description,
-      variantCount: toNumber(row.variant_count),
-      attributes: row.attributes || null,
-    }));
-
+    const items: ProductListItem[] = rows.map((row) => ({ id: row.id, name: row.name || "-", handle: row.handle, category: row.category, subcategory: row.subcategory, basePrice: toNullableNumber(row.display_price), currency: row.currency, stockStatus: row.stock_status, isActive: Boolean(row.is_active), shortDescription: row.short_description, variantCount: toNumber(row.variant_count), attributes: row.attributes || null }));
     return { ok: true, fetchedAt: new Date().toISOString(), tenant, items };
   } catch (error) {
     return { ok: false, fetchedAt: new Date().toISOString(), tenant: null, items: [], error: error instanceof Error ? error.message : "Unknown error" };
@@ -294,20 +262,7 @@ export async function getVariantsListByMerchantId(merchantId: string): Promise<V
       limit 200
     `;
 
-    const items: VariantListItem[] = rows.map((row) => ({
-      id: row.id,
-      productId: row.product_id,
-      productName: row.product_name || "-",
-      sku: row.sku,
-      title: row.title,
-      color: row.color,
-      size: row.size,
-      price: toNullableNumber(row.price),
-      stockQty: toNumber(row.stock_qty),
-      stockStatus: row.stock_status,
-      isActive: Boolean(row.is_active),
-    }));
-
+    const items: VariantListItem[] = rows.map((row) => ({ id: row.id, productId: row.product_id, productName: row.product_name || "-", sku: row.sku, title: row.title, color: row.color, size: row.size, price: toNullableNumber(row.price), stockQty: toNumber(row.stock_qty), stockStatus: row.stock_status, isActive: Boolean(row.is_active) }));
     return { ok: true, fetchedAt: new Date().toISOString(), tenant, items };
   } catch (error) {
     return { ok: false, fetchedAt: new Date().toISOString(), tenant: null, items: [], error: error instanceof Error ? error.message : "Unknown error" };
@@ -317,9 +272,7 @@ export async function getVariantsListByMerchantId(merchantId: string): Promise<V
 export async function getPoliciesContactByMerchantId(merchantId: string): Promise<PoliciesContactResponse> {
   try {
     const tenant = await getTenantPanelContextByMerchantId(merchantId);
-    if (!tenant) {
-      return { ok: false, fetchedAt: new Date().toISOString(), tenant: null, policies: { shipping: null, delivery: null, return: null, exchange: null, support: null, contact: null }, contactChannels: [], error: "Tenant not found for merchant" };
-    }
+    if (!tenant) return { ok: false, fetchedAt: new Date().toISOString(), tenant: null, policies: { shipping: null, delivery: null, return: null, exchange: null, support: null, contact: null }, contactChannels: [], error: "Tenant not found for merchant" };
 
     const [policyRows, contactRows] = await Promise.all([
       prisma.$queryRaw<PolicyRow[]>`select policy_key, policy_text from public.tenant_policies where tenant_id = CAST(${tenant.tenantId} AS uuid) and is_active = true order by policy_key asc`,
@@ -336,19 +289,7 @@ export async function getPoliciesContactByMerchantId(merchantId: string): Promis
       if (row.policy_key === "contact") policies.contact = row.policy_text;
     }
 
-    const contactChannels: ContactChannelItem[] = contactRows.map((row) => ({
-      id: row.id,
-      channelKey: row.channel_key,
-      label: row.label,
-      value: row.value,
-      displayValue: row.value,
-      contactUrl: row.contact_url,
-      availabilityText: row.availability_text,
-      isPrimary: Boolean(row.is_primary),
-      isActive: Boolean(row.is_active),
-      priority: toNumber(row.priority),
-    }));
-
+    const contactChannels: ContactChannelItem[] = contactRows.map((row) => ({ id: row.id, channelKey: row.channel_key, label: row.label, value: row.value, displayValue: row.value, contactUrl: row.contact_url, availabilityText: row.availability_text, isPrimary: Boolean(row.is_primary), isActive: Boolean(row.is_active), priority: toNumber(row.priority) }));
     return { ok: true, fetchedAt: new Date().toISOString(), tenant, policies, contactChannels };
   } catch (error) {
     return { ok: false, fetchedAt: new Date().toISOString(), tenant: null, policies: { shipping: null, delivery: null, return: null, exchange: null, support: null, contact: null }, contactChannels: [], error: error instanceof Error ? error.message : "Unknown error" };
@@ -395,7 +336,10 @@ export async function getInboxListByMerchantId(merchantId: string): Promise<Inbo
         lm.last_message_direction,
         lm.last_message_sender_type,
         csm.last_customer_message_at,
-        csm.last_operator_message_at
+        csm.last_operator_message_at,
+        c.operator_reviewed_at,
+        c.operator_reviewed_by,
+        c.operator_review_note
       from public.conversations c
       left join public.tenant_members tm on tm.id = c.member_id
       left join latest_messages lm on lm.conversation_id = c.id
@@ -406,6 +350,7 @@ export async function getInboxListByMerchantId(merchantId: string): Promise<Inbo
           when c.status = 'open'
            and csm.last_customer_message_at is not null
            and (csm.last_operator_message_at is null or csm.last_customer_message_at > csm.last_operator_message_at)
+           and (c.operator_reviewed_at is null or csm.last_customer_message_at > c.operator_reviewed_at)
           then 1 else 0
         end desc,
         coalesce(lm.last_message_at, c.last_message_at) desc nulls last,
@@ -413,23 +358,7 @@ export async function getInboxListByMerchantId(merchantId: string): Promise<Inbo
       limit 100
     `;
 
-    const items: InboxConversationItem[] = rows.map((row) => ({
-      id: row.conversation_id,
-      memberId: row.member_id,
-      customerId: row.customer_id,
-      customerDisplay: row.customer_id || "Bilinmeyen müşteri",
-      channel: row.channel,
-      status: row.status,
-      isOpen: row.status === "open",
-      lastMessageText: row.last_message_text,
-      lastMessageDirection: row.last_message_direction,
-      lastMessageSenderType: row.last_message_sender_type,
-      lastMessageAt: toIso(row.last_message_at),
-      lastCustomerMessageAt: toIso(row.last_customer_message_at),
-      lastOperatorMessageAt: toIso(row.last_operator_message_at),
-      contextProductName: row.context_product_name,
-    }));
-
+    const items: InboxConversationItem[] = rows.map((row) => ({ id: row.conversation_id, memberId: row.member_id, customerId: row.customer_id, customerDisplay: row.customer_id || "Bilinmeyen müşteri", channel: row.channel, status: row.status, isOpen: row.status === "open", lastMessageText: row.last_message_text, lastMessageDirection: row.last_message_direction, lastMessageSenderType: row.last_message_sender_type, lastMessageAt: toIso(row.last_message_at), lastCustomerMessageAt: toIso(row.last_customer_message_at), lastOperatorMessageAt: toIso(row.last_operator_message_at), operatorReviewedAt: toIso(row.operator_reviewed_at), operatorReviewedBy: row.operator_reviewed_by, operatorReviewNote: row.operator_review_note, contextProductName: row.context_product_name }));
     return { ok: true, fetchedAt: new Date().toISOString(), tenant, items };
   } catch (error) {
     return { ok: false, fetchedAt: new Date().toISOString(), tenant: null, items: [], error: error instanceof Error ? error.message : "Unknown error" };
@@ -460,7 +389,10 @@ export async function getConversationDetailByMerchantId(merchantId: string, conv
         c.context_product_name,
         c.last_message_at,
         csm.last_customer_message_at,
-        csm.last_operator_message_at
+        csm.last_operator_message_at,
+        c.operator_reviewed_at,
+        c.operator_reviewed_by,
+        c.operator_review_note
       from public.conversations c
       left join public.tenant_members tm on tm.id = c.member_id
       left join conversation_sender_marks csm on csm.conversation_id = c.id
@@ -473,14 +405,7 @@ export async function getConversationDetailByMerchantId(merchantId: string, conv
     if (!header) return { ok: false, fetchedAt: new Date().toISOString(), tenant, conversation: null, error: "Conversation not found" };
 
     const messageRows = await prisma.$queryRaw<ConversationMessageRow[]>`
-      select
-        m.id,
-        m.direction,
-        coalesce(m.sender_type, case when m.direction = 'in' then 'customer' else 'ai' end) as sender_type,
-        m.msg_type,
-        m.text_body,
-        m.created_at,
-        m.raw
+      select m.id, m.direction, coalesce(m.sender_type, case when m.direction = 'in' then 'customer' else 'ai' end) as sender_type, m.msg_type, m.text_body, m.created_at, m.raw
       from public.messages m
       where m.conversation_id = CAST(${conversationId} AS uuid)
       order by m.created_at asc nulls last, m.id asc
@@ -490,32 +415,10 @@ export async function getConversationDetailByMerchantId(merchantId: string, conv
     const messages: ConversationMessageItem[] = messageRows.map((row) => {
       const rawString = JSON.stringify(row.raw || {});
       const msgType = row.msg_type || null;
-      return {
-        id: row.id,
-        direction: row.direction,
-        senderType: row.sender_type,
-        msgType,
-        textBody: row.text_body,
-        createdAt: toIso(row.created_at),
-        hasMediaLikePayload: msgType != null && msgType !== "text" && msgType !== "interactive" && rawString.length > 2,
-      };
+      return { id: row.id, direction: row.direction, senderType: row.sender_type, msgType, textBody: row.text_body, createdAt: toIso(row.created_at), hasMediaLikePayload: msgType != null && msgType !== "text" && msgType !== "interactive" && rawString.length > 2 };
     });
 
-    const conversation: ConversationDetailItem = {
-      id: header.conversation_id,
-      memberId: header.member_id,
-      customerId: header.customer_id,
-      customerDisplay: header.customer_id || "Bilinmeyen müşteri",
-      channel: header.channel,
-      status: header.status,
-      isOpen: header.status === "open",
-      lastMessageAt: toIso(header.last_message_at),
-      lastCustomerMessageAt: toIso(header.last_customer_message_at),
-      lastOperatorMessageAt: toIso(header.last_operator_message_at),
-      contextProductName: header.context_product_name,
-      messages,
-    };
-
+    const conversation: ConversationDetailItem = { id: header.conversation_id, memberId: header.member_id, customerId: header.customer_id, customerDisplay: header.customer_id || "Bilinmeyen müşteri", channel: header.channel, status: header.status, isOpen: header.status === "open", lastMessageAt: toIso(header.last_message_at), lastCustomerMessageAt: toIso(header.last_customer_message_at), lastOperatorMessageAt: toIso(header.last_operator_message_at), operatorReviewedAt: toIso(header.operator_reviewed_at), operatorReviewedBy: header.operator_reviewed_by, operatorReviewNote: header.operator_review_note, contextProductName: header.context_product_name, messages };
     return { ok: true, fetchedAt: new Date().toISOString(), tenant, conversation };
   } catch (error) {
     return { ok: false, fetchedAt: new Date().toISOString(), tenant: null, conversation: null, error: error instanceof Error ? error.message : "Unknown error" };
