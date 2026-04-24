@@ -133,6 +133,23 @@ const OPERATOR_PRIORITY_OPTIONS = [
   { value: 'normal', label: 'Normal' },
   { value: 'high', label: 'Yüksek' },
 ];
+const OPERATION_CASE_TYPE_OPTIONS = [
+  { value: 'general', label: 'Genel' },
+  { value: 'return_exchange', label: 'İade / değişim' },
+  { value: 'shipping_delivery', label: 'Kargo / teslimat' },
+  { value: 'size_consultation', label: 'Beden danışma' },
+  { value: 'order_support', label: 'Sipariş destek' },
+  { value: 'payment_proof', label: 'Ödeme / dekont' },
+  { value: 'damaged_product', label: 'Hasarlı ürün' },
+  { value: 'hot_lead', label: 'Sıcak lead' },
+];
+
+const OPERATION_CASE_PRIORITY_OPTIONS = [
+  { value: 'low', label: 'Düşük' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'high', label: 'Yüksek' },
+  { value: 'critical', label: 'Kritik' },
+];
 
 export default function ConversationDetailPage() {
   const params = useParams<{ conversationId: string }>();
@@ -144,6 +161,11 @@ export default function ConversationDetailPage() {
   const [operatorNote, setOperatorNote] = useState('');
   const [operatorTag, setOperatorTag] = useState('');
   const [operatorPriority, setOperatorPriority] = useState('normal');
+  const [caseType, setCaseType] = useState('general');
+const [caseTitle, setCaseTitle] = useState('');
+const [caseDescription, setCaseDescription] = useState('');
+const [casePriority, setCasePriority] = useState('normal');
+const [creatingCase, setCreatingCase] = useState(false);
   const [sending, setSending] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [statusChanging, setStatusChanging] = useState(false);
@@ -266,6 +288,59 @@ export default function ConversationDetailPage() {
     }
   };
 
+  const handleCreateOperationCase = async () => {
+  try {
+    setActionError(null);
+    setActionSuccess(null);
+
+    if (!conversationId) return setActionError('conversationId bulunamadı.');
+
+    const normalizedTitle = caseTitle.trim();
+    if (!normalizedTitle) {
+      return setActionError('Operasyon kaydı için başlık zorunlu.');
+    }
+
+    setCreatingCase(true);
+    const iframeToken = await TokenHelpers.getTokenForIframeApp();
+    if (!iframeToken) return setActionError('iFrame JWT token alınamadı.');
+
+    const response = await fetch(`/api/apparel/conversations/${conversationId}/operation-case`, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        Authorization: 'JWT ' + iframeToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        caseType,
+        title: normalizedTitle,
+        description: caseDescription,
+        priority: casePriority,
+      }),
+    });
+
+    const raw = await response.json();
+    if (!response.ok || !raw?.ok) {
+      throw new Error(raw?.error || 'Operasyon kaydı oluşturulamadı.');
+    }
+
+    setActionSuccess(`Operasyon kaydı oluşturuldu: ${raw.case?.caseNo || 'Yeni kayıt'}`);
+    setCaseTitle('');
+    setCaseDescription('');
+    setCaseType('general');
+    setCasePriority('normal');
+
+    await loadConversation({ silent: true });
+  } catch (error) {
+    setActionError(
+      error instanceof Error
+        ? error.message
+        : 'Operasyon kaydı oluşturulurken hata oluştu.',
+    );
+  } finally {
+    setCreatingCase(false);
+  }
+};
   const handleSaveOperatorNote = async () => {
     try {
       setActionError(null);
@@ -506,6 +581,46 @@ export default function ConversationDetailPage() {
                 </div>
               </section>
 
+              <section style={{ border: '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', padding: 18 }}>
+  <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>Operasyon Kaydı Oluştur</div>
+  <div style={{ color: '#6b7280', fontSize: 13, lineHeight: 1.6, marginBottom: 12 }}>
+    Bu konuşmadan iade, kargo, sipariş destek veya benzeri bir iç operasyon kaydı oluşturur. Müşteriye mesaj göndermez.
+  </div>
+
+  <div style={{ display: 'grid', gap: 10 }}>
+    <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 800, color: '#374151' }}>
+      Vaka tipi
+      <select value={caseType} onChange={(event) => setCaseType(event.target.value)} style={{ border: '1px solid #d1d5db', borderRadius: 12, padding: '10px 12px', background: '#ffffff', color: '#111827' }}>
+        {OPERATION_CASE_TYPE_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    </label>
+
+    <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 800, color: '#374151' }}>
+      Öncelik
+      <select value={casePriority} onChange={(event) => setCasePriority(event.target.value)} style={{ border: '1px solid #d1d5db', borderRadius: 12, padding: '10px 12px', background: '#ffffff', color: '#111827' }}>
+        {OPERATION_CASE_PRIORITY_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    </label>
+
+    <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 800, color: '#374151' }}>
+      Başlık
+      <input value={caseTitle} onChange={(event) => setCaseTitle(event.target.value)} placeholder="Örn: Müşteri iade talebi" style={{ border: '1px solid #d1d5db', borderRadius: 12, padding: '10px 12px', background: '#ffffff', color: '#111827' }} />
+    </label>
+
+    <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 800, color: '#374151' }}>
+      Açıklama
+      <textarea value={caseDescription} onChange={(event) => setCaseDescription(event.target.value)} placeholder="Örn: Ürün kullanılmamış olduğunu söyledi, sipariş numarası istenecek." style={{ width: '100%', minHeight: 92, borderRadius: 14, border: '1px solid #d1d5db', padding: 12, fontSize: 14, lineHeight: 1.6, resize: 'vertical', outline: 'none', background: '#ffffff' }} />
+    </label>
+
+    <button onClick={handleCreateOperationCase} disabled={creatingCase} style={{ border: 'none', borderRadius: 12, padding: '10px 14px', background: creatingCase ? '#9ca3af' : '#111827', color: '#ffffff', fontWeight: 800, cursor: creatingCase ? 'not-allowed' : 'pointer' }}>
+      {creatingCase ? 'Oluşturuluyor...' : 'Operasyon kaydı oluştur'}
+    </button>
+  </div>
+</section>
               <section style={{ border: '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', padding: 18 }}>
                 <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>Operatör Notu</div>
                 <div style={{ color: '#6b7280', fontSize: 13, lineHeight: 1.6, marginBottom: 12 }}>
