@@ -120,6 +120,7 @@ export default function ConversationDetailPage() {
   const [replyText, setReplyText] = useState('');
   const [sending, setSending] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [statusChanging, setStatusChanging] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
@@ -197,6 +198,49 @@ export default function ConversationDetailPage() {
     }
   };
 
+  const handleConversationStatusChange = async (action: 'close' | 'reopen') => {
+  try {
+    setActionError(null);
+    setActionSuccess(null);
+
+    if (!conversationId) return setActionError('conversationId bulunamadı.');
+
+    setStatusChanging(true);
+    const iframeToken = await TokenHelpers.getTokenForIframeApp();
+    if (!iframeToken) return setActionError('iFrame JWT token alınamadı.');
+
+    const response = await fetch(`/api/apparel/conversations/${conversationId}/status`, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        Authorization: 'JWT ' + iframeToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ action }),
+    });
+
+    const raw = await response.json();
+    if (!response.ok || !raw?.ok) {
+      throw new Error(raw?.error || 'Konuşma durumu güncellenemedi.');
+    }
+
+    setActionSuccess(
+      action === 'close'
+        ? 'Konuşma kapatıldı.'
+        : 'Konuşma tekrar açıldı.',
+    );
+
+    await loadConversation({ silent: true });
+  } catch (error) {
+    setActionError(
+      error instanceof Error
+        ? error.message
+        : 'Konuşma durumu güncellenirken hata oluştu.',
+    );
+  } finally {
+    setStatusChanging(false);
+  }
+};
   const handleSendReply = async () => {
     try {
       const normalizedReply = replyText.trim();
@@ -303,6 +347,44 @@ export default function ConversationDetailPage() {
               </div>
 
               <div style={{ borderTop: '1px solid #e5e7eb', padding: 18, background: '#ffffff' }}>
+                <div style={{ border: '1px solid #e5e7eb', background: '#f9fafb', borderRadius: 14, padding: 14, marginBottom: 14, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+  <div>
+    <div style={{ fontWeight: 900, marginBottom: 4 }}>Konuşma Durumu</div>
+    <div style={{ fontSize: 13, lineHeight: 1.6, color: '#4b5563' }}>
+      Açık konuşmayı kapatabilir veya kapalı konuşmayı tekrar açabilirsiniz.
+    </div>
+  </div>
+
+  <button
+    onClick={() =>
+      handleConversationStatusChange(
+        String(conversation.status || '').toLowerCase() === 'open'
+          ? 'close'
+          : 'reopen',
+      )
+    }
+    disabled={statusChanging}
+    style={{
+      border: 'none',
+      borderRadius: 12,
+      padding: '10px 14px',
+      background: statusChanging
+        ? '#9ca3af'
+        : String(conversation.status || '').toLowerCase() === 'open'
+          ? '#991b1b'
+          : '#065f46',
+      color: '#ffffff',
+      fontWeight: 800,
+      cursor: statusChanging ? 'not-allowed' : 'pointer',
+    }}
+  >
+    {statusChanging
+      ? 'Güncelleniyor...'
+      : String(conversation.status || '').toLowerCase() === 'open'
+        ? 'Konuşmayı kapat'
+        : 'Konuşmayı tekrar aç'}
+  </button>
+</div>
                 {responseState.needsReply ? (
                   <div style={{ border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8', borderRadius: 14, padding: 14, marginBottom: 14, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                     <div>
