@@ -20,9 +20,13 @@ function formatDate(value: string | null | undefined) {
   }
 }
 
-function mapDirectionLabel(direction: 'in' | 'out' | null | undefined) {
+function mapSenderLabel(senderType: string | null | undefined, direction?: 'in' | 'out' | null) {
+  if (senderType === 'customer') return 'Müşteri';
+  if (senderType === 'operator') return 'Operatör';
+  if (senderType === 'ai') return 'AI Asistan';
+  if (senderType === 'system') return 'Sistem';
   if (direction === 'in') return 'Müşteri';
-  if (direction === 'out') return 'Sistem / Operatör';
+  if (direction === 'out') return 'AI Asistan';
   return 'Bilinmiyor';
 }
 
@@ -77,10 +81,17 @@ function toneStyles(tone: 'neutral' | 'success' | 'warning' | 'info') {
   return { border: '1px solid #e5e7eb', background: '#f9fafb', color: '#374151' };
 }
 
+function isAfter(a: string | null | undefined, b: string | null | undefined) {
+  if (!a) return false;
+  if (!b) return true;
+  const at = new Date(a).getTime();
+  const bt = new Date(b).getTime();
+  return Number.isFinite(at) && Number.isFinite(bt) ? at > bt : false;
+}
+
 function getResponseState(conversation: ConversationDetailResponse['conversation']) {
   const isOpen = String(conversation?.status || '').toLowerCase() === 'open';
-  const lastMessage = conversation?.messages?.[conversation.messages.length - 1] || null;
-  const needsReply = isOpen && lastMessage?.direction === 'in';
+  const needsReply = isOpen && isAfter(conversation?.lastCustomerMessageAt, conversation?.lastOperatorMessageAt);
 
   return {
     needsReply,
@@ -236,12 +247,13 @@ export default function ConversationDetailPage() {
                   <div style={{ color: '#6b7280' }}>Bu konuşmada henüz mesaj görünmüyor.</div>
                 ) : (
                   conversation.messages.map((message) => {
-                    const incoming = message.direction === 'in';
+                    const incoming = message.senderType === 'customer' || message.direction === 'in';
+                    const senderLabel = mapSenderLabel(message.senderType, message.direction);
                     return (
                       <div key={message.id} style={{ display: 'flex', justifyContent: incoming ? 'flex-start' : 'flex-end' }}>
                         <div style={{ maxWidth: '76%', borderRadius: incoming ? '18px 18px 18px 6px' : '18px 18px 6px 18px', padding: 14, background: incoming ? '#ffffff' : '#dcf8c6', color: '#111827', border: incoming ? '1px solid #e5e7eb' : '1px solid #bbf7d0', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
                           <div style={{ fontSize: 12, fontWeight: 800, color: incoming ? '#6b7280' : '#166534', marginBottom: 6 }}>
-                            {mapDirectionLabel(message.direction)} · {mapMsgTypeLabel(message.msgType)}
+                            {senderLabel} · {mapMsgTypeLabel(message.msgType)}
                           </div>
                           <div style={{ fontSize: 14, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{message.textBody || 'Metin içeriği bulunmuyor.'}</div>
                           <div style={{ marginTop: 8, fontSize: 11, color: '#6b7280', textAlign: 'right' }}>{formatDate(message.createdAt)}</div>
@@ -287,10 +299,10 @@ export default function ConversationDetailPage() {
             </section>
 
             <aside style={{ display: 'grid', gap: 16 }}>
-              <section style={{ borderRadius: 18, padding: 18, ...operatorTone }}>
+              <section style={{ borderRadius: 18, padding: 18, ...(responseState.needsReply ? { border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b' } : operatorTone) }}>
                 <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.35, opacity: 0.86 }}>Operatör için önerilen akış</div>
                 <div style={{ fontSize: 19, fontWeight: 800, marginBottom: 10, lineHeight: 1.35 }}>{responseState.needsReply ? 'Müşteriye yanıt ver' : operatorDeskState.title}</div>
-                <div style={{ fontSize: 14, lineHeight: 1.7, marginBottom: 12 }}>{responseState.needsReply ? 'Son mesaj müşteriden geldi. Bu konuşma yanıt kuyruğunda tutulmalı.' : operatorDeskState.helper}</div>
+                <div style={{ fontSize: 14, lineHeight: 1.7, marginBottom: 12 }}>{responseState.needsReply ? 'Müşteriye AI cevap vermiş olabilir; operatör manuel yanıt vermediği için bu konuşma hâlâ yanıt kuyruğunda.' : operatorDeskState.helper}</div>
                 <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: 12, fontSize: 13, lineHeight: 1.7 }}>
                   <strong>Dikkat seviyesi:</strong> {responseState.needsReply ? 'Yüksek' : operatorDeskState.attention}<br />
                   <strong>Önerilen sıradaki adım:</strong> {responseState.needsReply ? 'Manuel cevap gönder' : operatorDeskState.recommendedStep}
