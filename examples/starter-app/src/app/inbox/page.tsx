@@ -6,11 +6,44 @@ import { AppShell } from '@/components/apparel-panel/AppShell';
 import { TokenHelpers } from '@/helpers/token-helpers';
 import type { InboxListResponse } from '@/lib/apparel-panel/types';
 import {
-  inferLinkedCaseId,
   inferLinkedOrderId,
   inferPriorityLabel,
   getConversationQueueHint,
 } from '@/lib/apparel-panel/panel-relations';
+
+type OperationCaseItem = {
+  id: string;
+  caseNo: string | null;
+  caseType: string | null;
+  title: string | null;
+  description: string | null;
+  priority: string | null;
+  status: string | null;
+  sourceChannel: string | null;
+  customerWaId: string | null;
+  linkedOrderId: string | null;
+  evidenceSummary: string | null;
+  evidenceState: string | null;
+  assignedTo: string | null;
+  createdBy: string | null;
+  conversationId: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+type OperationCasesResponse = {
+  ok: boolean;
+  fetchedAt: string;
+  tenant: unknown | null;
+  metrics: {
+    total: number;
+    open: number;
+    highPriority: number;
+    evidence: number;
+  };
+  items: OperationCaseItem[];
+  error?: string;
+};
 
 function formatDate(value: string | null | undefined) {
   if (!value) return '-';
@@ -46,6 +79,33 @@ function mapStatusLabel(status: string | null | undefined) {
   return status || '-';
 }
 
+function mapCaseTypeLabel(type: string | null | undefined) {
+  if (type === 'damaged_product') return 'Hasarlı Ürün';
+  if (type === 'shipping_delivery') return 'Kargo / Teslimat';
+  if (type === 'payment_proof') return 'Ödeme / Dekont';
+  if (type === 'return_exchange') return 'İade / Değişim';
+  if (type === 'size_consultation') return 'Beden Danışma';
+  if (type === 'order_support') return 'Sipariş Destek';
+  if (type === 'hot_lead') return 'Sıcak Lead';
+  return 'Genel';
+}
+
+function mapCaseStatusLabel(status: string | null | undefined) {
+  if (status === 'open') return 'Açık';
+  if (status === 'in_progress') return 'İnceleniyor';
+  if (status === 'waiting_customer') return 'Müşteri Bekleniyor';
+  if (status === 'resolved') return 'Çözüldü';
+  if (status === 'closed') return 'Kapalı';
+  return status || '-';
+}
+
+function mapCasePriorityLabel(priority: string | null | undefined) {
+  if (priority === 'critical') return 'Kritik';
+  if (priority === 'high') return 'Yüksek';
+  if (priority === 'low') return 'Düşük';
+  return 'Normal';
+}
+
 function mapOperatorTagLabel(tag: string | null | undefined) {
   const normalized = String(tag || '').toLowerCase();
   if (normalized === 'general_followup') return 'Genel takip';
@@ -69,6 +129,19 @@ function getOperatorPriorityTone(priority: string | null | undefined): 'neutral'
   if (normalized === 'high') return 'danger';
   if (normalized === 'low') return 'neutral';
   return 'info';
+}
+
+function getCasePriorityTone(priority: string | null | undefined): 'neutral' | 'success' | 'warning' | 'info' | 'danger' {
+  if (priority === 'critical' || priority === 'high') return 'danger';
+  if (priority === 'low') return 'neutral';
+  return 'info';
+}
+
+function getCaseStatusTone(status: string | null | undefined): 'neutral' | 'success' | 'warning' | 'info' | 'danger' {
+  if (status === 'open') return 'info';
+  if (status === 'in_progress') return 'warning';
+  if (status === 'resolved' || status === 'closed') return 'success';
+  return 'neutral';
 }
 
 function SmallBadge({
@@ -162,6 +235,7 @@ function getResponseState(item: InboxListResponse['items'][number]) {
 
 export default function InboxPage() {
   const [data, setData] = useState<InboxListResponse | null>(null);
+  const [operationCases, setOperationCases] = useState<OperationCaseItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -180,13 +254,22 @@ export default function InboxPage() {
           return;
         }
 
-        const response = await fetch('/api/apparel/inbox', {
-          cache: 'no-store',
-          headers: { Authorization: 'JWT ' + iframeToken },
-        });
+        const [inboxResponse, casesResponse] = await Promise.all([
+          fetch('/api/apparel/inbox', {
+            cache: 'no-store',
+            headers: { Authorization: 'JWT ' + iframeToken },
+          }),
+          fetch('/api/apparel/operation-cases', {
+            cache: 'no-store',
+            headers: { Authorization: 'JWT ' + iframeToken },
+          }),
+        ]);
 
-        const raw = await response.json();
-        setData(raw);
+        const rawInbox = await inboxResponse.json();
+        const rawCases = (await casesResponse.json()) as OperationCasesResponse;
+
+        setData(rawInbox);
+        setOperationCases(rawCases?.ok ? rawCases.items || [] : []);
       } catch (error) {
         setData({
           ok: false,
@@ -195,6 +278,7 @@ export default function InboxPage() {
           items: [],
           error: error instanceof Error ? error.message : 'Unknown error',
         });
+        setOperationCases([]);
       } finally {
         setLoading(false);
       }
@@ -204,12 +288,27 @@ export default function InboxPage() {
   }, []);
 
   const items = useMemo(() => data?.items || [], [data?.items]);
+  const casesByConversation = useMemo(() => {
+    const map = new Map<string, OperationCaseItem[]>();
+    for (const operationCase of operationCases) {
+      if (!operationCase.conversationId) continue;
+      const existing = map.get(operationCase.conversationId) || [];
+      existing.push(operationCase);
+      map.set(operationCase.conversationId, existing);
+    }
+    return map;
+  }, [operationCases]);
+
   const sortedItems = useMemo(
     () =>
       [...items].sort((a, b) => {
         const ar = getResponseState(a).needsReply ? 1 : 0;
         const br = getResponseState(b).needsReply ? 1 : 0;
         if (ar !== br) return br - ar;
+
+        const ac = casesByConversation.get(a.id)?.length ? 1 : 0;
+        const bc = casesByConversation.get(b.id)?.length ? 1 : 0;
+        if (ac !== bc) return bc - ac;
 
         const ap = a.operatorPriority === 'high' ? 1 : 0;
         const bp = b.operatorPriority === 'high' ? 1 : 0;
@@ -219,7 +318,7 @@ export default function InboxPage() {
         const bt = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
         return bt - at;
       }),
-    [items],
+    [items, casesByConversation],
   );
 
   const metrics = useMemo(() => {
@@ -272,7 +371,9 @@ export default function InboxPage() {
               <div style={{ display: 'grid', gap: 14 }}>
                 {sortedItems.map((item) => {
                   const linkedOrderId = inferLinkedOrderId(item.lastMessageText, item.contextProductName);
-                  const linkedCaseId = inferLinkedCaseId(item.lastMessageText);
+                  const linkedCases = casesByConversation.get(item.id) || [];
+                  const linkedCase = linkedCases[0] || null;
+                  const linkedCaseCount = linkedCases.length;
                   const priorityLabel = inferPriorityLabel(item.lastMessageText);
                   const recommendation = getConversationQueueHint(item);
                   const responseState = getResponseState(item);
@@ -283,23 +384,25 @@ export default function InboxPage() {
                   const recommendationBoxStyle =
                     responseState.needsReply
                       ? { border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b' }
-                      : operatorPriority === 'high'
-                        ? { border: '1px solid #fecaca', background: '#fff7ed', color: '#9a3412' }
-                        : responseState.reviewedAfterCustomer
-                          ? { border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8' }
-                          : recommendation.tone === 'success'
-                            ? { border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#166534' }
-                            : recommendation.tone === 'warning'
-                              ? { border: '1px solid #fde68a', background: '#fffbeb', color: '#92400e' }
-                              : recommendation.tone === 'info'
-                                ? { border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8' }
-                                : { border: '1px solid #e5e7eb', background: '#f9fafb', color: '#374151' };
+                      : linkedCase
+                        ? { border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8' }
+                        : operatorPriority === 'high'
+                          ? { border: '1px solid #fecaca', background: '#fff7ed', color: '#9a3412' }
+                          : responseState.reviewedAfterCustomer
+                            ? { border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8' }
+                            : recommendation.tone === 'success'
+                              ? { border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#166534' }
+                              : recommendation.tone === 'warning'
+                                ? { border: '1px solid #fde68a', background: '#fffbeb', color: '#92400e' }
+                                : recommendation.tone === 'info'
+                                  ? { border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8' }
+                                  : { border: '1px solid #e5e7eb', background: '#f9fafb', color: '#374151' };
 
                   return (
                     <Link
                       key={item.id}
                       href={`/inbox/${item.id}`}
-                      style={{ textDecoration: 'none', border: responseState.needsReply || operatorPriority === 'high' ? '1px solid #fecaca' : '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', padding: 18, color: '#111827', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}
+                      style={{ textDecoration: 'none', border: responseState.needsReply || operatorPriority === 'high' || linkedCase ? '1px solid #bfdbfe' : '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', padding: 18, color: '#111827', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}
                     >
                       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(280px, 0.95fr)', gap: 16, alignItems: 'stretch' }}>
                         <div>
@@ -321,7 +424,10 @@ export default function InboxPage() {
                           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
                             <SmallBadge label={priorityLabel} tone="warning" />
                             <SmallBadge label={linkedOrderId ? `Bağlı sipariş: ${linkedOrderId}` : 'Sipariş bağı henüz yok'} tone={linkedOrderId ? 'info' : 'neutral'} />
-                            <SmallBadge label={linkedCaseId ? `Bağlı vaka: ${linkedCaseId}` : 'Vaka bağı henüz yok'} tone={linkedCaseId ? 'info' : 'neutral'} />
+                            <SmallBadge label={linkedCase ? (linkedCaseCount > 1 ? `Bağlı vaka: ${linkedCase.caseNo || 'Vaka'} +${linkedCaseCount - 1}` : `Bağlı vaka: ${linkedCase.caseNo || 'Vaka'}`) : 'Vaka bağı henüz yok'} tone={linkedCase ? 'info' : 'neutral'} />
+                            {linkedCase ? <SmallBadge label={mapCaseTypeLabel(linkedCase.caseType)} tone="warning" /> : null}
+                            {linkedCase?.priority ? <SmallBadge label={`Vaka önceliği: ${mapCasePriorityLabel(linkedCase.priority)}`} tone={getCasePriorityTone(linkedCase.priority)} /> : null}
+                            {linkedCase?.status ? <SmallBadge label={`Vaka durumu: ${mapCaseStatusLabel(linkedCase.status)}`} tone={getCaseStatusTone(linkedCase.status)} /> : null}
                             {responseState.reviewedAfterCustomer ? <SmallBadge label={`İnceleme: ${formatDate(item.operatorReviewedAt)}`} tone="info" /> : null}
                             {item.operatorNoteUpdatedAt ? <SmallBadge label={`Not: ${formatDate(item.operatorNoteUpdatedAt)}`} tone="neutral" /> : null}
                           </div>
@@ -347,25 +453,29 @@ export default function InboxPage() {
                           <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 8, lineHeight: 1.4 }}>
                             {responseState.needsReply
                               ? 'Müşteriye yanıt ver veya incele'
-                              : operatorPriority === 'high'
-                                ? 'Yüksek öncelikli takip'
-                                : responseState.reviewedAfterCustomer
-                                  ? 'İncelendi, takip gerekmiyor'
-                                  : recommendation.title}
+                              : linkedCase
+                                ? 'Bağlı operasyon vakası var'
+                                : operatorPriority === 'high'
+                                  ? 'Yüksek öncelikli takip'
+                                  : responseState.reviewedAfterCustomer
+                                    ? 'İncelendi, takip gerekmiyor'
+                                    : recommendation.title}
                           </div>
 
                           <div style={{ fontSize: 13, lineHeight: 1.7, marginBottom: 12 }}>
                             {responseState.needsReply
                               ? 'Müşteriye AI cevap vermiş olabilir; operatör manuel yanıt vermediği veya incelemediği için bu konuşma hâlâ yanıt kuyruğunda.'
-                              : operatorPriority === 'high'
-                                ? 'Operatör bu konuşmayı yüksek öncelikli işaretledi. Not ve etiket detayını kontrol edin.'
-                                : responseState.reviewedAfterCustomer
-                                  ? 'Operatör AI cevabını yeterli gördü. Müşteriye ek WhatsApp mesajı gönderilmeden kuyruktan düşürüldü.'
-                                  : recommendation.helper}
+                              : linkedCase
+                                ? `${linkedCase.caseNo || 'Operasyon vakası'} bu konuşmaya bağlı. Operasyonlar ekranından takip edilebilir.`
+                                : operatorPriority === 'high'
+                                  ? 'Operatör bu konuşmayı yüksek öncelikli işaretledi. Not ve etiket detayını kontrol edin.'
+                                  : responseState.reviewedAfterCustomer
+                                    ? 'Operatör AI cevabını yeterli gördü. Müşteriye ek WhatsApp mesajı gönderilmeden kuyruktan düşürüldü.'
+                                    : recommendation.helper}
                           </div>
 
                           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                            <SmallBadge label={responseState.needsReply ? 'Yanıt kuyruğu' : operatorPriority === 'high' ? 'Yüksek öncelik' : responseState.reviewedAfterCustomer ? 'İncelendi' : recommendation.queueLabel} tone={responseState.needsReply ? 'danger' : operatorPriority === 'high' ? 'danger' : responseState.reviewedAfterCustomer ? 'info' : recommendation.tone} />
+                            <SmallBadge label={responseState.needsReply ? 'Yanıt kuyruğu' : linkedCase ? 'Operasyon bağlı' : operatorPriority === 'high' ? 'Yüksek öncelik' : responseState.reviewedAfterCustomer ? 'İncelendi' : recommendation.queueLabel} tone={responseState.needsReply ? 'danger' : linkedCase ? 'info' : operatorPriority === 'high' ? 'danger' : responseState.reviewedAfterCustomer ? 'info' : recommendation.tone} />
                             <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.85 }}>{formatDate(item.lastMessageAt)}</div>
                           </div>
                         </div>
