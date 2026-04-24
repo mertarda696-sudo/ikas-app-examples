@@ -149,7 +149,7 @@ export async function GET(
           context_product_name,
           last_message_at,
           last_customer_message_at,
-          last_operator_message_at,
+          last_agent_message_at as last_operator_message_at,
           created_at
         from public.conversations
         where tenant_id = CAST(${tenant.tenantId} AS uuid)
