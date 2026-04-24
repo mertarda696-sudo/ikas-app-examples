@@ -133,6 +133,10 @@ export type InboxConversationItem = {
   operatorReviewedAt: string | null;
   operatorReviewedBy: string | null;
   operatorReviewNote: string | null;
+  operatorNote: string | null;
+  operatorTag: string | null;
+  operatorPriority: string | null;
+  operatorNoteUpdatedAt: string | null;
   contextProductName: string | null;
 };
 
@@ -168,6 +172,10 @@ export type ConversationDetailItem = {
   operatorReviewedAt: string | null;
   operatorReviewedBy: string | null;
   operatorReviewNote: string | null;
+  operatorNote: string | null;
+  operatorTag: string | null;
+  operatorPriority: string | null;
+  operatorNoteUpdatedAt: string | null;
   contextProductName: string | null;
   messages: ConversationMessageItem[];
 };
