@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { AppShell } from '@/components/apparel-panel/AppShell';
+import { LinkedOperationCasesBox } from '@/components/apparel-panel/LinkedOperationCasesBox';
 import { TokenHelpers } from '@/helpers/token-helpers';
 import type { ConversationDetailResponse } from '@/lib/apparel-panel/types';
 import {
@@ -580,7 +581,8 @@ const [creatingCase, setCreatingCase] = useState(false);
                   <strong>Önerilen sıradaki adım:</strong> {responseState.needsReply ? 'Manuel cevap gönder veya incelendi işaretle' : operatorDeskState.recommendedStep}
                 </div>
               </section>
-
+              
+              <LinkedOperationCasesBox conversationId={conversation.id} />
               <section style={{ border: '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', padding: 18 }}>
   <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>Operasyon Kaydı Oluştur</div>
   <div style={{ color: '#6b7280', fontSize: 13, lineHeight: 1.6, marginBottom: 12 }}>
