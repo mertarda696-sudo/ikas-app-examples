@@ -130,7 +130,7 @@ export async function GET(
         id,
         wa_user_id,
         created_at,
-        updated_at
+        null::timestamptz as updated_at
       from public.tenant_members
       where tenant_id = CAST(${tenant.tenantId} AS uuid)
         and wa_user_id = ${normalizedCustomerWaId}
@@ -216,7 +216,7 @@ export async function GET(
           m.id,
           m.conversation_id,
           m.direction,
-          m.sender_type,
+          null::text as sender_type,
           m.text_body,
           m.created_at
         from public.messages m
