@@ -420,7 +420,7 @@ export default function OrdersPage() {
               </div>
 
               <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1250 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1320 }}>
                   <thead>
                     <tr style={{ background: '#f9fafb' }}>
                       {[
@@ -434,6 +434,7 @@ export default function OrdersPage() {
                         'Kargo Bilgisi',
                         'Öncelik / Not',
                         'Konuşma',
+                        'Detay',
                         'Son Güncelleme',
                       ].map((header) => (
                         <th
@@ -467,7 +468,12 @@ export default function OrdersPage() {
                               whiteSpace: 'nowrap',
                             }}
                           >
-                            <div>{row.orderNo}</div>
+                            <Link
+                              href={`/orders/${row.id}`}
+                              style={{ textDecoration: 'none', color: '#111827', fontWeight: 900 }}
+                            >
+                              {row.orderNo}
+                            </Link>
                             <div style={{ marginTop: 4, color: '#6b7280', fontSize: 12 }}>
                               {row.sourcePlatform || 'manual'}
                             </div>
@@ -602,6 +608,20 @@ export default function OrdersPage() {
                             )}
                           </td>
 
+                          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
+                            <Link
+                              href={`/orders/${row.id}`}
+                              style={{
+                                textDecoration: 'none',
+                                color: '#111827',
+                                fontWeight: 800,
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              Detayı Aç →
+                            </Link>
+                          </td>
+
                           <td
                             style={{
                               padding: 14,
@@ -618,7 +638,7 @@ export default function OrdersPage() {
 
                     {rows.length === 0 ? (
                       <tr>
-                        <td colSpan={11} style={{ padding: 18, color: '#6b7280' }}>
+                        <td colSpan={12} style={{ padding: 18, color: '#6b7280' }}>
                           Bu tenant için henüz sipariş kaydı görünmüyor.
                         </td>
                       </tr>
