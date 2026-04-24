@@ -412,13 +412,27 @@ export default function OrderDetailPage() {
               />
 
                 <InfoCard title="Müşteri">
-                  <div style={{ display: 'grid', gap: 8, color: '#374151', lineHeight: 1.6 }}>
-                    <div><strong>Ad:</strong> {order.customerName || '-'}</div>
-                    <div><strong>WhatsApp:</strong> {order.customerWaId || '-'}</div>
-                    <div><strong>Telefon:</strong> {order.customerPhone || '-'}</div>
-                    <div><strong>E-posta:</strong> {order.customerEmail || '-'}</div>
-                  </div>
-                </InfoCard>
+  <div style={{ display: 'grid', gap: 8, color: '#374151', lineHeight: 1.6 }}>
+    <div><strong>Ad:</strong> {order.customerName || '-'}</div>
+    <div><strong>WhatsApp:</strong> {order.customerWaId || '-'}</div>
+    <div><strong>Telefon:</strong> {order.customerPhone || '-'}</div>
+    <div><strong>E-posta:</strong> {order.customerEmail || '-'}</div>
+
+    {order.customerWaId ? (
+      <Link
+        href={`/customers/${order.customerWaId}`}
+        style={{
+          color: '#111827',
+          fontWeight: 800,
+          textDecoration: 'none',
+          marginTop: 6,
+        }}
+      >
+        Müşteri Profiline Git →
+      </Link>
+    ) : null}
+  </div>
+</InfoCard>
 
                 <InfoCard title="Ödeme ve Kargo">
                   <div style={{ display: 'grid', gap: 8, color: '#374151', lineHeight: 1.6 }}>
