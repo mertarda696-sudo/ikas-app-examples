@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { AppShell } from '@/components/apparel-panel/AppShell';
+import { OrderStatusUpdateBox } from '@/components/apparel-panel/OrderStatusUpdateBox';
 import { TokenHelpers } from '@/helpers/token-helpers';
 
 type OrderItem = {
@@ -392,6 +393,18 @@ export default function OrderDetailPage() {
               </div>
 
               <aside style={{ display: 'grid', gap: 16 }}>
+                <OrderStatusUpdateBox
+                  orderId={order.id}
+                  initialStatus={order.status}
+                  initialFinancialStatus={order.financialStatus}
+                  initialFulfillmentStatus={order.fulfillmentStatus}
+                  initialShippingMethod={order.shippingMethod}
+                  initialCargoCompany={order.cargoCompany}
+                  initialTrackingNumber={order.trackingNumber}
+                  initialTrackingUrl={order.trackingUrl}
+                  initialNote={order.note}
+                />
+
                 <InfoCard title="Müşteri">
                   <div style={{ display: 'grid', gap: 8, color: '#374151', lineHeight: 1.6 }}>
                     <div><strong>Ad:</strong> {order.customerName || '-'}</div>
