@@ -55,6 +55,13 @@ function mapStatusLabel(status: string | null | undefined) {
   return status || '-';
 }
 
+function mapPriorityLabel(priority: string | null | undefined) {
+  const normalized = String(priority || 'normal').toLowerCase();
+  if (normalized === 'high') return 'Yüksek öncelik';
+  if (normalized === 'low') return 'Düşük öncelik';
+  return 'Normal öncelik';
+}
+
 function Badge({ label, tone }: { label: string; tone: 'success' | 'warning' | 'neutral' | 'info' | 'danger' }) {
   const styles =
     tone === 'success'
@@ -111,6 +118,22 @@ function quickReplySuggestions(contextProductName?: string | null) {
   ];
 }
 
+const OPERATOR_TAG_OPTIONS = [
+  { value: '', label: 'Etiket yok' },
+  { value: 'general_followup', label: 'Genel takip' },
+  { value: 'hot_lead', label: 'Sıcak lead' },
+  { value: 'order_support', label: 'Sipariş destek' },
+  { value: 'return_exchange', label: 'İade / değişim' },
+  { value: 'size_consultation', label: 'Beden danışma' },
+  { value: 'shipping_delivery', label: 'Kargo / teslimat' },
+];
+
+const OPERATOR_PRIORITY_OPTIONS = [
+  { value: 'low', label: 'Düşük' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'high', label: 'Yüksek' },
+];
+
 export default function ConversationDetailPage() {
   const params = useParams<{ conversationId: string }>();
   const conversationId = Array.isArray(params?.conversationId) ? params?.conversationId[0] : params?.conversationId;
@@ -118,9 +141,13 @@ export default function ConversationDetailPage() {
   const [data, setData] = useState<ConversationDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [replyText, setReplyText] = useState('');
+  const [operatorNote, setOperatorNote] = useState('');
+  const [operatorTag, setOperatorTag] = useState('');
+  const [operatorPriority, setOperatorPriority] = useState('normal');
   const [sending, setSending] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [statusChanging, setStatusChanging] = useState(false);
+  const [savingOperatorNote, setSavingOperatorNote] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
@@ -158,6 +185,14 @@ export default function ConversationDetailPage() {
   }, [conversationId]);
 
   const conversation = data?.conversation || null;
+
+  useEffect(() => {
+    if (!conversation) return;
+    setOperatorNote(conversation.operatorNote || '');
+    setOperatorTag(conversation.operatorTag || '');
+    setOperatorPriority(conversation.operatorPriority || 'normal');
+  }, [conversation?.id, conversation?.operatorNote, conversation?.operatorTag, conversation?.operatorPriority]);
+
   const flowContext = useMemo(() => getConversationFlowContext(conversation), [conversation]);
   const operatorDeskState = useMemo(() => getConversationDeskState(conversation, flowContext), [conversation, flowContext]);
   const operatorTone = toneStyles(operatorDeskState.tone);
@@ -199,48 +234,75 @@ export default function ConversationDetailPage() {
   };
 
   const handleConversationStatusChange = async (action: 'close' | 'reopen') => {
-  try {
-    setActionError(null);
-    setActionSuccess(null);
+    try {
+      setActionError(null);
+      setActionSuccess(null);
 
-    if (!conversationId) return setActionError('conversationId bulunamadı.');
+      if (!conversationId) return setActionError('conversationId bulunamadı.');
 
-    setStatusChanging(true);
-    const iframeToken = await TokenHelpers.getTokenForIframeApp();
-    if (!iframeToken) return setActionError('iFrame JWT token alınamadı.');
+      setStatusChanging(true);
+      const iframeToken = await TokenHelpers.getTokenForIframeApp();
+      if (!iframeToken) return setActionError('iFrame JWT token alınamadı.');
 
-    const response = await fetch(`/api/apparel/conversations/${conversationId}/status`, {
-      method: 'POST',
-      cache: 'no-store',
-      headers: {
-        Authorization: 'JWT ' + iframeToken,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ action }),
-    });
+      const response = await fetch(`/api/apparel/conversations/${conversationId}/status`, {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          Authorization: 'JWT ' + iframeToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action }),
+      });
 
-    const raw = await response.json();
-    if (!response.ok || !raw?.ok) {
-      throw new Error(raw?.error || 'Konuşma durumu güncellenemedi.');
+      const raw = await response.json();
+      if (!response.ok || !raw?.ok) throw new Error(raw?.error || 'Konuşma durumu güncellenemedi.');
+
+      setActionSuccess(action === 'close' ? 'Konuşma kapatıldı.' : 'Konuşma tekrar açıldı.');
+      await loadConversation({ silent: true });
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Konuşma durumu güncellenirken hata oluştu.');
+    } finally {
+      setStatusChanging(false);
     }
+  };
 
-    setActionSuccess(
-      action === 'close'
-        ? 'Konuşma kapatıldı.'
-        : 'Konuşma tekrar açıldı.',
-    );
+  const handleSaveOperatorNote = async () => {
+    try {
+      setActionError(null);
+      setActionSuccess(null);
 
-    await loadConversation({ silent: true });
-  } catch (error) {
-    setActionError(
-      error instanceof Error
-        ? error.message
-        : 'Konuşma durumu güncellenirken hata oluştu.',
-    );
-  } finally {
-    setStatusChanging(false);
-  }
-};
+      if (!conversationId) return setActionError('conversationId bulunamadı.');
+
+      setSavingOperatorNote(true);
+      const iframeToken = await TokenHelpers.getTokenForIframeApp();
+      if (!iframeToken) return setActionError('iFrame JWT token alınamadı.');
+
+      const response = await fetch(`/api/apparel/conversations/${conversationId}/operator-note`, {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          Authorization: 'JWT ' + iframeToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          note: operatorNote,
+          tag: operatorTag,
+          priority: operatorPriority,
+        }),
+      });
+
+      const raw = await response.json();
+      if (!response.ok || !raw?.ok) throw new Error(raw?.error || 'Operatör notu kaydedilemedi.');
+
+      setActionSuccess('Operatör notu kaydedildi. Bu not müşteriye gönderilmedi.');
+      await loadConversation({ silent: true });
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Operatör notu kaydedilirken hata oluştu.');
+    } finally {
+      setSavingOperatorNote(false);
+    }
+  };
+
   const handleSendReply = async () => {
     try {
       const normalizedReply = replyText.trim();
@@ -313,6 +375,8 @@ export default function ConversationDetailPage() {
                     <Badge label={mapChannelLabel(conversation.channel)} tone="info" />
                     <Badge label={mapStatusLabel(conversation.status)} tone={String(conversation.status).toLowerCase() === 'open' ? 'success' : 'neutral'} />
                     <Badge label={conversation.contextProductName ? `Ürün: ${conversation.contextProductName}` : 'Ürün bağlamı yok'} tone={conversation.contextProductName ? 'info' : 'neutral'} />
+                    {conversation.operatorTag ? <Badge label={conversation.operatorTag} tone="warning" /> : null}
+                    {conversation.operatorPriority ? <Badge label={mapPriorityLabel(conversation.operatorPriority)} tone={conversation.operatorPriority === 'high' ? 'danger' : conversation.operatorPriority === 'low' ? 'neutral' : 'info'} /> : null}
                   </div>
                 </div>
                 <div style={{ textAlign: 'right', fontSize: 13, color: '#6b7280', lineHeight: 1.7 }}>
@@ -320,6 +384,7 @@ export default function ConversationDetailPage() {
                   <div><strong>Son mesaj:</strong> {formatDate(conversation.lastMessageAt)}</div>
                   <div><strong>Toplam:</strong> {conversation.messages.length} mesaj</div>
                   {conversation.operatorReviewedAt ? <div><strong>İncelendi:</strong> {formatDate(conversation.operatorReviewedAt)}</div> : null}
+                  {conversation.operatorNoteUpdatedAt ? <div><strong>Not güncellendi:</strong> {formatDate(conversation.operatorNoteUpdatedAt)}</div> : null}
                 </div>
               </div>
 
@@ -348,43 +413,44 @@ export default function ConversationDetailPage() {
 
               <div style={{ borderTop: '1px solid #e5e7eb', padding: 18, background: '#ffffff' }}>
                 <div style={{ border: '1px solid #e5e7eb', background: '#f9fafb', borderRadius: 14, padding: 14, marginBottom: 14, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-  <div>
-    <div style={{ fontWeight: 900, marginBottom: 4 }}>Konuşma Durumu</div>
-    <div style={{ fontSize: 13, lineHeight: 1.6, color: '#4b5563' }}>
-      Açık konuşmayı kapatabilir veya kapalı konuşmayı tekrar açabilirsiniz.
-    </div>
-  </div>
+                  <div>
+                    <div style={{ fontWeight: 900, marginBottom: 4 }}>Konuşma Durumu</div>
+                    <div style={{ fontSize: 13, lineHeight: 1.6, color: '#4b5563' }}>
+                      Açık konuşmayı kapatabilir veya kapalı konuşmayı tekrar açabilirsiniz.
+                    </div>
+                  </div>
 
-  <button
-    onClick={() =>
-      handleConversationStatusChange(
-        String(conversation.status || '').toLowerCase() === 'open'
-          ? 'close'
-          : 'reopen',
-      )
-    }
-    disabled={statusChanging}
-    style={{
-      border: 'none',
-      borderRadius: 12,
-      padding: '10px 14px',
-      background: statusChanging
-        ? '#9ca3af'
-        : String(conversation.status || '').toLowerCase() === 'open'
-          ? '#991b1b'
-          : '#065f46',
-      color: '#ffffff',
-      fontWeight: 800,
-      cursor: statusChanging ? 'not-allowed' : 'pointer',
-    }}
-  >
-    {statusChanging
-      ? 'Güncelleniyor...'
-      : String(conversation.status || '').toLowerCase() === 'open'
-        ? 'Konuşmayı kapat'
-        : 'Konuşmayı tekrar aç'}
-  </button>
-</div>
+                  <button
+                    onClick={() =>
+                      handleConversationStatusChange(
+                        String(conversation.status || '').toLowerCase() === 'open'
+                          ? 'close'
+                          : 'reopen',
+                      )
+                    }
+                    disabled={statusChanging}
+                    style={{
+                      border: 'none',
+                      borderRadius: 12,
+                      padding: '10px 14px',
+                      background: statusChanging
+                        ? '#9ca3af'
+                        : String(conversation.status || '').toLowerCase() === 'open'
+                          ? '#991b1b'
+                          : '#065f46',
+                      color: '#ffffff',
+                      fontWeight: 800,
+                      cursor: statusChanging ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {statusChanging
+                      ? 'Güncelleniyor...'
+                      : String(conversation.status || '').toLowerCase() === 'open'
+                        ? 'Konuşmayı kapat'
+                        : 'Konuşmayı tekrar aç'}
+                  </button>
+                </div>
+
                 {responseState.needsReply ? (
                   <div style={{ border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8', borderRadius: 14, padding: 14, marginBottom: 14, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                     <div>
@@ -437,6 +503,44 @@ export default function ConversationDetailPage() {
                 <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: 12, fontSize: 13, lineHeight: 1.7 }}>
                   <strong>Dikkat seviyesi:</strong> {responseState.needsReply ? 'Yüksek' : operatorDeskState.attention}<br />
                   <strong>Önerilen sıradaki adım:</strong> {responseState.needsReply ? 'Manuel cevap gönder veya incelendi işaretle' : operatorDeskState.recommendedStep}
+                </div>
+              </section>
+
+              <section style={{ border: '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', padding: 18 }}>
+                <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>Operatör Notu</div>
+                <div style={{ color: '#6b7280', fontSize: 13, lineHeight: 1.6, marginBottom: 12 }}>
+                  Bu alan müşteriye gönderilmez. Sadece panel içinde iç takip, etiket ve öncelik için kullanılır.
+                </div>
+
+                <div style={{ display: 'grid', gap: 10 }}>
+                  <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 800, color: '#374151' }}>
+                    Etiket
+                    <select value={operatorTag} onChange={(event) => setOperatorTag(event.target.value)} style={{ border: '1px solid #d1d5db', borderRadius: 12, padding: '10px 12px', background: '#ffffff', color: '#111827' }}>
+                      {OPERATOR_TAG_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 800, color: '#374151' }}>
+                    Öncelik
+                    <select value={operatorPriority} onChange={(event) => setOperatorPriority(event.target.value)} style={{ border: '1px solid #d1d5db', borderRadius: 12, padding: '10px 12px', background: '#ffffff', color: '#111827' }}>
+                      {OPERATOR_PRIORITY_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 800, color: '#374151' }}>
+                    İç not
+                    <textarea value={operatorNote} onChange={(event) => setOperatorNote(event.target.value)} placeholder="Örn: müşteri iade soruyor, sipariş kontrol edilecek..." style={{ width: '100%', minHeight: 96, borderRadius: 14, border: '1px solid #d1d5db', padding: 12, fontSize: 14, lineHeight: 1.6, resize: 'vertical', outline: 'none', background: '#ffffff' }} />
+                  </label>
+
+                  <button onClick={handleSaveOperatorNote} disabled={savingOperatorNote} style={{ border: 'none', borderRadius: 12, padding: '10px 14px', background: savingOperatorNote ? '#9ca3af' : '#111827', color: '#ffffff', fontWeight: 800, cursor: savingOperatorNote ? 'not-allowed' : 'pointer' }}>
+                    {savingOperatorNote ? 'Kaydediliyor...' : 'Operatör notunu kaydet'}
+                  </button>
+
+                  {conversation.operatorNoteUpdatedAt ? <div style={{ fontSize: 12, color: '#6b7280' }}>Son not güncelleme: {formatDate(conversation.operatorNoteUpdatedAt)}</div> : null}
                 </div>
               </section>
 
