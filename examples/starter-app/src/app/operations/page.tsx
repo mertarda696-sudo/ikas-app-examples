@@ -62,6 +62,14 @@ const TYPE_OPTIONS: Array<{ key: OperationType; label: string }> = [
   { key: 'general', label: 'Genel' },
 ];
 
+const STATUS_OPTIONS = [
+  { value: 'open', label: 'Açık' },
+  { value: 'in_progress', label: 'İnceleniyor' },
+  { value: 'waiting_customer', label: 'Müşteri Bekleniyor' },
+  { value: 'resolved', label: 'Çözüldü' },
+  { value: 'closed', label: 'Kapalı' },
+];
+
 function formatDate(value: string | null | undefined) {
   if (!value) return '-';
   try {
@@ -181,6 +189,9 @@ export default function OperationsPage() {
   const [activeType, setActiveType] = useState<OperationType>('all');
   const [data, setData] = useState<OperationCasesResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [updatingCaseId, setUpdatingCaseId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     const run = async () => {
@@ -236,6 +247,55 @@ export default function OperationsPage() {
     highPriority: 0,
     evidence: 0,
   };
+
+  const handleUpdateCaseStatus = async (caseId: string, status: string) => {
+  try {
+    setActionError(null);
+    setActionSuccess(null);
+    setUpdatingCaseId(caseId);
+
+    const iframeToken = await TokenHelpers.getTokenForIframeApp();
+
+    if (!iframeToken) {
+      setActionError('iFrame JWT token alınamadı.');
+      return;
+    }
+
+    const updateResponse = await fetch(`/api/apparel/operation-cases/${caseId}/status`, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        Authorization: 'JWT ' + iframeToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ status }),
+    });
+
+    const updateRaw = await updateResponse.json();
+
+    if (!updateResponse.ok || !updateRaw?.ok) {
+      throw new Error(updateRaw?.error || 'Vaka durumu güncellenemedi.');
+    }
+
+    const listResponse = await fetch('/api/apparel/operation-cases', {
+      cache: 'no-store',
+      headers: { Authorization: 'JWT ' + iframeToken },
+    });
+
+    const listRaw = await listResponse.json();
+    setData(listRaw);
+
+    setActionSuccess(`Vaka durumu güncellendi: ${mapStatusLabel(status)}`);
+  } catch (error) {
+    setActionError(
+      error instanceof Error
+        ? error.message
+        : 'Vaka durumu güncellenirken hata oluştu.',
+    );
+  } finally {
+    setUpdatingCaseId(null);
+  }
+};
 
   return (
     <AppShell>
@@ -345,6 +405,40 @@ export default function OperationsPage() {
               </div>
             </section>
 
+            {actionError ? (
+  <div
+    style={{
+      border: '1px solid #fecaca',
+      background: '#fef2f2',
+      color: '#991b1b',
+      borderRadius: 14,
+      padding: 14,
+      marginBottom: 16,
+      fontSize: 14,
+      fontWeight: 700,
+    }}
+  >
+    {actionError}
+  </div>
+) : null}
+
+{actionSuccess ? (
+  <div
+    style={{
+      border: '1px solid #bbf7d0',
+      background: '#f0fdf4',
+      color: '#166534',
+      borderRadius: 14,
+      padding: 14,
+      marginBottom: 16,
+      fontSize: 14,
+      fontWeight: 700,
+    }}
+  >
+    {actionSuccess}
+  </div>
+) : null}
+
             <section
               style={{
                 border: '1px solid #e5e7eb',
@@ -429,9 +523,39 @@ export default function OperationsPage() {
                           <Pill label={mapPriorityLabel(row.priority)} tone={priorityTone(row.priority)} />
                         </td>
 
-                        <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
-                          <Pill label={mapStatusLabel(row.status)} tone={statusTone(row.status)} />
-                        </td>
+                       <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
+  <div style={{ display: 'grid', gap: 8, minWidth: 170 }}>
+    <Pill label={mapStatusLabel(row.status)} tone={statusTone(row.status)} />
+
+    <select
+      value={row.status || 'open'}
+      onChange={(event) => handleUpdateCaseStatus(row.id, event.target.value)}
+      disabled={updatingCaseId === row.id}
+      style={{
+        border: '1px solid #d1d5db',
+        borderRadius: 10,
+        padding: '8px 10px',
+        background: updatingCaseId === row.id ? '#f3f4f6' : '#ffffff',
+        color: '#111827',
+        fontSize: 13,
+        fontWeight: 700,
+        cursor: updatingCaseId === row.id ? 'not-allowed' : 'pointer',
+      }}
+    >
+      {STATUS_OPTIONS.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+
+    {updatingCaseId === row.id ? (
+      <span style={{ color: '#6b7280', fontSize: 12 }}>
+        Güncelleniyor...
+      </span>
+    ) : null}
+  </div>
+</td>
 
                         <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
                           {row.evidenceSummary || row.evidenceState ? (
