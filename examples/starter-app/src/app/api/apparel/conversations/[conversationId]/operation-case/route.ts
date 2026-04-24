@@ -21,6 +21,10 @@ type ConversationCaseContextRow = {
   customer_wa_id: string | null;
 };
 
+type LinkedOrderRow = {
+  order_no: string;
+};
+
 type OperationCaseRow = {
   id: string;
   case_no: string | null;
@@ -151,10 +155,22 @@ export async function POST(
     const priority = normalizePriority(body.priority);
 
     const description = String(body.description || "").trim() || null;
-    const linkedOrderId = String(body.linkedOrderId || "").trim() || null;
+    const manualLinkedOrderId = String(body.linkedOrderId || "").trim() || null;
     const evidenceSummary = String(body.evidenceSummary || "").trim() || null;
     const evidenceState = String(body.evidenceState || "").trim() || null;
 
+    const linkedOrderRows = manualLinkedOrderId
+      ? []
+      : await prisma.$queryRaw<LinkedOrderRow[]>`
+          select order_no
+          from public.commerce_orders
+          where tenant_id = CAST(${tenant.tenantId} AS uuid)
+            and conversation_id = CAST(${conversation.conversation_id} AS uuid)
+          order by ordered_at desc nulls last, created_at desc nulls last
+          limit 1
+        `;
+
+    const linkedOrderId = manualLinkedOrderId || linkedOrderRows[0]?.order_no || null;
     const caseNo = `OP-${Date.now()}`;
 
     const rows = await prisma.$queryRaw<OperationCaseRow[]>`
