@@ -29,9 +29,13 @@ function mapChannelLabel(channel: string | null | undefined) {
   return channel || 'Kanal';
 }
 
-function mapDirectionLabel(direction: 'in' | 'out' | null | undefined) {
+function mapSenderLabel(senderType: string | null | undefined, direction?: 'in' | 'out' | null) {
+  if (senderType === 'customer') return 'Müşteri';
+  if (senderType === 'operator') return 'Operatör';
+  if (senderType === 'ai') return 'AI Asistan';
+  if (senderType === 'system') return 'Sistem';
   if (direction === 'in') return 'Müşteri';
-  if (direction === 'out') return 'Sistem / Operatör';
+  if (direction === 'out') return 'AI Asistan';
   return 'Bilinmiyor';
 }
 
@@ -108,9 +112,17 @@ function getStatusTone(status: string | null | undefined): 'neutral' | 'success'
   return 'info';
 }
 
+function isAfter(a: string | null | undefined, b: string | null | undefined) {
+  if (!a) return false;
+  if (!b) return true;
+  const at = new Date(a).getTime();
+  const bt = new Date(b).getTime();
+  return Number.isFinite(at) && Number.isFinite(bt) ? at > bt : false;
+}
+
 function getResponseState(item: InboxListResponse['items'][number]) {
   const isOpen = String(item.status || '').toLowerCase() === 'open';
-  const needsReply = isOpen && item.lastMessageDirection === 'in';
+  const needsReply = isOpen && isAfter(item.lastCustomerMessageAt, item.lastOperatorMessageAt);
 
   return {
     needsReply,
@@ -196,8 +208,8 @@ export default function InboxPage() {
             </p>
           </div>
 
-          <div style={{ border: '1px dashed #d1d5db', borderRadius: 16, background: '#ffffff', padding: 14, color: '#6b7280', maxWidth: 360, fontSize: 13, lineHeight: 1.6 }}>
-            “Yanıt Bekleyen Mesaj” yalnızca açık konuşmada son mesaj müşteriden geldiyse artar. Sistem veya operatör cevapladığında sayaç düşer.
+          <div style={{ border: '1px dashed #d1d5db', borderRadius: 16, background: '#ffffff', padding: 14, color: '#6b7280', maxWidth: 380, fontSize: 13, lineHeight: 1.6 }}>
+            “Yanıt Bekleyen Mesaj”, son müşteri mesajından sonra operatör manuel cevap vermediyse artar. AI cevabı bu sayacı kapatmaz.
           </div>
         </div>
 
@@ -215,7 +227,7 @@ export default function InboxPage() {
           <div style={{ display: 'grid', gap: 16 }}>
             <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
               <MetricCard label="Açık Konuşma" value={metrics.openCount} helper="Aktif müşteri konuşmaları" />
-              <MetricCard label="Yanıt Bekleyen Mesaj" value={metrics.waitingReplyCount} helper="Son mesajı müşteriden gelen ve yanıt bekleyen açık konuşmalar" />
+              <MetricCard label="Yanıt Bekleyen Mesaj" value={metrics.waitingReplyCount} helper="Operatör manuel cevabı bekleyen açık konuşmalar" />
               <MetricCard label="Ürün Bağlamlı" value={metrics.productContextCount} helper="Aktif ürün bağlamı olan konuşmalar" />
               <MetricCard label="Kapalı Konuşma" value={metrics.closedCount} helper="Kapanmış kayıtlar" />
             </section>
@@ -258,7 +270,7 @@ export default function InboxPage() {
                           </div>
 
                           <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.7, marginBottom: 10 }}>
-                            <strong>{mapDirectionLabel(item.lastMessageDirection)}:</strong>{' '}
+                            <strong>{mapSenderLabel(item.lastMessageSenderType, item.lastMessageDirection)}:</strong>{' '}
                             {item.lastMessageText || 'Mesaj metni bulunmuyor.'}
                           </div>
 
@@ -286,7 +298,7 @@ export default function InboxPage() {
 
                           <div style={{ fontSize: 13, lineHeight: 1.7, marginBottom: 12 }}>
                             {responseState.needsReply
-                              ? 'Bu açık konuşmada son mesaj müşteriden gelmiş. Operatörün yanıt vermesi gerekiyor.'
+                              ? 'Müşteriye AI cevap vermiş olabilir; operatör manuel yanıt vermediği için bu konuşma hâlâ yanıt kuyruğunda.'
                               : recommendation.helper}
                           </div>
 
