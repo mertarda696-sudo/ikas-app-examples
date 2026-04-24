@@ -91,12 +91,14 @@ function isAfter(a: string | null | undefined, b: string | null | undefined) {
 
 function getResponseState(conversation: ConversationDetailResponse['conversation']) {
   const isOpen = String(conversation?.status || '').toLowerCase() === 'open';
-  const needsReply = isOpen && isAfter(conversation?.lastCustomerMessageAt, conversation?.lastOperatorMessageAt);
+  const customerAfterOperator = isAfter(conversation?.lastCustomerMessageAt, conversation?.lastOperatorMessageAt);
+  const customerAfterReview = isAfter(conversation?.lastCustomerMessageAt, conversation?.operatorReviewedAt);
+  const needsReply = isOpen && customerAfterOperator && customerAfterReview;
 
   return {
     needsReply,
-    label: needsReply ? 'Yanıt bekliyor' : 'Cevaplandı',
-    tone: needsReply ? ('danger' as const) : ('success' as const),
+    label: needsReply ? 'Yanıt bekliyor' : conversation?.operatorReviewedAt ? 'İncelendi' : 'Cevaplandı',
+    tone: needsReply ? ('danger' as const) : conversation?.operatorReviewedAt ? ('info' as const) : ('success' as const),
   };
 }
 
@@ -117,6 +119,7 @@ export default function ConversationDetailPage() {
   const [loading, setLoading] = useState(true);
   const [replyText, setReplyText] = useState('');
   const [sending, setSending] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
@@ -160,6 +163,39 @@ export default function ConversationDetailPage() {
   const responseState = getResponseState(conversation);
   const suggestions = quickReplySuggestions(conversation?.contextProductName);
   const hasWhatsAppLine = Boolean(data?.tenant?.waPhoneNumberId);
+
+  const handleReviewConversation = async () => {
+    try {
+      setActionError(null);
+      setActionSuccess(null);
+
+      if (!conversationId) return setActionError('conversationId bulunamadı.');
+
+      setReviewing(true);
+      const iframeToken = await TokenHelpers.getTokenForIframeApp();
+      if (!iframeToken) return setActionError('iFrame JWT token alınamadı.');
+
+      const response = await fetch(`/api/apparel/conversations/${conversationId}/review`, {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          Authorization: 'JWT ' + iframeToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ note: 'Operatör AI cevabını yeterli gördü.' }),
+      });
+
+      const raw = await response.json();
+      if (!response.ok || !raw?.ok) throw new Error(raw?.error || 'Konuşma incelendi olarak işaretlenemedi.');
+
+      setActionSuccess('Konuşma incelendi olarak işaretlendi. Müşteriye WhatsApp mesajı gönderilmedi.');
+      await loadConversation({ silent: true });
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'İnceleme kaydı sırasında hata oluştu.');
+    } finally {
+      setReviewing(false);
+    }
+  };
 
   const handleSendReply = async () => {
     try {
@@ -239,6 +275,7 @@ export default function ConversationDetailPage() {
                   <div><strong>Müşteri:</strong> {conversation.customerId || '-'}</div>
                   <div><strong>Son mesaj:</strong> {formatDate(conversation.lastMessageAt)}</div>
                   <div><strong>Toplam:</strong> {conversation.messages.length} mesaj</div>
+                  {conversation.operatorReviewedAt ? <div><strong>İncelendi:</strong> {formatDate(conversation.operatorReviewedAt)}</div> : null}
                 </div>
               </div>
 
@@ -266,6 +303,18 @@ export default function ConversationDetailPage() {
               </div>
 
               <div style={{ borderTop: '1px solid #e5e7eb', padding: 18, background: '#ffffff' }}>
+                {responseState.needsReply ? (
+                  <div style={{ border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8', borderRadius: 14, padding: 14, marginBottom: 14, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div>
+                      <div style={{ fontWeight: 900, marginBottom: 4 }}>AI cevabı yeterliyse müşteriye tekrar mesaj göndermeden kuyruğu temizleyebilirsiniz.</div>
+                      <div style={{ fontSize: 13, lineHeight: 1.6 }}>Bu işlem WhatsApp mesajı göndermez; yalnızca konuşmayı operatör tarafından incelendi olarak işaretler.</div>
+                    </div>
+                    <button onClick={handleReviewConversation} disabled={reviewing} style={{ border: 'none', borderRadius: 12, padding: '10px 14px', background: reviewing ? '#9ca3af' : '#1d4ed8', color: '#ffffff', fontWeight: 800, cursor: reviewing ? 'not-allowed' : 'pointer' }}>
+                      {reviewing ? 'İşaretleniyor...' : 'İncelendi olarak işaretle'}
+                    </button>
+                  </div>
+                ) : null}
+
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
                   <div>
                     <div style={{ fontSize: 18, fontWeight: 800 }}>Operatör Mesajı</div>
@@ -301,11 +350,11 @@ export default function ConversationDetailPage() {
             <aside style={{ display: 'grid', gap: 16 }}>
               <section style={{ borderRadius: 18, padding: 18, ...(responseState.needsReply ? { border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b' } : operatorTone) }}>
                 <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.35, opacity: 0.86 }}>Operatör için önerilen akış</div>
-                <div style={{ fontSize: 19, fontWeight: 800, marginBottom: 10, lineHeight: 1.35 }}>{responseState.needsReply ? 'Müşteriye yanıt ver' : operatorDeskState.title}</div>
-                <div style={{ fontSize: 14, lineHeight: 1.7, marginBottom: 12 }}>{responseState.needsReply ? 'Müşteriye AI cevap vermiş olabilir; operatör manuel yanıt vermediği için bu konuşma hâlâ yanıt kuyruğunda.' : operatorDeskState.helper}</div>
+                <div style={{ fontSize: 19, fontWeight: 800, marginBottom: 10, lineHeight: 1.35 }}>{responseState.needsReply ? 'Müşteriye yanıt ver veya incele' : responseState.label === 'İncelendi' ? 'Operatör tarafından incelendi' : operatorDeskState.title}</div>
+                <div style={{ fontSize: 14, lineHeight: 1.7, marginBottom: 12 }}>{responseState.needsReply ? 'AI cevabı yeterliyse “İncelendi olarak işaretle”; değilse manuel cevap gönder.' : responseState.label === 'İncelendi' ? 'Bu konuşma müşteriye ek mesaj gönderilmeden operatör tarafından kontrol edildi.' : operatorDeskState.helper}</div>
                 <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: 12, fontSize: 13, lineHeight: 1.7 }}>
                   <strong>Dikkat seviyesi:</strong> {responseState.needsReply ? 'Yüksek' : operatorDeskState.attention}<br />
-                  <strong>Önerilen sıradaki adım:</strong> {responseState.needsReply ? 'Manuel cevap gönder' : operatorDeskState.recommendedStep}
+                  <strong>Önerilen sıradaki adım:</strong> {responseState.needsReply ? 'Manuel cevap gönder veya incelendi işaretle' : operatorDeskState.recommendedStep}
                 </div>
               </section>
 
