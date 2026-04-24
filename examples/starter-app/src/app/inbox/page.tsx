@@ -122,12 +122,16 @@ function isAfter(a: string | null | undefined, b: string | null | undefined) {
 
 function getResponseState(item: InboxListResponse['items'][number]) {
   const isOpen = String(item.status || '').toLowerCase() === 'open';
-  const needsReply = isOpen && isAfter(item.lastCustomerMessageAt, item.lastOperatorMessageAt);
+  const customerAfterOperator = isAfter(item.lastCustomerMessageAt, item.lastOperatorMessageAt);
+  const customerAfterReview = isAfter(item.lastCustomerMessageAt, item.operatorReviewedAt);
+  const needsReply = isOpen && customerAfterOperator && customerAfterReview;
+  const reviewedAfterCustomer = Boolean(item.operatorReviewedAt) && !customerAfterReview;
 
   return {
     needsReply,
-    label: needsReply ? 'Yanıt bekliyor' : 'Cevaplandı',
-    tone: needsReply ? ('danger' as const) : ('success' as const),
+    reviewedAfterCustomer,
+    label: needsReply ? 'Yanıt bekliyor' : reviewedAfterCustomer ? 'İncelendi' : 'Cevaplandı',
+    tone: needsReply ? ('danger' as const) : reviewedAfterCustomer ? ('info' as const) : ('success' as const),
   };
 }
 
@@ -208,8 +212,8 @@ export default function InboxPage() {
             </p>
           </div>
 
-          <div style={{ border: '1px dashed #d1d5db', borderRadius: 16, background: '#ffffff', padding: 14, color: '#6b7280', maxWidth: 380, fontSize: 13, lineHeight: 1.6 }}>
-            “Yanıt Bekleyen Mesaj”, son müşteri mesajından sonra operatör manuel cevap vermediyse artar. AI cevabı bu sayacı kapatmaz.
+          <div style={{ border: '1px dashed #d1d5db', borderRadius: 16, background: '#ffffff', padding: 14, color: '#6b7280', maxWidth: 400, fontSize: 13, lineHeight: 1.6 }}>
+            “Yanıt Bekleyen Mesaj”, son müşteri mesajından sonra operatör manuel cevap vermediyse ve konuşma incelenmediyse artar. AI cevabı bu sayacı kapatmaz.
           </div>
         </div>
 
@@ -227,7 +231,7 @@ export default function InboxPage() {
           <div style={{ display: 'grid', gap: 16 }}>
             <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
               <MetricCard label="Açık Konuşma" value={metrics.openCount} helper="Aktif müşteri konuşmaları" />
-              <MetricCard label="Yanıt Bekleyen Mesaj" value={metrics.waitingReplyCount} helper="Operatör manuel cevabı bekleyen açık konuşmalar" />
+              <MetricCard label="Yanıt Bekleyen Mesaj" value={metrics.waitingReplyCount} helper="Operatör cevabı veya incelemesi bekleyen açık konuşmalar" />
               <MetricCard label="Ürün Bağlamlı" value={metrics.productContextCount} helper="Aktif ürün bağlamı olan konuşmalar" />
               <MetricCard label="Kapalı Konuşma" value={metrics.closedCount} helper="Kapanmış kayıtlar" />
             </section>
@@ -246,13 +250,15 @@ export default function InboxPage() {
                   const recommendationBoxStyle =
                     responseState.needsReply
                       ? { border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b' }
-                      : recommendation.tone === 'success'
-                        ? { border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#166534' }
-                        : recommendation.tone === 'warning'
-                          ? { border: '1px solid #fde68a', background: '#fffbeb', color: '#92400e' }
-                          : recommendation.tone === 'info'
-                            ? { border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8' }
-                            : { border: '1px solid #e5e7eb', background: '#f9fafb', color: '#374151' };
+                      : responseState.reviewedAfterCustomer
+                        ? { border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8' }
+                        : recommendation.tone === 'success'
+                          ? { border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#166534' }
+                          : recommendation.tone === 'warning'
+                            ? { border: '1px solid #fde68a', background: '#fffbeb', color: '#92400e' }
+                            : recommendation.tone === 'info'
+                              ? { border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8' }
+                              : { border: '1px solid #e5e7eb', background: '#f9fafb', color: '#374151' };
 
                   return (
                     <Link
@@ -278,6 +284,7 @@ export default function InboxPage() {
                             <SmallBadge label={priorityLabel} tone="warning" />
                             <SmallBadge label={linkedOrderId ? `Bağlı sipariş: ${linkedOrderId}` : 'Sipariş bağı henüz yok'} tone={linkedOrderId ? 'info' : 'neutral'} />
                             <SmallBadge label={linkedCaseId ? `Bağlı vaka: ${linkedCaseId}` : 'Vaka bağı henüz yok'} tone={linkedCaseId ? 'info' : 'neutral'} />
+                            {responseState.reviewedAfterCustomer ? <SmallBadge label={`İnceleme: ${formatDate(item.operatorReviewedAt)}`} tone="info" /> : null}
                           </div>
 
                           {item.contextProductName ? (
@@ -293,17 +300,19 @@ export default function InboxPage() {
                           </div>
 
                           <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 8, lineHeight: 1.4 }}>
-                            {responseState.needsReply ? 'Müşteriye yanıt ver' : recommendation.title}
+                            {responseState.needsReply ? 'Müşteriye yanıt ver veya incele' : responseState.reviewedAfterCustomer ? 'İncelendi, takip gerekmiyor' : recommendation.title}
                           </div>
 
                           <div style={{ fontSize: 13, lineHeight: 1.7, marginBottom: 12 }}>
                             {responseState.needsReply
-                              ? 'Müşteriye AI cevap vermiş olabilir; operatör manuel yanıt vermediği için bu konuşma hâlâ yanıt kuyruğunda.'
-                              : recommendation.helper}
+                              ? 'Müşteriye AI cevap vermiş olabilir; operatör manuel yanıt vermediği veya incelemediği için bu konuşma hâlâ yanıt kuyruğunda.'
+                              : responseState.reviewedAfterCustomer
+                                ? 'Operatör AI cevabını yeterli gördü. Müşteriye ek WhatsApp mesajı gönderilmeden kuyruktan düşürüldü.'
+                                : recommendation.helper}
                           </div>
 
                           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                            <SmallBadge label={responseState.needsReply ? 'Yanıt kuyruğu' : recommendation.queueLabel} tone={responseState.needsReply ? 'danger' : recommendation.tone} />
+                            <SmallBadge label={responseState.needsReply ? 'Yanıt kuyruğu' : responseState.reviewedAfterCustomer ? 'İncelendi' : recommendation.queueLabel} tone={responseState.needsReply ? 'danger' : responseState.reviewedAfterCustomer ? 'info' : recommendation.tone} />
                             <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.85 }}>{formatDate(item.lastMessageAt)}</div>
                           </div>
                         </div>
