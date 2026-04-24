@@ -46,6 +46,31 @@ function mapStatusLabel(status: string | null | undefined) {
   return status || '-';
 }
 
+function mapOperatorTagLabel(tag: string | null | undefined) {
+  const normalized = String(tag || '').toLowerCase();
+  if (normalized === 'general_followup') return 'Genel takip';
+  if (normalized === 'hot_lead') return 'Sıcak lead';
+  if (normalized === 'order_support') return 'Sipariş destek';
+  if (normalized === 'return_exchange') return 'İade / değişim';
+  if (normalized === 'size_consultation') return 'Beden danışma';
+  if (normalized === 'shipping_delivery') return 'Kargo / teslimat';
+  return tag || '';
+}
+
+function mapOperatorPriorityLabel(priority: string | null | undefined) {
+  const normalized = String(priority || 'normal').toLowerCase();
+  if (normalized === 'high') return 'Yüksek öncelik';
+  if (normalized === 'low') return 'Düşük öncelik';
+  return 'Normal öncelik';
+}
+
+function getOperatorPriorityTone(priority: string | null | undefined): 'neutral' | 'success' | 'warning' | 'info' | 'danger' {
+  const normalized = String(priority || 'normal').toLowerCase();
+  if (normalized === 'high') return 'danger';
+  if (normalized === 'low') return 'neutral';
+  return 'info';
+}
+
 function SmallBadge({
   label,
   tone,
@@ -185,6 +210,11 @@ export default function InboxPage() {
         const ar = getResponseState(a).needsReply ? 1 : 0;
         const br = getResponseState(b).needsReply ? 1 : 0;
         if (ar !== br) return br - ar;
+
+        const ap = a.operatorPriority === 'high' ? 1 : 0;
+        const bp = b.operatorPriority === 'high' ? 1 : 0;
+        if (ap !== bp) return bp - ap;
+
         const at = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
         const bt = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
         return bt - at;
@@ -246,25 +276,30 @@ export default function InboxPage() {
                   const priorityLabel = inferPriorityLabel(item.lastMessageText);
                   const recommendation = getConversationQueueHint(item);
                   const responseState = getResponseState(item);
+                  const hasOperatorNote = Boolean(String(item.operatorNote || '').trim());
+                  const hasOperatorTag = Boolean(String(item.operatorTag || '').trim());
+                  const operatorPriority = String(item.operatorPriority || 'normal').toLowerCase();
 
                   const recommendationBoxStyle =
                     responseState.needsReply
                       ? { border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b' }
-                      : responseState.reviewedAfterCustomer
-                        ? { border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8' }
-                        : recommendation.tone === 'success'
-                          ? { border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#166534' }
-                          : recommendation.tone === 'warning'
-                            ? { border: '1px solid #fde68a', background: '#fffbeb', color: '#92400e' }
-                            : recommendation.tone === 'info'
-                              ? { border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8' }
-                              : { border: '1px solid #e5e7eb', background: '#f9fafb', color: '#374151' };
+                      : operatorPriority === 'high'
+                        ? { border: '1px solid #fecaca', background: '#fff7ed', color: '#9a3412' }
+                        : responseState.reviewedAfterCustomer
+                          ? { border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8' }
+                          : recommendation.tone === 'success'
+                            ? { border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#166534' }
+                            : recommendation.tone === 'warning'
+                              ? { border: '1px solid #fde68a', background: '#fffbeb', color: '#92400e' }
+                              : recommendation.tone === 'info'
+                                ? { border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8' }
+                                : { border: '1px solid #e5e7eb', background: '#f9fafb', color: '#374151' };
 
                   return (
                     <Link
                       key={item.id}
                       href={`/inbox/${item.id}`}
-                      style={{ textDecoration: 'none', border: responseState.needsReply ? '1px solid #fecaca' : '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', padding: 18, color: '#111827', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}
+                      style={{ textDecoration: 'none', border: responseState.needsReply || operatorPriority === 'high' ? '1px solid #fecaca' : '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', padding: 18, color: '#111827', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}
                     >
                       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(280px, 0.95fr)', gap: 16, alignItems: 'stretch' }}>
                         <div>
@@ -273,6 +308,9 @@ export default function InboxPage() {
                             <SmallBadge label={mapChannelLabel(item.channel)} tone="info" />
                             <SmallBadge label={mapStatusLabel(item.status)} tone={getStatusTone(item.status)} />
                             <SmallBadge label={responseState.label} tone={responseState.tone} />
+                            {hasOperatorTag ? <SmallBadge label={mapOperatorTagLabel(item.operatorTag)} tone="warning" /> : null}
+                            {item.operatorPriority ? <SmallBadge label={mapOperatorPriorityLabel(item.operatorPriority)} tone={getOperatorPriorityTone(item.operatorPriority)} /> : null}
+                            {hasOperatorNote ? <SmallBadge label="Not var" tone="neutral" /> : null}
                           </div>
 
                           <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.7, marginBottom: 10 }}>
@@ -285,7 +323,14 @@ export default function InboxPage() {
                             <SmallBadge label={linkedOrderId ? `Bağlı sipariş: ${linkedOrderId}` : 'Sipariş bağı henüz yok'} tone={linkedOrderId ? 'info' : 'neutral'} />
                             <SmallBadge label={linkedCaseId ? `Bağlı vaka: ${linkedCaseId}` : 'Vaka bağı henüz yok'} tone={linkedCaseId ? 'info' : 'neutral'} />
                             {responseState.reviewedAfterCustomer ? <SmallBadge label={`İnceleme: ${formatDate(item.operatorReviewedAt)}`} tone="info" /> : null}
+                            {item.operatorNoteUpdatedAt ? <SmallBadge label={`Not: ${formatDate(item.operatorNoteUpdatedAt)}`} tone="neutral" /> : null}
                           </div>
+
+                          {hasOperatorNote ? (
+                            <div style={{ marginBottom: 10, border: '1px solid #e5e7eb', borderRadius: 12, padding: '8px 10px', background: '#f9fafb', color: '#4b5563', fontSize: 13, lineHeight: 1.6 }}>
+                              <strong>Operatör notu:</strong> {item.operatorNote}
+                            </div>
+                          ) : null}
 
                           {item.contextProductName ? (
                             <div style={{ display: 'inline-block', borderRadius: 999, padding: '6px 10px', background: '#f9fafb', color: '#4b5563', fontSize: 12, fontWeight: 700, border: '1px solid #e5e7eb' }}>
@@ -300,19 +345,27 @@ export default function InboxPage() {
                           </div>
 
                           <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 8, lineHeight: 1.4 }}>
-                            {responseState.needsReply ? 'Müşteriye yanıt ver veya incele' : responseState.reviewedAfterCustomer ? 'İncelendi, takip gerekmiyor' : recommendation.title}
+                            {responseState.needsReply
+                              ? 'Müşteriye yanıt ver veya incele'
+                              : operatorPriority === 'high'
+                                ? 'Yüksek öncelikli takip'
+                                : responseState.reviewedAfterCustomer
+                                  ? 'İncelendi, takip gerekmiyor'
+                                  : recommendation.title}
                           </div>
 
                           <div style={{ fontSize: 13, lineHeight: 1.7, marginBottom: 12 }}>
                             {responseState.needsReply
                               ? 'Müşteriye AI cevap vermiş olabilir; operatör manuel yanıt vermediği veya incelemediği için bu konuşma hâlâ yanıt kuyruğunda.'
-                              : responseState.reviewedAfterCustomer
-                                ? 'Operatör AI cevabını yeterli gördü. Müşteriye ek WhatsApp mesajı gönderilmeden kuyruktan düşürüldü.'
-                                : recommendation.helper}
+                              : operatorPriority === 'high'
+                                ? 'Operatör bu konuşmayı yüksek öncelikli işaretledi. Not ve etiket detayını kontrol edin.'
+                                : responseState.reviewedAfterCustomer
+                                  ? 'Operatör AI cevabını yeterli gördü. Müşteriye ek WhatsApp mesajı gönderilmeden kuyruktan düşürüldü.'
+                                  : recommendation.helper}
                           </div>
 
                           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                            <SmallBadge label={responseState.needsReply ? 'Yanıt kuyruğu' : responseState.reviewedAfterCustomer ? 'İncelendi' : recommendation.queueLabel} tone={responseState.needsReply ? 'danger' : responseState.reviewedAfterCustomer ? 'info' : recommendation.tone} />
+                            <SmallBadge label={responseState.needsReply ? 'Yanıt kuyruğu' : operatorPriority === 'high' ? 'Yüksek öncelik' : responseState.reviewedAfterCustomer ? 'İncelendi' : recommendation.queueLabel} tone={responseState.needsReply ? 'danger' : operatorPriority === 'high' ? 'danger' : responseState.reviewedAfterCustomer ? 'info' : recommendation.tone} />
                             <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.85 }}>{formatDate(item.lastMessageAt)}</div>
                           </div>
                         </div>
