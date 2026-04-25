@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { AppShell } from '@/components/apparel-panel/AppShell';
 import { LinkedOperationCasesBox } from '@/components/apparel-panel/LinkedOperationCasesBox';
+import { CustomerProfileLink } from '@/components/apparel-panel/CustomerProfileLink';
 import { TokenHelpers } from '@/helpers/token-helpers';
 import type { ConversationDetailResponse } from '@/lib/apparel-panel/types';
 import {
@@ -456,12 +457,18 @@ const [creatingCase, setCreatingCase] = useState(false);
                   </div>
                 </div>
                 <div style={{ textAlign: 'right', fontSize: 13, color: '#6b7280', lineHeight: 1.7 }}>
-                  <div><strong>Müşteri:</strong> {conversation.customerId || '-'}</div>
-                  <div><strong>Son mesaj:</strong> {formatDate(conversation.lastMessageAt)}</div>
-                  <div><strong>Toplam:</strong> {conversation.messages.length} mesaj</div>
-                  {conversation.operatorReviewedAt ? <div><strong>İncelendi:</strong> {formatDate(conversation.operatorReviewedAt)}</div> : null}
-                  {conversation.operatorNoteUpdatedAt ? <div><strong>Not güncellendi:</strong> {formatDate(conversation.operatorNoteUpdatedAt)}</div> : null}
-                </div>
+  <div><strong>Müşteri:</strong> {conversation.customerId || '-'}</div>
+
+  <CustomerProfileLink
+    customerWaId={conversation.customerId}
+    compact
+  />
+
+  <div><strong>Son mesaj:</strong> {formatDate(conversation.lastMessageAt)}</div>
+  <div><strong>Toplam:</strong> {conversation.messages.length} mesaj</div>
+  {conversation.operatorReviewedAt ? <div><strong>İncelendi:</strong> {formatDate(conversation.operatorReviewedAt)}</div> : null}
+  {conversation.operatorNoteUpdatedAt ? <div><strong>Not güncellendi:</strong> {formatDate(conversation.operatorNoteUpdatedAt)}</div> : null}
+</div>
               </div>
 
               <div style={{ padding: 18, background: '#f3f4f6', minHeight: 460, display: 'grid', gap: 12, alignContent: 'start' }}>
