@@ -43,6 +43,11 @@ const NAV_ITEMS: NavItem[] = [
     hint: 'Medya ve dekont',
   },
   {
+    href: '/system-health',
+    label: 'Sistem Sağlığı',
+    hint: 'Teknik özet',
+  },
+  {
     href: '/catalog',
     label: 'Katalog',
     hint: 'Ürün ve varyant',
@@ -189,26 +194,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <DashboardOperationsHub />
               </div>
 
-              <details style={{ maxWidth: 1200, margin: '16px auto 0', padding: '0 20px 20px' }}>
-                <summary
+              <div style={{ maxWidth: 1200, margin: '16px auto 0', padding: '0 20px 20px' }}>
+                <Link
+                  href="/system-health"
                   style={{
+                    display: 'block',
+                    textDecoration: 'none',
                     border: '1px solid #e5e7eb',
                     borderRadius: 16,
                     background: '#ffffff',
                     padding: '14px 16px',
-                    cursor: 'pointer',
                     color: '#111827',
                     fontWeight: 900,
-                    listStyle: 'none',
                   }}
                 >
-                  Teknik ve katalog detaylarını göster
+                  Sistem Sağlığına Git →
                   <span style={{ display: 'block', marginTop: 4, color: '#6b7280', fontSize: 13, fontWeight: 600 }}>
-                    Katalog sağlığı, policy özeti, canlı hazırlık ve teknik araçlar bu bölümde tutulur.
+                    Katalog sağlığı, policy özeti, sync durumu ve teknik bağlantılar ayrı sayfada izlenir.
                   </span>
-                </summary>
-                <div style={{ marginTop: 12 }}>{children}</div>
-              </details>
+                </Link>
+              </div>
             </>
           ) : (
             children
