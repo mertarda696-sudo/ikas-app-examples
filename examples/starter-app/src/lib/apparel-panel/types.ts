@@ -150,6 +150,13 @@ export type InboxConversationItem = {
   operatorNoteUpdatedAt: string | null;
   linkedOperationCaseCount?: number;
   latestOperationCase?: LinkedOperationCaseSummary | null;
+  crmProfileExists?: boolean;
+  crmTag?: string | null;
+  riskLevel?: string | null;
+  followupStatus?: string | null;
+  crmInternalNote?: string | null;
+  crmReviewedAt?: string | null;
+  crmUpdatedAt?: string | null;
   contextProductName: string | null;
 };
 
