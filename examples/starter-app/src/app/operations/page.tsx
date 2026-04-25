@@ -114,6 +114,16 @@ function mapStatusLabel(status: string | null | undefined) {
   return status || '-';
 }
 
+function mapEvidenceStateLabel(state: string | null | undefined) {
+  const normalized = String(state || '').toLowerCase();
+  if (normalized === 'requested') return 'Kanıt istendi';
+  if (normalized === 'received') return 'Kanıt alındı';
+  if (normalized === 'verified') return 'Doğrulandı';
+  if (normalized === 'missing') return 'Eksik';
+  if (normalized === 'rejected') return 'Reddedildi';
+  return state || 'Kanıt durumu yok';
+}
+
 function mapCrmTagLabel(tag: string | null | undefined) {
   const normalized = String(tag || 'general').toLowerCase();
   if (normalized === 'vip_customer') return 'VIP müşteri';
@@ -413,7 +423,7 @@ export default function OperationsPage() {
                             {row.evidenceSummary || row.evidenceState ? (
                               <div style={{ display: 'grid', gap: 4 }}>
                                 <span>{row.evidenceSummary || '-'}</span>
-                                <Pill label={row.evidenceState || 'Kanıt durumu yok'} tone="warning" />
+                                <Pill label={mapEvidenceStateLabel(row.evidenceState)} tone="warning" />
                               </div>
                             ) : '-'}
                           </td>
