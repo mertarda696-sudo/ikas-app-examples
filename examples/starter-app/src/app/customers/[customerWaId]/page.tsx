@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { AppShell } from '@/components/apparel-panel/AppShell';
+import { CustomerCrmProfileBox } from '@/components/apparel-panel/CustomerCrmProfileBox';
 import { CustomerOperationCaseBox } from '@/components/apparel-panel/CustomerOperationCaseBox';
 import { TokenHelpers } from '@/helpers/token-helpers';
 
@@ -414,6 +415,7 @@ export default function CustomerProfilePage() {
               </div>
 
               <aside style={{ display: 'grid', gap: 16 }}>
+                <CustomerCrmProfileBox customerWaId={customer.waId} />
                 <CustomerOperationCaseBox customerWaId={customer.waId} />
 
                 <InfoCard title="Hızlı Bakış">
