@@ -184,11 +184,35 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <div style={{ minWidth: 0 }}>
           {showDashboardOperationsHub ? (
-            <div style={{ maxWidth: 1200, margin: '0 auto', padding: '20px 20px 0' }}>
-              <DashboardOperationsHub />
-            </div>
-          ) : null}
-          {children}
+            <>
+              <div style={{ maxWidth: 1200, margin: '0 auto', padding: '20px 20px 0' }}>
+                <DashboardOperationsHub />
+              </div>
+
+              <details style={{ maxWidth: 1200, margin: '16px auto 0', padding: '0 20px 20px' }}>
+                <summary
+                  style={{
+                    border: '1px solid #e5e7eb',
+                    borderRadius: 16,
+                    background: '#ffffff',
+                    padding: '14px 16px',
+                    cursor: 'pointer',
+                    color: '#111827',
+                    fontWeight: 900,
+                    listStyle: 'none',
+                  }}
+                >
+                  Teknik ve katalog detaylarını göster
+                  <span style={{ display: 'block', marginTop: 4, color: '#6b7280', fontSize: 13, fontWeight: 600 }}>
+                    Katalog sağlığı, policy özeti, canlı hazırlık ve teknik araçlar bu bölümde tutulur.
+                  </span>
+                </summary>
+                <div style={{ marginTop: 12 }}>{children}</div>
+              </details>
+            </>
+          ) : (
+            children
+          )}
         </div>
       </div>
     </div>
