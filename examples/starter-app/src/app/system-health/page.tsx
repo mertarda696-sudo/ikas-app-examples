@@ -81,6 +81,18 @@ function mapSyncStatus(status: string | null | undefined) {
   return { label: status || 'Bilinmiyor', tone: 'neutral' as const };
 }
 
+function mapStockStatus(status: string | null | undefined) {
+  const normalized = String(status || '').toLowerCase();
+
+  if (normalized === 'in_stock') return { label: 'Stokta', tone: 'success' as const };
+  if (normalized === 'out_of_stock') return { label: 'Stokta Yok', tone: 'danger' as const };
+  if (normalized === 'low_stock') return { label: 'Az Stok', tone: 'warning' as const };
+  if (normalized === 'preorder') return { label: 'Ön Sipariş', tone: 'info' as const };
+  if (normalized === 'discontinued') return { label: 'Satış Dışı', tone: 'neutral' as const };
+
+  return { label: status || 'Stok bilgisi yok', tone: 'neutral' as const };
+}
+
 function truncateText(value: string | null | undefined, max = 90) {
   const text = String(value || '').trim();
   if (!text) return '-';
@@ -243,13 +255,17 @@ export default function SystemHealthPage() {
                 <div style={{ border: '1px solid #e5e7eb', borderRadius: 14, padding: 14, background: '#f9fafb' }}>
                   <div style={{ fontSize: 15, fontWeight: 900, color: '#111827', marginBottom: 10 }}>Son Varyantlar</div>
                   <div style={{ display: 'grid', gap: 10 }}>
-                    {topVariants.length > 0 ? topVariants.map((item) => (
-                      <div key={item.id} style={{ borderBottom: '1px solid #e5e7eb', paddingBottom: 8 }}>
-                        <div style={{ fontWeight: 900, color: '#111827' }}>{item.productName}</div>
-                        <div style={{ color: '#6b7280', fontSize: 13 }}>{item.color || '-'} / {item.size || '-'} · {item.stockQty} stok</div>
-                        <div style={{ marginTop: 4 }}><StatusPill label={item.stockStatus || 'Stok bilgisi yok'} tone={item.stockStatus === 'in_stock' ? 'success' : 'neutral'} /></div>
-                      </div>
-                    )) : <div style={{ color: '#6b7280', fontSize: 13 }}>Varyant önizlemesi yok.</div>}
+                    {topVariants.length > 0 ? topVariants.map((item) => {
+                      const stockStatus = mapStockStatus(item.stockStatus);
+
+                      return (
+                        <div key={item.id} style={{ borderBottom: '1px solid #e5e7eb', paddingBottom: 8 }}>
+                          <div style={{ fontWeight: 900, color: '#111827' }}>{item.productName}</div>
+                          <div style={{ color: '#6b7280', fontSize: 13 }}>{item.color || '-'} / {item.size || '-'} · {item.stockQty} stok</div>
+                          <div style={{ marginTop: 4 }}><StatusPill label={stockStatus.label} tone={stockStatus.tone} /></div>
+                        </div>
+                      );
+                    }) : <div style={{ color: '#6b7280', fontSize: 13 }}>Varyant önizlemesi yok.</div>}
                   </div>
                 </div>
               </div>
