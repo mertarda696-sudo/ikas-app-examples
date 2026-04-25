@@ -95,31 +95,33 @@ function mapProfile(row: CustomerCrmProfileRow | null, customerWaId: string) {
   };
 }
 
-async function resolveTenant(request: NextRequest) {
-  const user = getUserFromRequest(request);
-
-  if (!user?.merchantId) {
-    return { user, tenant: null, response: NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 }) };
-  }
-
-  const tenant = await getTenantPanelContextByMerchantId(user.merchantId);
-
-  if (!tenant) {
-    return { user, tenant: null, response: NextResponse.json({ ok: false, error: "Tenant not found for merchant" }, { status: 404 }) };
-  }
-
-  return { user, tenant, response: null };
-}
-
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ customerWaId: string }> },
 ) {
   try {
-    const { user, tenant, response } = await resolveTenant(request);
+    const user = getUserFromRequest(request);
 
-    if (response || !tenant || !user?.merchantId) {
-      return response;
+    if (!user?.merchantId) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Unauthorized",
+        },
+        { status: 401 },
+      );
+    }
+
+    const tenant = await getTenantPanelContextByMerchantId(user.merchantId);
+
+    if (!tenant) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Tenant not found for merchant",
+        },
+        { status: 404 },
+      );
     }
 
     const { customerWaId } = await params;
@@ -180,10 +182,28 @@ export async function POST(
   { params }: { params: Promise<{ customerWaId: string }> },
 ) {
   try {
-    const { user, tenant, response } = await resolveTenant(request);
+    const user = getUserFromRequest(request);
 
-    if (response || !tenant || !user?.merchantId) {
-      return response;
+    if (!user?.merchantId) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Unauthorized",
+        },
+        { status: 401 },
+      );
+    }
+
+    const tenant = await getTenantPanelContextByMerchantId(user.merchantId);
+
+    if (!tenant) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Tenant not found for merchant",
+        },
+        { status: 404 },
+      );
     }
 
     const { customerWaId } = await params;
