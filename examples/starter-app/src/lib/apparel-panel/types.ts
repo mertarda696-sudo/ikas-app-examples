@@ -197,6 +197,13 @@ export type ConversationDetailItem = {
   operatorPriority: string | null;
   operatorNoteUpdatedAt: string | null;
   linkedOperationCases?: LinkedOperationCaseSummary[];
+  crmProfileExists?: boolean;
+  crmTag?: string | null;
+  riskLevel?: string | null;
+  followupStatus?: string | null;
+  crmInternalNote?: string | null;
+  crmReviewedAt?: string | null;
+  crmUpdatedAt?: string | null;
   contextProductName: string | null;
   messages: ConversationMessageItem[];
 };
