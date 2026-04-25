@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import { CustomerProfileLink } from '@/components/apparel-panel/CustomerProfileLink';
 import { AppShell } from '@/components/apparel-panel/AppShell';
 import { TokenHelpers } from '@/helpers/token-helpers';
 
@@ -512,8 +513,11 @@ export default function OperationsPage() {
                         </td>
 
                         <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
-                          {row.customerWaId || '-'}
-                        </td>
+  <div style={{ display: 'grid', gap: 4 }}>
+    <span>{row.customerWaId || '-'}</span>
+    <CustomerProfileLink customerWaId={row.customerWaId} compact />
+  </div>
+</td>
 
                         <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
                           {row.linkedOrderId || '-'}
