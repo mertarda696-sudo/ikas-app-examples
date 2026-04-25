@@ -22,6 +22,11 @@ const NAV_ITEMS: NavItem[] = [
     hint: 'Konuşmalar',
   },
   {
+    href: '/operator-actions',
+    label: 'Aksiyon Merkezi',
+    hint: 'Operatör kuyruğu',
+  },
+  {
     href: '/orders',
     label: 'Siparişler',
     hint: 'Sipariş ve ödeme',
