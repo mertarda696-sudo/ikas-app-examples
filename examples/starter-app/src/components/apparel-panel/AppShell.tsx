@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import React from 'react';
+import { DashboardOperationsHub } from '@/components/apparel-panel/DashboardOperationsHub';
 
 type NavItem = {
   href: string;
@@ -64,6 +65,7 @@ function isActivePath(pathname: string, href: string) {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const showDashboardOperationsHub = pathname === '/dashboard';
 
   return (
     <div
@@ -180,7 +182,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
         </aside>
 
-        <div style={{ minWidth: 0 }}>{children}</div>
+        <div style={{ minWidth: 0 }}>
+          {showDashboardOperationsHub ? (
+            <div style={{ maxWidth: 1200, margin: '0 auto', padding: '20px 20px 0' }}>
+              <DashboardOperationsHub />
+            </div>
+          ) : null}
+          {children}
+        </div>
       </div>
     </div>
   );
