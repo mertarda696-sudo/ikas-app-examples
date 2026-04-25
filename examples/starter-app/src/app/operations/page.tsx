@@ -35,6 +35,13 @@ type OperationCaseItem = {
   conversationId: string | null;
   createdAt: string | null;
   updatedAt: string | null;
+  crmProfileExists?: boolean;
+  crmTag?: string | null;
+  riskLevel?: string | null;
+  followupStatus?: string | null;
+  crmInternalNote?: string | null;
+  crmReviewedAt?: string | null;
+  crmUpdatedAt?: string | null;
 };
 
 type OperationCasesResponse = {
@@ -107,6 +114,33 @@ function mapStatusLabel(status: string | null | undefined) {
   return status || '-';
 }
 
+function mapCrmTagLabel(tag: string | null | undefined) {
+  const normalized = String(tag || 'general').toLowerCase();
+  if (normalized === 'vip_customer') return 'VIP müşteri';
+  if (normalized === 'risky_customer') return 'Riskli müşteri';
+  if (normalized === 'high_return_tendency') return 'İade eğilimi yüksek';
+  if (normalized === 'needs_followup') return 'Tekrar takip edilecek';
+  if (normalized === 'delivery_issue') return 'Problemli teslimat';
+  if (normalized === 'hot_lead') return 'Potansiyel sıcak lead';
+  return 'Genel müşteri';
+}
+
+function mapRiskLevelLabel(level: string | null | undefined) {
+  const normalized = String(level || 'normal').toLowerCase();
+  if (normalized === 'low') return 'Düşük';
+  if (normalized === 'high') return 'Yüksek';
+  if (normalized === 'critical') return 'Kritik';
+  return 'Normal';
+}
+
+function mapFollowupStatusLabel(status: string | null | undefined) {
+  const normalized = String(status || 'none').toLowerCase();
+  if (normalized === 'follow_up') return 'Takip edilecek';
+  if (normalized === 'waiting_customer') return 'Müşteri bekleniyor';
+  if (normalized === 'operator_action_required') return 'Operatör aksiyonu gerekli';
+  return 'Takip gerekmiyor';
+}
+
 function Pill({
   label,
   tone,
@@ -155,6 +189,19 @@ function statusTone(status: string | null | undefined) {
   return 'neutral' as const;
 }
 
+function riskTone(level: string | null | undefined) {
+  if (level === 'critical' || level === 'high') return 'danger' as const;
+  if (level === 'low') return 'success' as const;
+  return 'info' as const;
+}
+
+function followupTone(status: string | null | undefined) {
+  if (status === 'operator_action_required') return 'danger' as const;
+  if (status === 'waiting_customer') return 'warning' as const;
+  if (status === 'follow_up') return 'info' as const;
+  return 'neutral' as const;
+}
+
 function MetricCard({
   label,
   value,
@@ -173,15 +220,9 @@ function MetricCard({
         padding: 18,
       }}
     >
-      <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>
-        {label}
-      </div>
-      <div style={{ fontSize: 28, fontWeight: 800, color: '#111827' }}>
-        {value}
-      </div>
-      <div style={{ marginTop: 8, fontSize: 13, color: '#6b7280', lineHeight: 1.6 }}>
-        {helper}
-      </div>
+      <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>{label}</div>
+      <div style={{ fontSize: 28, fontWeight: 800, color: '#111827' }}>{value}</div>
+      <div style={{ marginTop: 8, fontSize: 13, color: '#6b7280', lineHeight: 1.6 }}>{helper}</div>
     </div>
   );
 }
@@ -200,14 +241,7 @@ export default function OperationsPage() {
         const iframeToken = await TokenHelpers.getTokenForIframeApp();
 
         if (!iframeToken) {
-          setData({
-            ok: false,
-            fetchedAt: new Date().toISOString(),
-            tenant: null,
-            metrics: { total: 0, open: 0, highPriority: 0, evidence: 0 },
-            items: [],
-            error: 'iFrame JWT token alınamadı.',
-          });
+          setData({ ok: false, fetchedAt: new Date().toISOString(), tenant: null, metrics: { total: 0, open: 0, highPriority: 0, evidence: 0 }, items: [], error: 'iFrame JWT token alınamadı.' });
           return;
         }
 
@@ -219,14 +253,7 @@ export default function OperationsPage() {
         const raw = await response.json();
         setData(raw);
       } catch (error) {
-        setData({
-          ok: false,
-          fetchedAt: new Date().toISOString(),
-          tenant: null,
-          metrics: { total: 0, open: 0, highPriority: 0, evidence: 0 },
-          items: [],
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
+        setData({ ok: false, fetchedAt: new Date().toISOString(), tenant: null, metrics: { total: 0, open: 0, highPriority: 0, evidence: 0 }, items: [], error: error instanceof Error ? error.message : 'Unknown error' });
       } finally {
         setLoading(false);
       }
@@ -242,96 +269,62 @@ export default function OperationsPage() {
     return items.filter((item) => item.caseType === activeType);
   }, [activeType, items]);
 
-  const metrics = data?.metrics || {
-    total: 0,
-    open: 0,
-    highPriority: 0,
-    evidence: 0,
-  };
+  const metrics = data?.metrics || { total: 0, open: 0, highPriority: 0, evidence: 0 };
+  const crmAlertCount = items.filter((item) => item.crmProfileExists && (item.riskLevel === 'high' || item.riskLevel === 'critical' || item.followupStatus === 'operator_action_required')).length;
 
   const handleUpdateCaseStatus = async (caseId: string, status: string) => {
-  try {
-    setActionError(null);
-    setActionSuccess(null);
-    setUpdatingCaseId(caseId);
+    try {
+      setActionError(null);
+      setActionSuccess(null);
+      setUpdatingCaseId(caseId);
 
-    const iframeToken = await TokenHelpers.getTokenForIframeApp();
+      const iframeToken = await TokenHelpers.getTokenForIframeApp();
 
-    if (!iframeToken) {
-      setActionError('iFrame JWT token alınamadı.');
-      return;
+      if (!iframeToken) {
+        setActionError('iFrame JWT token alınamadı.');
+        return;
+      }
+
+      const updateResponse = await fetch(`/api/apparel/operation-cases/${caseId}/status`, {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { Authorization: 'JWT ' + iframeToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+
+      const updateRaw = await updateResponse.json();
+
+      if (!updateResponse.ok || !updateRaw?.ok) {
+        throw new Error(updateRaw?.error || 'Vaka durumu güncellenemedi.');
+      }
+
+      const listResponse = await fetch('/api/apparel/operation-cases', {
+        cache: 'no-store',
+        headers: { Authorization: 'JWT ' + iframeToken },
+      });
+
+      const listRaw = await listResponse.json();
+      setData(listRaw);
+      setActionSuccess(`Vaka durumu güncellendi: ${mapStatusLabel(status)}`);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Vaka durumu güncellenirken hata oluştu.');
+    } finally {
+      setUpdatingCaseId(null);
     }
-
-    const updateResponse = await fetch(`/api/apparel/operation-cases/${caseId}/status`, {
-      method: 'POST',
-      cache: 'no-store',
-      headers: {
-        Authorization: 'JWT ' + iframeToken,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ status }),
-    });
-
-    const updateRaw = await updateResponse.json();
-
-    if (!updateResponse.ok || !updateRaw?.ok) {
-      throw new Error(updateRaw?.error || 'Vaka durumu güncellenemedi.');
-    }
-
-    const listResponse = await fetch('/api/apparel/operation-cases', {
-      cache: 'no-store',
-      headers: { Authorization: 'JWT ' + iframeToken },
-    });
-
-    const listRaw = await listResponse.json();
-    setData(listRaw);
-
-    setActionSuccess(`Vaka durumu güncellendi: ${mapStatusLabel(status)}`);
-  } catch (error) {
-    setActionError(
-      error instanceof Error
-        ? error.message
-        : 'Vaka durumu güncellenirken hata oluştu.',
-    );
-  } finally {
-    setUpdatingCaseId(null);
-  }
-};
+  };
 
   return (
     <AppShell>
       <main style={{ maxWidth: 1280, margin: '0 auto', padding: 24, minHeight: '100vh' }}>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            gap: 16,
-            alignItems: 'flex-start',
-            flexWrap: 'wrap',
-            marginBottom: 20,
-          }}
-        >
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 20 }}>
           <div>
-            <h1 style={{ fontSize: 30, fontWeight: 800, marginBottom: 8 }}>
-              Operasyonlar
-            </h1>
+            <h1 style={{ fontSize: 30, fontWeight: 800, marginBottom: 8 }}>Operasyonlar</h1>
             <p style={{ color: '#4b5563', margin: 0, lineHeight: 1.7 }}>
               Konuşmalardan oluşturulan iade, kargo, ödeme, beden ve destek vakalarını canlı operasyon kuyruğunda izleyin.
             </p>
           </div>
 
-          <div
-            style={{
-              border: '1px dashed #d1d5db',
-              borderRadius: 16,
-              background: '#ffffff',
-              padding: 14,
-              color: '#6b7280',
-              maxWidth: 360,
-              fontSize: 13,
-              lineHeight: 1.6,
-            }}
-          >
+          <div style={{ border: '1px dashed #d1d5db', borderRadius: 16, background: '#ffffff', padding: 14, color: '#6b7280', maxWidth: 360, fontSize: 13, lineHeight: 1.6 }}>
             Bu sayfa artık placeholder değil. Kayıtlar Supabase operation_cases tablosundan canlı okunur.
           </div>
         </div>
@@ -339,66 +332,24 @@ export default function OperationsPage() {
         {loading ? (
           <div>Yükleniyor...</div>
         ) : data?.error ? (
-          <div
-            style={{
-              border: '1px solid #fecaca',
-              background: '#fef2f2',
-              color: '#991b1b',
-              borderRadius: 14,
-              padding: 16,
-              fontWeight: 700,
-            }}
-          >
-            {data.error}
-          </div>
+          <div style={{ border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b', borderRadius: 14, padding: 16, fontWeight: 700 }}>{data.error}</div>
         ) : (
           <>
-            <section
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                gap: 12,
-                marginBottom: 16,
-              }}
-            >
+            <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 16 }}>
               <MetricCard label="Toplam Vaka" value={metrics.total} helper="Bu tenant için toplam operasyon kaydı." />
               <MetricCard label="Açık Vaka" value={metrics.open} helper="Açık, incelenen veya müşteri bekleyen vakalar." />
               <MetricCard label="Yüksek / Kritik" value={metrics.highPriority} helper="Yüksek veya kritik öncelikli kayıtlar." />
+              <MetricCard label="CRM Uyarısı" value={crmAlertCount} helper="Riskli veya operatör aksiyonu isteyen müşteri vakaları." />
               <MetricCard label="Kanıt / Not İçeren" value={metrics.evidence} helper="Kanıt özeti veya kanıt durumu dolu vakalar." />
             </section>
 
-            <section
-              style={{
-                border: '1px solid #e5e7eb',
-                borderRadius: 18,
-                background: '#ffffff',
-                padding: 18,
-                marginBottom: 16,
-              }}
-            >
-              <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
-                Vaka Tipleri
-              </div>
-
+            <section style={{ border: '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', padding: 18, marginBottom: 16 }}>
+              <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>Vaka Tipleri</div>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 {TYPE_OPTIONS.map((option) => {
                   const active = activeType === option.key;
-
                   return (
-                    <button
-                      key={option.key}
-                      onClick={() => setActiveType(option.key)}
-                      style={{
-                        border: active ? '1px solid #111827' : '1px solid #d1d5db',
-                        background: active ? '#111827' : '#ffffff',
-                        color: active ? '#ffffff' : '#111827',
-                        borderRadius: 999,
-                        padding: '9px 14px',
-                        fontSize: 13,
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                      }}
-                    >
+                    <button key={option.key} onClick={() => setActiveType(option.key)} style={{ border: active ? '1px solid #111827' : '1px solid #d1d5db', background: active ? '#111827' : '#ffffff', color: active ? '#ffffff' : '#111827', borderRadius: 999, padding: '9px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
                       {option.label}
                     </button>
                   );
@@ -406,196 +357,79 @@ export default function OperationsPage() {
               </div>
             </section>
 
-            {actionError ? (
-  <div
-    style={{
-      border: '1px solid #fecaca',
-      background: '#fef2f2',
-      color: '#991b1b',
-      borderRadius: 14,
-      padding: 14,
-      marginBottom: 16,
-      fontSize: 14,
-      fontWeight: 700,
-    }}
-  >
-    {actionError}
-  </div>
-) : null}
+            {actionError ? <div style={{ border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b', borderRadius: 14, padding: 14, marginBottom: 16, fontSize: 14, fontWeight: 700 }}>{actionError}</div> : null}
+            {actionSuccess ? <div style={{ border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#166534', borderRadius: 14, padding: 14, marginBottom: 16, fontSize: 14, fontWeight: 700 }}>{actionSuccess}</div> : null}
 
-{actionSuccess ? (
-  <div
-    style={{
-      border: '1px solid #bbf7d0',
-      background: '#f0fdf4',
-      color: '#166534',
-      borderRadius: 14,
-      padding: 14,
-      marginBottom: 16,
-      fontSize: 14,
-      fontWeight: 700,
-    }}
-  >
-    {actionSuccess}
-  </div>
-) : null}
-
-            <section
-              style={{
-                border: '1px solid #e5e7eb',
-                borderRadius: 18,
-                background: '#ffffff',
-                overflow: 'hidden',
-              }}
-            >
-              <div
-                style={{
-                  padding: 18,
-                  borderBottom: '1px solid #e5e7eb',
-                  fontSize: 18,
-                  fontWeight: 800,
-                }}
-              >
-                Operasyon Listesi
-              </div>
+            <section style={{ border: '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', overflow: 'hidden' }}>
+              <div style={{ padding: 18, borderBottom: '1px solid #e5e7eb', fontSize: 18, fontWeight: 800 }}>Operasyon Listesi</div>
 
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1180 }}>
                   <thead>
                     <tr style={{ background: '#f9fafb' }}>
-                      {[
-                        'Vaka No',
-                        'Tip',
-                        'Başlık',
-                        'Müşteri',
-                        'Sipariş',
-                        'Öncelik',
-                        'Durum',
-                        'Kanıt',
-                        'Son Güncelleme',
-                        'Konuşma',
-                      ].map((header) => (
-                        <th
-                          key={header}
-                          style={{
-                            textAlign: 'left',
-                            padding: 14,
-                            fontSize: 13,
-                            color: '#6b7280',
-                            fontWeight: 800,
-                            borderBottom: '1px solid #e5e7eb',
-                          }}
-                        >
-                          {header}
-                        </th>
+                      {['Vaka No', 'Tip', 'Başlık', 'Müşteri', 'Sipariş', 'Öncelik', 'Durum', 'Kanıt', 'Son Güncelleme', 'Konuşma'].map((header) => (
+                        <th key={header} style={{ textAlign: 'left', padding: 14, fontSize: 13, color: '#6b7280', fontWeight: 800, borderBottom: '1px solid #e5e7eb' }}>{header}</th>
                       ))}
                     </tr>
                   </thead>
 
                   <tbody>
-                    {rows.map((row) => (
-                      <tr key={row.id}>
-                        <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6', fontWeight: 700 }}>
-                          {row.caseNo || '-'}
-                        </td>
+                    {rows.map((row) => {
+                      const hasCrmSignal = Boolean(row.crmProfileExists && (row.crmTag !== 'general' || row.riskLevel !== 'normal' || row.followupStatus !== 'none' || row.crmInternalNote));
+                      return (
+                        <tr key={row.id}>
+                          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6', fontWeight: 700 }}>{row.caseNo || '-'}</td>
+                          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}><Pill label={mapTypeLabel(row.caseType)} tone="info" /></td>
+                          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
+                            <div style={{ fontWeight: 800 }}>{row.title || '-'}</div>
+                            {row.description ? <div style={{ marginTop: 4, color: '#6b7280', fontSize: 13, lineHeight: 1.5 }}>{row.description}</div> : null}
+                          </td>
 
-                        <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
-                          <Pill label={mapTypeLabel(row.caseType)} tone="info" />
-                        </td>
-
-                        <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
-                          <div style={{ fontWeight: 800 }}>{row.title || '-'}</div>
-                          {row.description ? (
-                            <div style={{ marginTop: 4, color: '#6b7280', fontSize: 13, lineHeight: 1.5 }}>
-                              {row.description}
+                          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
+                            <div style={{ display: 'grid', gap: 6, minWidth: 190 }}>
+                              <span>{row.customerWaId || '-'}</span>
+                              <CustomerProfileLink customerWaId={row.customerWaId} compact />
+                              {hasCrmSignal ? <Pill label={`CRM: ${mapCrmTagLabel(row.crmTag)}`} tone="info" /> : null}
+                              {hasCrmSignal ? <Pill label={`Risk: ${mapRiskLevelLabel(row.riskLevel)}`} tone={riskTone(row.riskLevel)} /> : null}
+                              {hasCrmSignal ? <Pill label={`Takip: ${mapFollowupStatusLabel(row.followupStatus)}`} tone={followupTone(row.followupStatus)} /> : null}
+                              {row.crmInternalNote ? <Pill label="CRM notu var" tone="neutral" /> : null}
                             </div>
-                          ) : null}
-                        </td>
+                          </td>
 
-                        <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
-  <div style={{ display: 'grid', gap: 4 }}>
-    <span>{row.customerWaId || '-'}</span>
-    <CustomerProfileLink customerWaId={row.customerWaId} compact />
-  </div>
-</td>
+                          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>{row.linkedOrderId || '-'}</td>
+                          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}><Pill label={mapPriorityLabel(row.priority)} tone={priorityTone(row.priority)} /></td>
 
-                        <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
-                          {row.linkedOrderId || '-'}
-                        </td>
-
-                        <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
-                          <Pill label={mapPriorityLabel(row.priority)} tone={priorityTone(row.priority)} />
-                        </td>
-
-                       <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
-  <div style={{ display: 'grid', gap: 8, minWidth: 170 }}>
-    <Pill label={mapStatusLabel(row.status)} tone={statusTone(row.status)} />
-
-    <select
-      value={row.status || 'open'}
-      onChange={(event) => handleUpdateCaseStatus(row.id, event.target.value)}
-      disabled={updatingCaseId === row.id}
-      style={{
-        border: '1px solid #d1d5db',
-        borderRadius: 10,
-        padding: '8px 10px',
-        background: updatingCaseId === row.id ? '#f3f4f6' : '#ffffff',
-        color: '#111827',
-        fontSize: 13,
-        fontWeight: 700,
-        cursor: updatingCaseId === row.id ? 'not-allowed' : 'pointer',
-      }}
-    >
-      {STATUS_OPTIONS.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
-
-    {updatingCaseId === row.id ? (
-      <span style={{ color: '#6b7280', fontSize: 12 }}>
-        Güncelleniyor...
-      </span>
-    ) : null}
-  </div>
-</td>
-
-                        <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
-                          {row.evidenceSummary || row.evidenceState ? (
-                            <div style={{ display: 'grid', gap: 4 }}>
-                              <span>{row.evidenceSummary || '-'}</span>
-                              <Pill label={row.evidenceState || 'Kanıt durumu yok'} tone="warning" />
+                          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
+                            <div style={{ display: 'grid', gap: 8, minWidth: 170 }}>
+                              <Pill label={mapStatusLabel(row.status)} tone={statusTone(row.status)} />
+                              <select value={row.status || 'open'} onChange={(event) => handleUpdateCaseStatus(row.id, event.target.value)} disabled={updatingCaseId === row.id} style={{ border: '1px solid #d1d5db', borderRadius: 10, padding: '8px 10px', background: updatingCaseId === row.id ? '#f3f4f6' : '#ffffff', color: '#111827', fontSize: 13, fontWeight: 700, cursor: updatingCaseId === row.id ? 'not-allowed' : 'pointer' }}>
+                                {STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                              </select>
+                              {updatingCaseId === row.id ? <span style={{ color: '#6b7280', fontSize: 12 }}>Güncelleniyor...</span> : null}
                             </div>
-                          ) : (
-                            '-'
-                          )}
-                        </td>
+                          </td>
 
-                        <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6', color: '#6b7280' }}>
-                          {formatDate(row.updatedAt || row.createdAt)}
-                        </td>
+                          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
+                            {row.evidenceSummary || row.evidenceState ? (
+                              <div style={{ display: 'grid', gap: 4 }}>
+                                <span>{row.evidenceSummary || '-'}</span>
+                                <Pill label={row.evidenceState || 'Kanıt durumu yok'} tone="warning" />
+                              </div>
+                            ) : '-'}
+                          </td>
 
-                        <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
-                          {row.conversationId ? (
-                            <Link
-                              href={`/inbox/${row.conversationId}`}
-                              style={{ textDecoration: 'none', color: '#111827', fontWeight: 700 }}
-                            >
-                              Konuşmaya Git →
-                            </Link>
-                          ) : (
-                            '-'
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6', color: '#6b7280' }}>{formatDate(row.updatedAt || row.createdAt)}</td>
+
+                          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
+                            {row.conversationId ? <Link href={`/inbox/${row.conversationId}`} style={{ textDecoration: 'none', color: '#111827', fontWeight: 700 }}>Konuşmaya Git →</Link> : '-'}
+                          </td>
+                        </tr>
+                      );
+                    })}
 
                     {rows.length === 0 ? (
                       <tr>
-                        <td colSpan={10} style={{ padding: 18, color: '#6b7280' }}>
-                          Seçili filtrede gösterilecek operasyon kaydı bulunmuyor.
-                        </td>
+                        <td colSpan={10} style={{ padding: 18, color: '#6b7280' }}>Seçili filtrede gösterilecek operasyon kaydı bulunmuyor.</td>
                       </tr>
                     ) : null}
                   </tbody>
