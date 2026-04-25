@@ -240,9 +240,16 @@ export function OperatorActionSummaryBox() {
                     <div style={{ fontWeight: 900, color: '#111827', marginBottom: 4 }}>{item.title}</div>
                     <div style={{ color: '#4b5563', fontSize: 13, lineHeight: 1.6, marginBottom: 8 }}>{item.detail}</div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                      <Link href={item.href} style={{ color: '#111827', fontWeight: 900, textDecoration: 'none', fontSize: 13 }}>
-                        {item.cta} →
-                      </Link>
+                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                        <Link href={item.href} style={{ color: '#111827', fontWeight: 900, textDecoration: 'none', fontSize: 13 }}>
+                          {item.cta} →
+                        </Link>
+                        {item.customerWaId ? (
+                          <Link href={`/customers/${encodeURIComponent(item.customerWaId)}`} style={{ color: '#111827', fontWeight: 900, textDecoration: 'none', fontSize: 13 }}>
+                            Müşteri Profiline Git →
+                          </Link>
+                        ) : null}
+                      </div>
                       <span style={{ color: '#6b7280', fontSize: 12, fontWeight: 700 }}>{formatDate(item.updatedAt)}</span>
                     </div>
                   </div>
