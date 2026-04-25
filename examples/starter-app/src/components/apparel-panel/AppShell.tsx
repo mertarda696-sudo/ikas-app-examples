@@ -37,6 +37,11 @@ const NAV_ITEMS: NavItem[] = [
     hint: 'Vaka merkezi',
   },
   {
+    href: '/evidence',
+    label: 'Kanıtlar',
+    hint: 'Medya ve dekont',
+  },
+  {
     href: '/catalog',
     label: 'Katalog',
     hint: 'Ürün ve varyant',
