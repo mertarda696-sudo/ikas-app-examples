@@ -115,7 +115,9 @@ function hasEvidenceSignal(item: OperationCaseItem) {
     String(item.evidenceSummary || '').trim() ||
       String(item.evidenceState || '').trim() ||
       item.caseType === 'damaged_product' ||
-      item.caseType === 'payment_proof',
+      item.caseType === 'payment_proof' ||
+      item.caseType === 'shipping_delivery' ||
+      item.caseType === 'return_exchange',
   );
 }
 
@@ -306,7 +308,7 @@ export default function EvidencePage() {
         ) : (
           <div style={{ display: 'grid', gap: 16 }}>
             <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
-              <MetricCard label="Kanıt Adayı" value={metrics.evidenceCandidateCount} helper="Kanıt özeti, kanıt durumu veya medya gerektiren vaka tipi olan kayıtlar" tone={metrics.evidenceCandidateCount > 0 ? 'info' : 'neutral'} />
+              <MetricCard label="Kanıt Adayı" value={metrics.evidenceCandidateCount} helper="Kanıt özeti, kanıt durumu veya medya gerektirebilecek operasyon kayıtları" tone={metrics.evidenceCandidateCount > 0 ? 'info' : 'neutral'} />
               <MetricCard label="Hasarlı Ürün" value={metrics.damagedCount} helper="Fotoğraf/video kanıtı gerektirebilecek hasarlı ürün vakaları" tone={metrics.damagedCount > 0 ? 'warning' : 'success'} />
               <MetricCard label="Ödeme / Dekont" value={metrics.paymentProofCount} helper="Dekont veya ödeme kanıtı gerektirebilecek vakalar" tone={metrics.paymentProofCount > 0 ? 'info' : 'success'} />
               <MetricCard label="Kargo / Teslimat" value={metrics.shippingCount} helper="Kargo paketi, teslimat veya takip kanıtı ile ilişkili vakalar" tone={metrics.shippingCount > 0 ? 'info' : 'success'} />
