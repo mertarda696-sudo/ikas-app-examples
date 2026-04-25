@@ -21,6 +21,13 @@ type OperationCaseRow = {
   conversation_id: string | null;
   created_at: Date | string | null;
   updated_at: Date | string | null;
+  crm_profile_exists: boolean | null;
+  crm_tag: string | null;
+  risk_level: string | null;
+  followup_status: string | null;
+  crm_internal_note: string | null;
+  crm_reviewed_at: Date | string | null;
+  crm_updated_at: Date | string | null;
 };
 
 type CountRow = {
@@ -86,35 +93,51 @@ export async function GET(request: NextRequest) {
     const [rows, totalRows, openRows, highPriorityRows, evidenceRows] = await Promise.all([
       prisma.$queryRaw<OperationCaseRow[]>`
         select
-          id,
-          case_no,
-          case_type,
-          title,
-          description,
-          priority,
-          status,
-          source_channel,
-          customer_wa_id,
-          linked_order_id,
-          evidence_summary,
-          evidence_state,
-          assigned_to,
-          created_by,
-          conversation_id,
-          created_at,
-          updated_at
-        from public.operation_cases
-        where tenant_id = CAST(${tenant.tenantId} AS uuid)
+          oc.id,
+          oc.case_no,
+          oc.case_type,
+          oc.title,
+          oc.description,
+          oc.priority,
+          oc.status,
+          oc.source_channel,
+          oc.customer_wa_id,
+          oc.linked_order_id,
+          oc.evidence_summary,
+          oc.evidence_state,
+          oc.assigned_to,
+          oc.created_by,
+          oc.conversation_id,
+          oc.created_at,
+          oc.updated_at,
+          (ccp.id is not null) as crm_profile_exists,
+          coalesce(ccp.crm_tag, 'general') as crm_tag,
+          coalesce(ccp.risk_level, 'normal') as risk_level,
+          coalesce(ccp.followup_status, 'none') as followup_status,
+          ccp.internal_note as crm_internal_note,
+          ccp.reviewed_at as crm_reviewed_at,
+          ccp.updated_at as crm_updated_at
+        from public.operation_cases oc
+        left join public.customer_crm_profiles ccp
+          on ccp.tenant_id = oc.tenant_id
+         and ccp.customer_wa_id = oc.customer_wa_id
+        where oc.tenant_id = CAST(${tenant.tenantId} AS uuid)
         order by
           case
-            when priority = 'critical' then 4
-            when priority = 'high' then 3
-            when priority = 'normal' then 2
-            when priority = 'low' then 1
+            when oc.priority = 'critical' then 4
+            when oc.priority = 'high' then 3
+            when oc.priority = 'normal' then 2
+            when oc.priority = 'low' then 1
             else 0
           end desc,
-          updated_at desc nulls last,
-          created_at desc nulls last
+          case
+            when coalesce(ccp.risk_level, 'normal') = 'critical' then 4
+            when coalesce(ccp.risk_level, 'normal') = 'high' then 3
+            when coalesce(ccp.followup_status, 'none') = 'operator_action_required' then 2
+            else 0
+          end desc,
+          oc.updated_at desc nulls last,
+          oc.created_at desc nulls last
         limit 100
       `,
       prisma.$queryRaw<CountRow[]>`
@@ -174,6 +197,13 @@ export async function GET(request: NextRequest) {
           conversationId: row.conversation_id,
           createdAt: toIso(row.created_at),
           updatedAt: toIso(row.updated_at),
+          crmProfileExists: Boolean(row.crm_profile_exists),
+          crmTag: row.crm_tag || "general",
+          riskLevel: row.risk_level || "normal",
+          followupStatus: row.followup_status || "none",
+          crmInternalNote: row.crm_internal_note,
+          crmReviewedAt: toIso(row.crm_reviewed_at),
+          crmUpdatedAt: toIso(row.crm_updated_at),
         })),
       },
       { status: 200 },
