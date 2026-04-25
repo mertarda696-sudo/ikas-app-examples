@@ -2,7 +2,9 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import { ConversationCrmAlertBox } from '@/components/apparel-panel/ConversationCrmAlertBox';
 import { TokenHelpers } from '@/helpers/token-helpers';
+import type { ConversationDetailItem, ConversationDetailResponse } from '@/lib/apparel-panel/types';
 
 type OperationCaseItem = {
   id: string;
@@ -133,6 +135,7 @@ export function LinkedOperationCasesBox({
   conversationId: string;
 }) {
   const [items, setItems] = useState<OperationCaseItem[]>([]);
+  const [crmConversation, setCrmConversation] = useState<ConversationDetailItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -141,6 +144,7 @@ export function LinkedOperationCasesBox({
       try {
         setLoading(true);
         setError(null);
+        setCrmConversation(null);
 
         const iframeToken = await TokenHelpers.getTokenForIframeApp();
 
@@ -149,18 +153,30 @@ export function LinkedOperationCasesBox({
           return;
         }
 
-        const response = await fetch('/api/apparel/operation-cases', {
-          cache: 'no-store',
-          headers: { Authorization: 'JWT ' + iframeToken },
-        });
+        const [casesResponse, conversationResponse] = await Promise.all([
+          fetch('/api/apparel/operation-cases', {
+            cache: 'no-store',
+            headers: { Authorization: 'JWT ' + iframeToken },
+          }),
+          fetch(`/api/apparel/conversations/${conversationId}`, {
+            cache: 'no-store',
+            headers: { Authorization: 'JWT ' + iframeToken },
+          }),
+        ]);
 
-        const raw = (await response.json()) as OperationCasesResponse;
+        const rawCases = (await casesResponse.json()) as OperationCasesResponse;
 
-        if (!response.ok || !raw?.ok) {
-          throw new Error(raw?.error || 'Operasyon kayıtları alınamadı.');
+        if (!casesResponse.ok || !rawCases?.ok) {
+          throw new Error(rawCases?.error || 'Operasyon kayıtları alınamadı.');
         }
 
-        setItems(raw.items || []);
+        setItems(rawCases.items || []);
+
+        const rawConversation = (await conversationResponse.json().catch(() => null)) as ConversationDetailResponse | null;
+
+        if (conversationResponse.ok && rawConversation?.ok && rawConversation.conversation) {
+          setCrmConversation(rawConversation.conversation);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Operasyon kayıtları alınırken hata oluştu.');
       } finally {
@@ -169,7 +185,7 @@ export function LinkedOperationCasesBox({
     };
 
     run();
-  }, []);
+  }, [conversationId]);
 
   const linkedCases = useMemo(
     () => items.filter((item) => item.conversationId === conversationId),
@@ -177,91 +193,95 @@ export function LinkedOperationCasesBox({
   );
 
   return (
-    <section
-      style={{
-        border: '1px solid #e5e7eb',
-        borderRadius: 18,
-        background: '#ffffff',
-        padding: 18,
-      }}
-    >
-      <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
-        Bağlı Operasyon Kayıtları
-      </div>
+    <>
+      {crmConversation ? <ConversationCrmAlertBox conversation={crmConversation} /> : null}
 
-      {loading ? (
-        <div style={{ color: '#6b7280', fontSize: 13 }}>Operasyon kayıtları yükleniyor...</div>
-      ) : error ? (
-        <div
-          style={{
-            border: '1px solid #fecaca',
-            background: '#fef2f2',
-            color: '#991b1b',
-            borderRadius: 12,
-            padding: 12,
-            fontSize: 13,
-            fontWeight: 700,
-          }}
-        >
-          {error}
+      <section
+        style={{
+          border: '1px solid #e5e7eb',
+          borderRadius: 18,
+          background: '#ffffff',
+          padding: 18,
+        }}
+      >
+        <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
+          Bağlı Operasyon Kayıtları
         </div>
-      ) : linkedCases.length === 0 ? (
-        <div style={{ color: '#6b7280', fontSize: 13, lineHeight: 1.6 }}>
-          Bu konuşmaya bağlı operasyon kaydı henüz yok.
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gap: 10 }}>
-          {linkedCases.map((caseItem) => (
-            <div
-              key={caseItem.id}
-              style={{
-                border: '1px solid #e5e7eb',
-                borderRadius: 14,
-                background: '#f9fafb',
-                padding: 12,
-              }}
-            >
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-                <Badge label={caseItem.caseNo || 'Vaka'} tone="info" />
-                <Badge label={mapCaseTypeLabel(caseItem.caseType)} tone="warning" />
-                <Badge label={mapStatusLabel(caseItem.status)} tone={statusTone(caseItem.status)} />
-                <Badge
-                  label={`Öncelik: ${mapPriorityLabel(caseItem.priority)}`}
-                  tone={priorityTone(caseItem.priority)}
-                />
-              </div>
 
-              <div style={{ fontWeight: 800, color: '#111827', lineHeight: 1.4 }}>
-                {caseItem.title || 'Başlıksız operasyon kaydı'}
-              </div>
-
-              {caseItem.description ? (
-                <div style={{ marginTop: 6, color: '#4b5563', fontSize: 13, lineHeight: 1.5 }}>
-                  {caseItem.description}
-                </div>
-              ) : null}
-
-              <div style={{ marginTop: 8, color: '#6b7280', fontSize: 12 }}>
-                Son güncelleme: {formatDate(caseItem.updatedAt || caseItem.createdAt)}
-              </div>
-
-              <Link
-                href="/operations"
+        {loading ? (
+          <div style={{ color: '#6b7280', fontSize: 13 }}>Operasyon kayıtları yükleniyor...</div>
+        ) : error ? (
+          <div
+            style={{
+              border: '1px solid #fecaca',
+              background: '#fef2f2',
+              color: '#991b1b',
+              borderRadius: 12,
+              padding: 12,
+              fontSize: 13,
+              fontWeight: 700,
+            }}
+          >
+            {error}
+          </div>
+        ) : linkedCases.length === 0 ? (
+          <div style={{ color: '#6b7280', fontSize: 13, lineHeight: 1.6 }}>
+            Bu konuşmaya bağlı operasyon kaydı henüz yok.
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: 10 }}>
+            {linkedCases.map((caseItem) => (
+              <div
+                key={caseItem.id}
                 style={{
-                  display: 'inline-block',
-                  marginTop: 10,
-                  textDecoration: 'none',
-                  fontSize: 13,
-                  fontWeight: 800,
-                  color: '#111827',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: 14,
+                  background: '#f9fafb',
+                  padding: 12,
                 }}
               >
-                Operasyonlar ekranında gör →
-              </Link>
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                  <Badge label={caseItem.caseNo || 'Vaka'} tone="info" />
+                  <Badge label={mapCaseTypeLabel(caseItem.caseType)} tone="warning" />
+                  <Badge label={mapStatusLabel(caseItem.status)} tone={statusTone(caseItem.status)} />
+                  <Badge
+                    label={`Öncelik: ${mapPriorityLabel(caseItem.priority)}`}
+                    tone={priorityTone(caseItem.priority)}
+                  />
+                </div>
+
+                <div style={{ fontWeight: 800, color: '#111827', lineHeight: 1.4 }}>
+                  {caseItem.title || 'Başlıksız operasyon kaydı'}
+                </div>
+
+                {caseItem.description ? (
+                  <div style={{ marginTop: 6, color: '#4b5563', fontSize: 13, lineHeight: 1.5 }}>
+                    {caseItem.description}
+                  </div>
+                ) : null}
+
+                <div style={{ marginTop: 8, color: '#6b7280', fontSize: 12 }}>
+                  Son güncelleme: {formatDate(caseItem.updatedAt || caseItem.createdAt)}
+                </div>
+
+                <Link
+                  href="/operations"
+                  style={{
+                    display: 'inline-block',
+                    marginTop: 10,
+                    textDecoration: 'none',
+                    fontSize: 13,
+                    fontWeight: 800,
+                    color: '#111827',
+                  }}
+                >
+                  Operasyonlar ekranında gör →
+                </Link>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </>
   );
 }
