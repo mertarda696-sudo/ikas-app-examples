@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/apparel-panel/AppShell';
+import { CustomerProfileLink } from '@/components/apparel-panel/CustomerProfileLink';
 import { TokenHelpers } from '@/helpers/token-helpers';
 import type { InboxListResponse } from '@/lib/apparel-panel/types';
 import {
@@ -399,9 +400,8 @@ export default function InboxPage() {
                                   : { border: '1px solid #e5e7eb', background: '#f9fafb', color: '#374151' };
 
                   return (
-                    <Link
+                    <div
                       key={item.id}
-                      href={`/inbox/${item.id}`}
                       style={{ textDecoration: 'none', border: responseState.needsReply || operatorPriority === 'high' || linkedCase ? '1px solid #bfdbfe' : '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', padding: 18, color: '#111827', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}
                     >
                       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(280px, 0.95fr)', gap: 16, alignItems: 'stretch' }}>
@@ -443,6 +443,16 @@ export default function InboxPage() {
                               Aktif ürün bağlamı: {item.contextProductName}
                             </div>
                           ) : null}
+
+                          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 12 }}>
+                            <Link
+                              href={`/inbox/${item.id}`}
+                              style={{ textDecoration: 'none', color: '#111827', fontWeight: 800, fontSize: 13 }}
+                            >
+                              Konuşma Detayına Git →
+                            </Link>
+                            <CustomerProfileLink customerWaId={item.customerId} compact />
+                          </div>
                         </div>
 
                         <div style={{ borderRadius: 16, padding: 14, ...recommendationBoxStyle }}>
@@ -480,7 +490,7 @@ export default function InboxPage() {
                           </div>
                         </div>
                       </div>
-                    </Link>
+                    </div>
                   );
                 })}
               </div>
