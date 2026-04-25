@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { AppShell } from '@/components/apparel-panel/AppShell';
+import { CustomerOperationCaseBox } from '@/components/apparel-panel/CustomerOperationCaseBox';
 import { TokenHelpers } from '@/helpers/token-helpers';
 
 type CustomerConversation = {
@@ -413,6 +414,8 @@ export default function CustomerProfilePage() {
               </div>
 
               <aside style={{ display: 'grid', gap: 16 }}>
+                <CustomerOperationCaseBox customerWaId={customer.waId} />
+
                 <InfoCard title="Hızlı Bakış">
                   <div style={{ display: 'grid', gap: 10, color: '#374151', lineHeight: 1.6 }}>
                     <div><strong>Son konuşma:</strong> {latestConversation ? formatDate(latestConversation.lastMessageAt || latestConversation.createdAt) : '-'}</div>
