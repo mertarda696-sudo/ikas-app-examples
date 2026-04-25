@@ -125,11 +125,54 @@ function mapOperatorPriorityLabel(priority: string | null | undefined) {
   return 'Normal öncelik';
 }
 
+function mapCrmTagLabel(tag: string | null | undefined) {
+  const normalized = String(tag || 'general').toLowerCase();
+  if (normalized === 'vip_customer') return 'VIP müşteri';
+  if (normalized === 'risky_customer') return 'Riskli müşteri';
+  if (normalized === 'high_return_tendency') return 'İade eğilimi yüksek';
+  if (normalized === 'needs_followup') return 'Tekrar takip edilecek';
+  if (normalized === 'delivery_issue') return 'Problemli teslimat';
+  if (normalized === 'hot_lead') return 'Potansiyel sıcak lead';
+  return 'Genel müşteri';
+}
+
+function mapRiskLevelLabel(level: string | null | undefined) {
+  const normalized = String(level || 'normal').toLowerCase();
+  if (normalized === 'low') return 'Düşük';
+  if (normalized === 'high') return 'Yüksek';
+  if (normalized === 'critical') return 'Kritik';
+  return 'Normal';
+}
+
+function mapFollowupStatusLabel(status: string | null | undefined) {
+  const normalized = String(status || 'none').toLowerCase();
+  if (normalized === 'follow_up') return 'Takip edilecek';
+  if (normalized === 'waiting_customer') return 'Müşteri bekleniyor';
+  if (normalized === 'operator_action_required') return 'Operatör aksiyonu gerekli';
+  return 'Takip gerekmiyor';
+}
+
 function getOperatorPriorityTone(priority: string | null | undefined): 'neutral' | 'success' | 'warning' | 'info' | 'danger' {
   const normalized = String(priority || 'normal').toLowerCase();
   if (normalized === 'high') return 'danger';
   if (normalized === 'low') return 'neutral';
   return 'info';
+}
+
+function getRiskLevelTone(level: string | null | undefined): 'neutral' | 'success' | 'warning' | 'info' | 'danger' {
+  const normalized = String(level || 'normal').toLowerCase();
+  if (normalized === 'critical') return 'danger';
+  if (normalized === 'high') return 'danger';
+  if (normalized === 'low') return 'success';
+  return 'info';
+}
+
+function getFollowupStatusTone(status: string | null | undefined): 'neutral' | 'success' | 'warning' | 'info' | 'danger' {
+  const normalized = String(status || 'none').toLowerCase();
+  if (normalized === 'operator_action_required') return 'danger';
+  if (normalized === 'waiting_customer') return 'warning';
+  if (normalized === 'follow_up') return 'info';
+  return 'neutral';
 }
 
 function getCasePriorityTone(priority: string | null | undefined): 'neutral' | 'success' | 'warning' | 'info' | 'danger' {
@@ -315,6 +358,16 @@ export default function InboxPage() {
         const bp = b.operatorPriority === 'high' ? 1 : 0;
         if (ap !== bp) return bp - ap;
 
+        const riskRank = (value: string | null | undefined) => {
+          if (value === 'critical') return 3;
+          if (value === 'high') return 2;
+          if (value === 'normal') return 1;
+          return 0;
+        };
+        const arisk = riskRank(a.riskLevel);
+        const brisk = riskRank(b.riskLevel);
+        if (arisk !== brisk) return brisk - arisk;
+
         const at = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
         const bt = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
         return bt - at;
@@ -327,8 +380,9 @@ export default function InboxPage() {
     const closedCount = items.filter((item) => String(item.status).toLowerCase() === 'closed').length;
     const productContextCount = items.filter((item) => item.contextProductName).length;
     const waitingReplyCount = items.filter((item) => getResponseState(item).needsReply).length;
+    const crmAlertCount = items.filter((item) => item.crmProfileExists && (item.riskLevel === 'high' || item.riskLevel === 'critical' || item.followupStatus === 'operator_action_required')).length;
 
-    return { openCount, closedCount, productContextCount, waitingReplyCount };
+    return { openCount, closedCount, productContextCount, waitingReplyCount, crmAlertCount };
   }, [items]);
 
   return (
@@ -363,6 +417,7 @@ export default function InboxPage() {
               <MetricCard label="Açık Konuşma" value={metrics.openCount} helper="Aktif müşteri konuşmaları" />
               <MetricCard label="Yanıt Bekleyen Mesaj" value={metrics.waitingReplyCount} helper="Operatör cevabı veya incelemesi bekleyen açık konuşmalar" />
               <MetricCard label="Ürün Bağlamlı" value={metrics.productContextCount} helper="Aktif ürün bağlamı olan konuşmalar" />
+              <MetricCard label="CRM Uyarısı" value={metrics.crmAlertCount} helper="Yüksek riskli veya operatör aksiyonu isteyen müşteriler" />
               <MetricCard label="Kapalı Konuşma" value={metrics.closedCount} helper="Kapanmış kayıtlar" />
             </section>
 
@@ -381,28 +436,32 @@ export default function InboxPage() {
                   const hasOperatorNote = Boolean(String(item.operatorNote || '').trim());
                   const hasOperatorTag = Boolean(String(item.operatorTag || '').trim());
                   const operatorPriority = String(item.operatorPriority || 'normal').toLowerCase();
+                  const hasCrmSignal = Boolean(item.crmProfileExists && (item.crmTag !== 'general' || item.riskLevel !== 'normal' || item.followupStatus !== 'none' || item.crmInternalNote));
+                  const hasCriticalCrmSignal = item.riskLevel === 'critical' || item.riskLevel === 'high' || item.followupStatus === 'operator_action_required';
 
                   const recommendationBoxStyle =
                     responseState.needsReply
                       ? { border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b' }
-                      : linkedCase
-                        ? { border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8' }
-                        : operatorPriority === 'high'
-                          ? { border: '1px solid #fecaca', background: '#fff7ed', color: '#9a3412' }
-                          : responseState.reviewedAfterCustomer
-                            ? { border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8' }
-                            : recommendation.tone === 'success'
-                              ? { border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#166534' }
-                              : recommendation.tone === 'warning'
-                                ? { border: '1px solid #fde68a', background: '#fffbeb', color: '#92400e' }
-                                : recommendation.tone === 'info'
-                                  ? { border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8' }
-                                  : { border: '1px solid #e5e7eb', background: '#f9fafb', color: '#374151' };
+                      : hasCriticalCrmSignal
+                        ? { border: '1px solid #fecaca', background: '#fff7ed', color: '#9a3412' }
+                        : linkedCase
+                          ? { border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8' }
+                          : operatorPriority === 'high'
+                            ? { border: '1px solid #fecaca', background: '#fff7ed', color: '#9a3412' }
+                            : responseState.reviewedAfterCustomer
+                              ? { border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8' }
+                              : recommendation.tone === 'success'
+                                ? { border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#166534' }
+                                : recommendation.tone === 'warning'
+                                  ? { border: '1px solid #fde68a', background: '#fffbeb', color: '#92400e' }
+                                  : recommendation.tone === 'info'
+                                    ? { border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8' }
+                                    : { border: '1px solid #e5e7eb', background: '#f9fafb', color: '#374151' };
 
                   return (
                     <div
                       key={item.id}
-                      style={{ textDecoration: 'none', border: responseState.needsReply || operatorPriority === 'high' || linkedCase ? '1px solid #bfdbfe' : '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', padding: 18, color: '#111827', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}
+                      style={{ textDecoration: 'none', border: responseState.needsReply || operatorPriority === 'high' || linkedCase || hasCriticalCrmSignal ? '1px solid #bfdbfe' : '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', padding: 18, color: '#111827', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}
                     >
                       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(280px, 0.95fr)', gap: 16, alignItems: 'stretch' }}>
                         <div>
@@ -414,6 +473,7 @@ export default function InboxPage() {
                             {hasOperatorTag ? <SmallBadge label={mapOperatorTagLabel(item.operatorTag)} tone="warning" /> : null}
                             {item.operatorPriority ? <SmallBadge label={mapOperatorPriorityLabel(item.operatorPriority)} tone={getOperatorPriorityTone(item.operatorPriority)} /> : null}
                             {hasOperatorNote ? <SmallBadge label="Not var" tone="neutral" /> : null}
+                            {hasCrmSignal ? <SmallBadge label="CRM kaydı var" tone={hasCriticalCrmSignal ? 'danger' : 'info'} /> : null}
                           </div>
 
                           <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.7, marginBottom: 10 }}>
@@ -428,6 +488,10 @@ export default function InboxPage() {
                             {linkedCase ? <SmallBadge label={mapCaseTypeLabel(linkedCase.caseType)} tone="warning" /> : null}
                             {linkedCase?.priority ? <SmallBadge label={`Vaka önceliği: ${mapCasePriorityLabel(linkedCase.priority)}`} tone={getCasePriorityTone(linkedCase.priority)} /> : null}
                             {linkedCase?.status ? <SmallBadge label={`Vaka durumu: ${mapCaseStatusLabel(linkedCase.status)}`} tone={getCaseStatusTone(linkedCase.status)} /> : null}
+                            {hasCrmSignal ? <SmallBadge label={`CRM: ${mapCrmTagLabel(item.crmTag)}`} tone="info" /> : null}
+                            {hasCrmSignal ? <SmallBadge label={`Risk: ${mapRiskLevelLabel(item.riskLevel)}`} tone={getRiskLevelTone(item.riskLevel)} /> : null}
+                            {hasCrmSignal ? <SmallBadge label={`Takip: ${mapFollowupStatusLabel(item.followupStatus)}`} tone={getFollowupStatusTone(item.followupStatus)} /> : null}
+                            {item.crmInternalNote ? <SmallBadge label="CRM notu var" tone="neutral" /> : null}
                             {responseState.reviewedAfterCustomer ? <SmallBadge label={`İnceleme: ${formatDate(item.operatorReviewedAt)}`} tone="info" /> : null}
                             {item.operatorNoteUpdatedAt ? <SmallBadge label={`Not: ${formatDate(item.operatorNoteUpdatedAt)}`} tone="neutral" /> : null}
                           </div>
@@ -435,6 +499,12 @@ export default function InboxPage() {
                           {hasOperatorNote ? (
                             <div style={{ marginBottom: 10, border: '1px solid #e5e7eb', borderRadius: 12, padding: '8px 10px', background: '#f9fafb', color: '#4b5563', fontSize: 13, lineHeight: 1.6 }}>
                               <strong>Operatör notu:</strong> {item.operatorNote}
+                            </div>
+                          ) : null}
+
+                          {item.crmInternalNote ? (
+                            <div style={{ marginBottom: 10, border: '1px solid #fde68a', borderRadius: 12, padding: '8px 10px', background: '#fffbeb', color: '#92400e', fontSize: 13, lineHeight: 1.6 }}>
+                              <strong>CRM iç notu:</strong> {item.crmInternalNote}
                             </div>
                           ) : null}
 
@@ -463,29 +533,33 @@ export default function InboxPage() {
                           <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 8, lineHeight: 1.4 }}>
                             {responseState.needsReply
                               ? 'Müşteriye yanıt ver veya incele'
-                              : linkedCase
-                                ? 'Bağlı operasyon vakası var'
-                                : operatorPriority === 'high'
-                                  ? 'Yüksek öncelikli takip'
-                                  : responseState.reviewedAfterCustomer
-                                    ? 'İncelendi, takip gerekmiyor'
-                                    : recommendation.title}
+                              : hasCriticalCrmSignal
+                                ? 'CRM uyarısını dikkate al'
+                                : linkedCase
+                                  ? 'Bağlı operasyon vakası var'
+                                  : operatorPriority === 'high'
+                                    ? 'Yüksek öncelikli takip'
+                                    : responseState.reviewedAfterCustomer
+                                      ? 'İncelendi, takip gerekmiyor'
+                                      : recommendation.title}
                           </div>
 
                           <div style={{ fontSize: 13, lineHeight: 1.7, marginBottom: 12 }}>
                             {responseState.needsReply
                               ? 'Müşteriye AI cevap vermiş olabilir; operatör manuel yanıt vermediği veya incelemediği için bu konuşma hâlâ yanıt kuyruğunda.'
-                              : linkedCase
-                                ? `${linkedCase.caseNo || 'Operasyon vakası'} bu konuşmaya bağlı. Operasyonlar ekranından takip edilebilir.`
-                                : operatorPriority === 'high'
-                                  ? 'Operatör bu konuşmayı yüksek öncelikli işaretledi. Not ve etiket detayını kontrol edin.'
-                                  : responseState.reviewedAfterCustomer
-                                    ? 'Operatör AI cevabını yeterli gördü. Müşteriye ek WhatsApp mesajı gönderilmeden kuyruktan düşürüldü.'
-                                    : recommendation.helper}
+                              : hasCriticalCrmSignal
+                                ? `Bu müşteri CRM tarafında ${mapCrmTagLabel(item.crmTag)} / ${mapRiskLevelLabel(item.riskLevel)} risk / ${mapFollowupStatusLabel(item.followupStatus)} olarak işaretli.`
+                                : linkedCase
+                                  ? `${linkedCase.caseNo || 'Operasyon vakası'} bu konuşmaya bağlı. Operasyonlar ekranından takip edilebilir.`
+                                  : operatorPriority === 'high'
+                                    ? 'Operatör bu konuşmayı yüksek öncelikli işaretledi. Not ve etiket detayını kontrol edin.'
+                                    : responseState.reviewedAfterCustomer
+                                      ? 'Operatör AI cevabını yeterli gördü. Müşteriye ek WhatsApp mesajı gönderilmeden kuyruktan düşürüldü.'
+                                      : recommendation.helper}
                           </div>
 
                           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                            <SmallBadge label={responseState.needsReply ? 'Yanıt kuyruğu' : linkedCase ? 'Operasyon bağlı' : operatorPriority === 'high' ? 'Yüksek öncelik' : responseState.reviewedAfterCustomer ? 'İncelendi' : recommendation.queueLabel} tone={responseState.needsReply ? 'danger' : linkedCase ? 'info' : operatorPriority === 'high' ? 'danger' : responseState.reviewedAfterCustomer ? 'info' : recommendation.tone} />
+                            <SmallBadge label={responseState.needsReply ? 'Yanıt kuyruğu' : hasCriticalCrmSignal ? 'CRM uyarısı' : linkedCase ? 'Operasyon bağlı' : operatorPriority === 'high' ? 'Yüksek öncelik' : responseState.reviewedAfterCustomer ? 'İncelendi' : recommendation.queueLabel} tone={responseState.needsReply ? 'danger' : hasCriticalCrmSignal ? 'danger' : linkedCase ? 'info' : operatorPriority === 'high' ? 'danger' : responseState.reviewedAfterCustomer ? 'info' : recommendation.tone} />
                             <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.85 }}>{formatDate(item.lastMessageAt)}</div>
                           </div>
                         </div>
