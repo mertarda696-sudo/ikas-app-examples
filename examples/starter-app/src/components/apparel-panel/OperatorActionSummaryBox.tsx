@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { TokenHelpers } from '@/helpers/token-helpers';
+import { mapCrmTagLabel, mapFollowupStatusLabel } from '@/lib/apparel-panel/labels';
 
 type OperatorActionSummaryMetrics = {
   waitingReplyConversationCount: number;
@@ -117,6 +118,13 @@ function riskTone(riskLevel: string | null | undefined): 'neutral' | 'success' |
   if (riskLevel === 'critical' || riskLevel === 'high') return 'danger';
   if (riskLevel === 'low') return 'success';
   return 'info';
+}
+
+function followupTone(followupStatus: string | null | undefined): 'neutral' | 'success' | 'warning' | 'info' | 'danger' {
+  if (followupStatus === 'operator_action_required') return 'danger';
+  if (followupStatus === 'waiting_customer') return 'warning';
+  if (followupStatus === 'follow_up') return 'info';
+  return 'neutral';
 }
 
 export function OperatorActionSummaryBox() {
@@ -236,6 +244,8 @@ export function OperatorActionSummaryBox() {
                       <Badge label={mapPriorityLabel(item.priority)} tone={priorityTone(item.priority)} />
                       <Badge label={mapStatusLabel(item.status)} tone="info" />
                       <Badge label={mapRiskLabel(item.riskLevel)} tone={riskTone(item.riskLevel)} />
+                      {item.crmTag && item.crmTag !== 'general' ? <Badge label={mapCrmTagLabel(item.crmTag)} tone="info" /> : null}
+                      {item.followupStatus && item.followupStatus !== 'none' ? <Badge label={mapFollowupStatusLabel(item.followupStatus)} tone={followupTone(item.followupStatus)} /> : null}
                     </div>
                     <div style={{ fontWeight: 900, color: '#111827', marginBottom: 4 }}>{item.title}</div>
                     <div style={{ color: '#4b5563', fontSize: 13, lineHeight: 1.6, marginBottom: 8 }}>{item.detail}</div>
