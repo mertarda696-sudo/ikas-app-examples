@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
 import { getConversationDetailByMerchantId } from "@/lib/apparel-panel/queries";
+import { mapCaseTypeLabel } from "@/lib/apparel-panel/labels";
 
 type CrmProfileRow = {
   crm_tag: string | null;
@@ -98,6 +99,9 @@ export async function GET(
         ...result,
         conversation: {
           ...result.conversation,
+          operatorTag: result.conversation.operatorTag
+            ? mapCaseTypeLabel(result.conversation.operatorTag)
+            : result.conversation.operatorTag,
           crmProfileExists: Boolean(crm),
           crmTag: crm?.crmTag || "general",
           riskLevel: crm?.riskLevel || "normal",
