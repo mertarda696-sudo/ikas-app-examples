@@ -1,494 +1,381 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { AppShell } from '@/components/apparel-panel/AppShell';
+import { CustomerProfileLink } from '@/components/apparel-panel/CustomerProfileLink';
+import { TokenHelpers } from '@/helpers/token-helpers';
 import {
-  getCaseDetail,
-  getCaseEvidence,
-  type PanelEvidenceStatus,
-  type PanelEvidenceType,
-} from '@/lib/apparel-panel/panel-relations';
+  mapCaseTypeLabel,
+  mapCrmTagLabel,
+  mapEvidenceStateLabel,
+  mapFollowupStatusLabel,
+  mapPriorityLabel,
+  mapRiskLevelLabel,
+  mapStatusLabel,
+} from '@/lib/apparel-panel/labels';
 
-function MetricCard({
-  label,
-  value,
-  helper,
-}: {
-  label: string;
-  value: string | number;
-  helper?: string;
-}) {
+type OperationCaseDetail = {
+  id: string;
+  caseNo: string | null;
+  caseType: string | null;
+  title: string | null;
+  description: string | null;
+  priority: string | null;
+  status: string | null;
+  sourceChannel: string | null;
+  customerWaId: string | null;
+  linkedOrderId: string | null;
+  evidenceSummary: string | null;
+  evidenceState: string | null;
+  assignedTo: string | null;
+  createdBy: string | null;
+  conversationId: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  resolvedAt: string | null;
+  closedAt: string | null;
+  crmProfileExists: boolean;
+  crmTag: string | null;
+  riskLevel: string | null;
+  followupStatus: string | null;
+  crmInternalNote: string | null;
+  crmReviewedAt: string | null;
+  crmUpdatedAt: string | null;
+};
+
+type OperationCaseDetailResponse = {
+  ok: boolean;
+  fetchedAt: string;
+  tenant: unknown | null;
+  operationCase: OperationCaseDetail | null;
+  error?: string;
+};
+
+const STATUS_OPTIONS = [
+  { value: 'open', label: 'Açık' },
+  { value: 'in_progress', label: 'İnceleniyor' },
+  { value: 'waiting_customer', label: 'Müşteri Bekleniyor' },
+  { value: 'resolved', label: 'Çözüldü' },
+  { value: 'closed', label: 'Kapalı' },
+];
+
+function formatDate(value: string | null | undefined) {
+  if (!value) return '-';
+  try {
+    return new Date(value).toLocaleString('tr-TR');
+  } catch {
+    return value;
+  }
+}
+
+function Badge({ label, tone }: { label: string; tone: 'neutral' | 'success' | 'warning' | 'info' | 'danger' }) {
+  const styles =
+    tone === 'success'
+      ? { background: '#ecfdf5', color: '#065f46' }
+      : tone === 'warning'
+        ? { background: '#fffbeb', color: '#92400e' }
+        : tone === 'info'
+          ? { background: '#eff6ff', color: '#1d4ed8' }
+          : tone === 'danger'
+            ? { background: '#fef2f2', color: '#991b1b' }
+            : { background: '#f3f4f6', color: '#374151' };
+
   return (
-    <div
-      style={{
-        border: '1px solid #e5e7eb',
-        borderRadius: 18,
-        background: '#ffffff',
-        padding: 18,
-      }}
-    >
-      <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>{label}</div>
-      <div style={{ fontSize: 20, fontWeight: 800, color: '#111827' }}>{value}</div>
-      {helper ? (
-        <div style={{ marginTop: 8, fontSize: 13, color: '#6b7280', lineHeight: 1.6 }}>
-          {helper}
-        </div>
-      ) : null}
+    <span style={{ display: 'inline-flex', borderRadius: 999, padding: '5px 10px', fontSize: 12, fontWeight: 900, ...styles }}>
+      {label}
+    </span>
+  );
+}
+
+function statusTone(status: string | null | undefined): 'neutral' | 'success' | 'warning' | 'info' | 'danger' {
+  if (status === 'resolved' || status === 'closed') return 'success';
+  if (status === 'open') return 'info';
+  if (status === 'in_progress' || status === 'waiting_customer') return 'warning';
+  return 'neutral';
+}
+
+function priorityTone(priority: string | null | undefined): 'neutral' | 'success' | 'warning' | 'info' | 'danger' {
+  if (priority === 'critical' || priority === 'high') return 'danger';
+  if (priority === 'low') return 'neutral';
+  return 'info';
+}
+
+function riskTone(level: string | null | undefined): 'neutral' | 'success' | 'warning' | 'info' | 'danger' {
+  if (level === 'critical' || level === 'high') return 'danger';
+  if (level === 'low') return 'success';
+  return 'info';
+}
+
+function followupTone(status: string | null | undefined): 'neutral' | 'success' | 'warning' | 'info' | 'danger' {
+  if (status === 'operator_action_required') return 'danger';
+  if (status === 'waiting_customer') return 'warning';
+  if (status === 'follow_up') return 'info';
+  return 'neutral';
+}
+
+function evidenceTone(state: string | null | undefined): 'neutral' | 'success' | 'warning' | 'info' | 'danger' {
+  if (state === 'verified') return 'success';
+  if (state === 'received') return 'info';
+  if (state === 'requested' || state === 'missing') return 'warning';
+  if (state === 'rejected') return 'danger';
+  return 'neutral';
+}
+
+function InfoCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section style={{ border: '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', padding: 18 }}>
+      <div style={{ fontSize: 18, fontWeight: 900, color: '#111827', marginBottom: 12 }}>{title}</div>
+      {children}
+    </section>
+  );
+}
+
+function FieldRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '150px minmax(0, 1fr)', gap: 10, padding: '9px 0', borderBottom: '1px solid #f3f4f6', fontSize: 14 }}>
+      <div style={{ color: '#6b7280', fontWeight: 800 }}>{label}</div>
+      <div style={{ color: '#111827', lineHeight: 1.6, minWidth: 0, overflowWrap: 'anywhere' }}>{value}</div>
     </div>
   );
 }
 
-function typeLabel(type: PanelEvidenceType) {
-  if (type === 'image') return 'Görsel';
-  if (type === 'video') return 'Video';
-  if (type === 'audio') return 'Ses';
-  return 'Belge';
+function getRecommendedAction(operationCase: OperationCaseDetail) {
+  if (operationCase.status === 'resolved' || operationCase.status === 'closed') {
+    return {
+      title: 'Vaka kapanış kontrolünde',
+      helper: 'Vaka çözülmüş veya kapalı görünüyor. Gerekirse konuşma, sipariş ve kanıt bağlarını arşiv kontrolü için açın.',
+      tone: 'success' as const,
+    };
+  }
+
+  if (operationCase.riskLevel === 'critical' || operationCase.priority === 'critical') {
+    return {
+      title: 'Kritik öncelikli işlem',
+      helper: 'Bu vaka hızlı operatör kontrolü gerektiriyor. Önce müşteri profili, konuşma ve sipariş bağlantılarını doğrulayın.',
+      tone: 'danger' as const,
+    };
+  }
+
+  if (operationCase.riskLevel === 'high' || operationCase.priority === 'high' || operationCase.followupStatus === 'operator_action_required') {
+    return {
+      title: 'Öncelikli takip gerekli',
+      helper: 'CRM riski, yüksek öncelik veya operatör aksiyonu sinyali var. Vaka durumunu güncel tutun ve gerekiyorsa müşteriye konuşmadan dönüş yapın.',
+      tone: 'warning' as const,
+    };
+  }
+
+  if (operationCase.evidenceState === 'requested' || operationCase.evidenceState === 'missing') {
+    return {
+      title: 'Kanıt bekleniyor',
+      helper: 'Kanıt istenmiş veya eksik görünüyor. Kanıtlar ekranı ve konuşma detayı birlikte kontrol edilmeli.',
+      tone: 'warning' as const,
+    };
+  }
+
+  return {
+    title: 'Normal operasyon takibi',
+    helper: 'Vaka açık ya da inceleniyor olabilir. Konuşma, sipariş ve müşteri profili bağlantıları üzerinden rutin takibi sürdürebilirsiniz.',
+    tone: 'info' as const,
+  };
 }
 
-function typeStyles(type: PanelEvidenceType) {
-  if (type === 'image') {
-    return { background: '#eff6ff', color: '#1d4ed8' };
-  }
-  if (type === 'video') {
-    return { background: '#fef3c7', color: '#92400e' };
-  }
-  if (type === 'audio') {
-    return { background: '#ede9fe', color: '#6d28d9' };
-  }
-  return { background: '#f3f4f6', color: '#374151' };
-}
-
-function statusStyles(status: PanelEvidenceStatus) {
-  if (status === 'Doğrulandı') {
-    return { background: '#ecfdf5', color: '#065f46' };
-  }
-  if (status === 'Arşiv') {
-    return { background: '#f3f4f6', color: '#374151' };
-  }
-  if (status === 'Ek bilgi bekleniyor') {
-    return { background: '#fffbeb', color: '#92400e' };
-  }
-  return { background: '#fef2f2', color: '#991b1b' };
-}
-
-export default function OperationDetailPage() {
+export default function OperationCaseDetailPage() {
   const params = useParams<{ caseId: string }>();
-  const rawCaseId = Array.isArray(params?.caseId) ? params.caseId[0] : params?.caseId;
-  const caseId = rawCaseId || 'OP-301';
+  const caseId = Array.isArray(params?.caseId) ? params.caseId[0] : params?.caseId;
 
-  const detail = getCaseDetail(caseId);
-  const evidenceItems = getCaseEvidence(caseId);
+  const [data, setData] = useState<OperationCaseDetailResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
-  const evidenceCount = evidenceItems.length;
-  const customerUploadCount = evidenceItems.filter((item) =>
-    item.source.toLocaleLowerCase('tr-TR').includes('müşteri'),
-  ).length;
-  const pendingCount = evidenceItems.filter(
-    (item) => item.status === 'İnceleme bekliyor' || item.status === 'Ek bilgi bekleniyor',
-  ).length;
-  const documentCount = evidenceItems.filter((item) => item.type === 'document').length;
+  const loadCase = async (options?: { silent?: boolean }) => {
+    try {
+      if (!caseId) {
+        setData({ ok: false, fetchedAt: new Date().toISOString(), tenant: null, operationCase: null, error: 'caseId bulunamadı.' });
+        return;
+      }
+
+      if (!options?.silent) setLoading(true);
+      const iframeToken = await TokenHelpers.getTokenForIframeApp();
+
+      if (!iframeToken) {
+        setData({ ok: false, fetchedAt: new Date().toISOString(), tenant: null, operationCase: null, error: 'iFrame JWT token alınamadı.' });
+        return;
+      }
+
+      const response = await fetch(`/api/apparel/operation-cases/${encodeURIComponent(caseId)}`, {
+        cache: 'no-store',
+        headers: { Authorization: 'JWT ' + iframeToken },
+      });
+
+      const raw = (await response.json()) as OperationCaseDetailResponse;
+      setData(raw);
+    } catch (error) {
+      setData({ ok: false, fetchedAt: new Date().toISOString(), tenant: null, operationCase: null, error: error instanceof Error ? error.message : 'Unknown error' });
+    } finally {
+      if (!options?.silent) setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadCase();
+  }, [caseId]);
+
+  const operationCase = data?.operationCase || null;
+  const recommendation = useMemo(() => (operationCase ? getRecommendedAction(operationCase) : null), [operationCase]);
+
+  const handleStatusChange = async (status: string) => {
+    try {
+      if (!operationCase) return;
+      setActionError(null);
+      setActionSuccess(null);
+      setUpdatingStatus(true);
+
+      const iframeToken = await TokenHelpers.getTokenForIframeApp();
+
+      if (!iframeToken) {
+        setActionError('iFrame JWT token alınamadı.');
+        return;
+      }
+
+      const response = await fetch(`/api/apparel/operation-cases/${operationCase.id}/status`, {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { Authorization: 'JWT ' + iframeToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+
+      const raw = await response.json();
+
+      if (!response.ok || !raw?.ok) {
+        throw new Error(raw?.error || 'Vaka durumu güncellenemedi.');
+      }
+
+      setActionSuccess(`Vaka durumu güncellendi: ${mapStatusLabel(status)}`);
+      await loadCase({ silent: true });
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Vaka durumu güncellenirken hata oluştu.');
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
 
   return (
     <AppShell>
-      <main
-        style={{
-          maxWidth: 1200,
-          margin: '0 auto',
-          padding: 24,
-          minHeight: '100vh',
-        }}
-      >
-        <div style={{ marginBottom: 20 }}>
-          <Link
-            href="/operations"
-            style={{
-              display: 'inline-block',
-              textDecoration: 'none',
-              borderRadius: 10,
-              padding: '8px 12px',
-              background: '#ffffff',
-              color: '#111827',
-              border: '1px solid #e5e7eb',
-              fontWeight: 700,
-              marginBottom: 14,
-            }}
-          >
-            ← Operasyonlara dön
-          </Link>
-
-          <h1 style={{ fontSize: 30, fontWeight: 800, marginBottom: 8 }}>
-            Operasyon Detayı
-          </h1>
-          <p style={{ color: '#4b5563', margin: 0, lineHeight: 1.7 }}>
-            Bu ekran vaka, sipariş ve müşteri kanıtlarını tek merkezde toplar. Ayrıntılı
-            medya / dekont / belge inceleme yüzeyi burada konumlanır.
-          </p>
+      <main style={{ maxWidth: 1220, margin: '0 auto', padding: 24, minHeight: '100vh' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 18 }}>
+          <div>
+            <Link href="/operations" style={{ display: 'inline-block', textDecoration: 'none', borderRadius: 10, padding: '8px 12px', background: '#ffffff', color: '#111827', border: '1px solid #e5e7eb', fontWeight: 800, marginBottom: 12 }}>
+              ← Operasyonlara dön
+            </Link>
+            <div style={{ fontSize: 12, fontWeight: 900, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.45, marginBottom: 8 }}>
+              Operasyon Vaka Merkezi
+            </div>
+            <h1 style={{ fontSize: 30, fontWeight: 900, color: '#111827', margin: '0 0 8px' }}>Operasyon Vaka Detayı</h1>
+            <p style={{ color: '#4b5563', margin: 0, lineHeight: 1.7, maxWidth: 760 }}>
+              Vakanın konuşma, müşteri, sipariş, CRM ve kanıt bağlantılarını tek ekranda takip edin.
+            </p>
+          </div>
         </div>
 
-        <section
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1.3fr) minmax(320px, 0.95fr)',
-            gap: 16,
-            marginBottom: 16,
-          }}
-        >
-          <div
-            style={{
-              border: '1px solid #e5e7eb',
-              borderRadius: 18,
-              background: '#ffffff',
-              padding: 18,
-            }}
-          >
-            <div style={{ fontSize: 14, color: '#6b7280', marginBottom: 8 }}>Vaka No</div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: '#111827', marginBottom: 8 }}>
-              {detail.id}
+        {loading ? (
+          <div>Yükleniyor...</div>
+        ) : data?.error ? (
+          <div style={{ border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b', borderRadius: 14, padding: 16, fontWeight: 800 }}>{data.error}</div>
+        ) : !operationCase ? (
+          <div style={{ border: '1px dashed #d1d5db', borderRadius: 16, padding: 20, background: '#ffffff', color: '#6b7280' }}>Operasyon vakası bulunamadı.</div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.45fr) minmax(320px, 0.85fr)', gap: 16, alignItems: 'start' }}>
+            <div style={{ display: 'grid', gap: 16 }}>
+              <InfoCard title="Vaka Özeti">
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+                  <Badge label={operationCase.caseNo || 'Vaka'} tone="info" />
+                  <Badge label={mapCaseTypeLabel(operationCase.caseType)} tone="warning" />
+                  <Badge label={mapStatusLabel(operationCase.status)} tone={statusTone(operationCase.status)} />
+                  <Badge label={`Öncelik: ${mapPriorityLabel(operationCase.priority)}`} tone={priorityTone(operationCase.priority)} />
+                  <Badge label={mapEvidenceStateLabel(operationCase.evidenceState)} tone={evidenceTone(operationCase.evidenceState)} />
+                </div>
+
+                <div style={{ fontSize: 20, fontWeight: 900, color: '#111827', marginBottom: 8 }}>{operationCase.title || 'Başlıksız operasyon vakası'}</div>
+                <div style={{ color: '#4b5563', fontSize: 14, lineHeight: 1.7 }}>{operationCase.description || 'Açıklama bulunmuyor.'}</div>
+              </InfoCard>
+
+              <InfoCard title="Vaka Bilgileri">
+                <FieldRow label="Vaka ID" value={operationCase.id} />
+                <FieldRow label="Vaka No" value={operationCase.caseNo || '-'} />
+                <FieldRow label="Tip" value={mapCaseTypeLabel(operationCase.caseType)} />
+                <FieldRow label="Durum" value={mapStatusLabel(operationCase.status)} />
+                <FieldRow label="Öncelik" value={mapPriorityLabel(operationCase.priority)} />
+                <FieldRow label="Kaynak" value={operationCase.sourceChannel || '-'} />
+                <FieldRow label="Oluşturulma" value={formatDate(operationCase.createdAt)} />
+                <FieldRow label="Son güncelleme" value={formatDate(operationCase.updatedAt)} />
+                <FieldRow label="Çözülme" value={formatDate(operationCase.resolvedAt)} />
+                <FieldRow label="Kapanış" value={formatDate(operationCase.closedAt)} />
+              </InfoCard>
+
+              <InfoCard title="Kanıt / Medya Bilgisi">
+                <FieldRow label="Kanıt durumu" value={mapEvidenceStateLabel(operationCase.evidenceState)} />
+                <FieldRow label="Kanıt özeti" value={operationCase.evidenceSummary || 'Henüz kanıt özeti yok.'} />
+                <div style={{ marginTop: 12 }}>
+                  <Link href="/evidence" style={{ textDecoration: 'none', borderRadius: 12, padding: '10px 14px', background: '#111827', color: '#ffffff', fontWeight: 900, display: 'inline-block' }}>
+                    Kanıtlar / Medya Merkezine Git →
+                  </Link>
+                </div>
+              </InfoCard>
             </div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', marginBottom: 8 }}>
-              {detail.title}
-            </div>
-            <div style={{ color: '#4b5563', lineHeight: 1.7 }}>{detail.summary}</div>
-          </div>
 
-          <div
-            style={{
-              border: '1px solid #e5e7eb',
-              borderRadius: 18,
-              background: '#ffffff',
-              padding: 18,
-            }}
-          >
-            <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>
-              Kanıt merkezi özeti
-            </div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: '#111827', marginBottom: 10 }}>
-              {detail.evidenceCenterLabel}
-            </div>
-            <div style={{ color: '#4b5563', lineHeight: 1.7, marginBottom: 12 }}>
-              {detail.reviewSummary}
-            </div>
-            <div
-              style={{
-                borderTop: '1px solid #f3f4f6',
-                paddingTop: 12,
-                color: '#374151',
-                lineHeight: 1.7,
-                fontSize: 13,
-              }}
-            >
-              <strong>Sonraki adım:</strong> {detail.nextAction}
-            </div>
-          </div>
-        </section>
-
-        <section
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: 12,
-            marginBottom: 16,
-          }}
-        >
-          <MetricCard label="Vaka Tipi" value={detail.type} />
-          <MetricCard label="Müşteri" value={detail.customer} />
-          <MetricCard label="Öncelik" value={detail.priority} />
-          <MetricCard label="Kanal" value={detail.channel} />
-          <MetricCard
-            label="Kanıt Sayısı"
-            value={evidenceCount}
-            helper="Bu vakaya bağlı medya / belge kaydı"
-          />
-          <MetricCard
-            label="İnceleme Bekleyen"
-            value={pendingCount}
-            helper="Önce bakılması gereken kanıt adedi"
-          />
-        </section>
-
-        <section
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-            gap: 12,
-            marginBottom: 16,
-          }}
-        >
-          <MetricCard
-            label="Bağlı Sipariş"
-            value={detail.orderId}
-            helper="Sipariş detail ile birlikte değerlendirme yapılabilir."
-          />
-          <MetricCard
-            label="Sorumlu"
-            value={detail.assignee}
-            helper="Bu vakayı kim takip ediyor bilgisi"
-          />
-          <MetricCard
-            label="Müşteri Yüklemesi"
-            value={customerUploadCount}
-            helper="Doğrudan müşteriden gelen kanıt adedi"
-          />
-          <MetricCard
-            label="Belge Sayısı"
-            value={documentCount}
-            helper="PDF, dekont veya form niteliğindeki kayıtlar"
-          />
-        </section>
-
-        <section
-          style={{
-            border: '1px solid #e5e7eb',
-            borderRadius: 18,
-            background: '#ffffff',
-            padding: 18,
-            marginBottom: 16,
-          }}
-        >
-          <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
-            Kanıt Merkezi
-          </div>
-
-          <div style={{ color: '#4b5563', lineHeight: 1.7, marginBottom: 14 }}>
-            Bu alan hasarlı ürün görselleri, dekont, video, ekran görüntüsü ve diğer müşteri
-            kanıtlarının incelendiği ana detay yüzeyidir.
-          </div>
-
-          {evidenceItems.length === 0 ? (
-            <div
-              style={{
-                border: '1px dashed #d1d5db',
-                borderRadius: 14,
-                padding: 16,
-                background: '#fafafa',
-                color: '#6b7280',
-              }}
-            >
-              Bu vaka için bağlı kanıt kaydı görünmüyor.
-            </div>
-          ) : (
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-                gap: 12,
-              }}
-            >
-              {evidenceItems.map((item) => {
-                const typeStyle = typeStyles(item.type);
-                const reviewStyle = statusStyles(item.status);
-
-                return (
-                  <div
-                    key={item.id}
-                    style={{
-                      border: '1px solid #e5e7eb',
-                      borderRadius: 16,
-                      background: '#ffffff',
-                      padding: 16,
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        gap: 8,
-                        alignItems: 'flex-start',
-                        flexWrap: 'wrap',
-                        marginBottom: 10,
-                      }}
-                    >
-                      <span
-                        style={{
-                          display: 'inline-flex',
-                          borderRadius: 999,
-                          padding: '5px 10px',
-                          fontSize: 12,
-                          fontWeight: 700,
-                          ...typeStyle,
-                        }}
-                      >
-                        {typeLabel(item.type)}
-                      </span>
-
-                      <span
-                        style={{
-                          display: 'inline-flex',
-                          borderRadius: 999,
-                          padding: '5px 10px',
-                          fontSize: 12,
-                          fontWeight: 700,
-                          ...reviewStyle,
-                        }}
-                      >
-                        {item.status}
-                      </span>
-                    </div>
-
-                    <div
-                      style={{
-                        fontSize: 16,
-                        fontWeight: 800,
-                        color: '#111827',
-                        marginBottom: 8,
-                        lineHeight: 1.4,
-                      }}
-                    >
-                      {item.title}
-                    </div>
-
-                    <div
-                      style={{
-                        display: 'grid',
-                        gap: 6,
-                        color: '#4b5563',
-                        fontSize: 13,
-                        lineHeight: 1.6,
-                        marginBottom: 10,
-                      }}
-                    >
-                      <div>
-                        <strong>Kaynak:</strong> {item.source}
-                      </div>
-                      <div>
-                        <strong>İlişki:</strong> {item.relation}
-                      </div>
-                      <div>
-                        <strong>Yüklenme:</strong> {item.uploadedAt}
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        borderTop: '1px solid #f3f4f6',
-                        paddingTop: 10,
-                        color: '#374151',
-                        fontSize: 13,
-                        lineHeight: 1.7,
-                      }}
-                    >
-                      {item.note}
-                    </div>
+            <aside style={{ display: 'grid', gap: 16 }}>
+              {recommendation ? (
+                <InfoCard title="Operatör için önerilen sıradaki adım">
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    <Badge label={recommendation.title} tone={recommendation.tone} />
+                    <div style={{ color: '#4b5563', fontSize: 14, lineHeight: 1.7 }}>{recommendation.helper}</div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
+                </InfoCard>
+              ) : null}
 
-        <section
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-            gap: 12,
-            marginBottom: 16,
-          }}
-        >
-          <div
-            style={{
-              border: '1px solid #fde68a',
-              borderRadius: 16,
-              background: '#fffbeb',
-              padding: 16,
-            }}
-          >
-            <div style={{ fontWeight: 800, color: '#92400e', marginBottom: 8 }}>
-              1. Kanıtı önce sınıflandır
-            </div>
-            <div style={{ color: '#4b5563', lineHeight: 1.7 }}>
-              Görsel, video, belge veya ses kaydının gerçekten vakayı destekleyip desteklemediği ilk adımda netleşmeli.
-            </div>
+              <InfoCard title="Durum Güncelle">
+                <div style={{ display: 'grid', gap: 10 }}>
+                  <select value={operationCase.status || 'open'} onChange={(event) => handleStatusChange(event.target.value)} disabled={updatingStatus} style={{ border: '1px solid #d1d5db', borderRadius: 12, padding: '10px 12px', background: updatingStatus ? '#f3f4f6' : '#ffffff', color: '#111827', fontSize: 14, fontWeight: 800, cursor: updatingStatus ? 'not-allowed' : 'pointer' }}>
+                    {STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                  {updatingStatus ? <div style={{ color: '#6b7280', fontSize: 13 }}>Güncelleniyor...</div> : null}
+                  {actionError ? <div style={{ border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b', borderRadius: 12, padding: 12, fontSize: 13, fontWeight: 800 }}>{actionError}</div> : null}
+                  {actionSuccess ? <div style={{ border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#166534', borderRadius: 12, padding: 12, fontSize: 13, fontWeight: 800 }}>{actionSuccess}</div> : null}
+                </div>
+              </InfoCard>
+
+              <InfoCard title="Müşteri ve CRM">
+                <FieldRow label="Müşteri" value={operationCase.customerWaId || '-'} />
+                <div style={{ margin: '10px 0' }}>
+                  <CustomerProfileLink customerWaId={operationCase.customerWaId} compact />
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                  <Badge label={mapCrmTagLabel(operationCase.crmTag)} tone="info" />
+                  <Badge label={`Risk: ${mapRiskLevelLabel(operationCase.riskLevel)}`} tone={riskTone(operationCase.riskLevel)} />
+                  <Badge label={mapFollowupStatusLabel(operationCase.followupStatus)} tone={followupTone(operationCase.followupStatus)} />
+                </div>
+                {operationCase.crmInternalNote ? (
+                  <div style={{ marginTop: 12, border: '1px solid #fde68a', background: '#fffbeb', color: '#92400e', borderRadius: 12, padding: 12, fontSize: 13, lineHeight: 1.6 }}>
+                    <strong>CRM iç notu:</strong> {operationCase.crmInternalNote}
+                  </div>
+                ) : null}
+              </InfoCard>
+
+              <InfoCard title="Bağlı Kayıtlar">
+                <div style={{ display: 'grid', gap: 10 }}>
+                  {operationCase.conversationId ? <Link href={`/inbox/${operationCase.conversationId}`} style={{ textDecoration: 'none', color: '#111827', fontWeight: 900 }}>Konuşmaya Git →</Link> : <span style={{ color: '#6b7280' }}>Konuşma bağı yok</span>}
+                  {operationCase.linkedOrderId ? <Link href={`/orders/${operationCase.linkedOrderId}`} style={{ textDecoration: 'none', color: '#111827', fontWeight: 900 }}>Siparişe Git →</Link> : <span style={{ color: '#6b7280' }}>Sipariş bağı yok</span>}
+                  <Link href="/operations" style={{ textDecoration: 'none', color: '#111827', fontWeight: 900 }}>Operasyonlar Listesine Git →</Link>
+                  <Link href="/operator-actions" style={{ textDecoration: 'none', color: '#111827', fontWeight: 900 }}>Aksiyon Merkezine Git →</Link>
+                </div>
+              </InfoCard>
+            </aside>
           </div>
-
-          <div
-            style={{
-              border: '1px solid #e5e7eb',
-              borderRadius: 16,
-              background: '#ffffff',
-              padding: 16,
-            }}
-          >
-            <div style={{ fontWeight: 800, color: '#111827', marginBottom: 8 }}>
-              2. Sipariş ve konuşmayla eşleştir
-            </div>
-            <div style={{ color: '#4b5563', lineHeight: 1.7 }}>
-              Kanıt, müşteri konuşması ve doğru sipariş kaydı ile birlikte değerlendirildiğinde çözüm daha güvenli ilerler.
-            </div>
-          </div>
-
-          <div
-            style={{
-              border: '1px solid #e5e7eb',
-              borderRadius: 16,
-              background: '#ffffff',
-              padding: 16,
-            }}
-          >
-            <div style={{ fontWeight: 800, color: '#111827', marginBottom: 8 }}>
-              3. Sonra operatör kararını ver
-            </div>
-            <div style={{ color: '#4b5563', lineHeight: 1.7 }}>
-              İnceleme tamamlanınca müşteriye cevap, finans onayı, değişim veya kapanış kararı daha net verilir.
-            </div>
-          </div>
-        </section>
-
-        <section
-          style={{
-            border: '1px solid #e5e7eb',
-            borderRadius: 18,
-            background: '#ffffff',
-            padding: 18,
-          }}
-        >
-          <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>
-            Hızlı Geçişler
-          </div>
-
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <Link
-              href={detail.linkedOrderId ? `/orders/${detail.linkedOrderId}` : '/orders'}
-              style={{
-                textDecoration: 'none',
-                border: '1px solid #e5e7eb',
-                borderRadius: 12,
-                padding: '10px 14px',
-                background: '#ffffff',
-                color: '#111827',
-                fontWeight: 700,
-              }}
-            >
-              Siparişe Git
-            </Link>
-
-            <Link
-              href="/inbox"
-              style={{
-                textDecoration: 'none',
-                border: '1px solid #e5e7eb',
-                borderRadius: 12,
-                padding: '10px 14px',
-                background: '#ffffff',
-                color: '#111827',
-                fontWeight: 700,
-              }}
-            >
-              Mesajlara Git
-            </Link>
-          </div>
-
-          <div
-            style={{
-              marginTop: 12,
-              color: '#6b7280',
-              lineHeight: 1.7,
-              fontSize: 13,
-            }}
-          >
-            Bu ekran artık kanıt inceleme için ana merkezdir; konuşma ve sipariş ekranları bunu yalnız özetler.
-          </div>
-        </section>
+        )}
       </main>
     </AppShell>
   );
