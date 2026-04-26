@@ -46,6 +46,18 @@ function toNumber(value: number | string | null | undefined) {
   return Number.isFinite(num) ? num : 0;
 }
 
+function mapSourceChannelLabel(channel: string | null | undefined) {
+  const normalized = String(channel || "").toLowerCase();
+
+  if (normalized === "whatsapp") return "WhatsApp";
+  if (normalized === "instagram") return "Instagram";
+  if (normalized === "messenger") return "Messenger";
+  if (normalized === "email") return "E-posta";
+  if (normalized === "webchat") return "Web Chat";
+
+  return channel || "Kanal bilgisi yok";
+}
+
 export async function GET(request: NextRequest) {
   try {
     const user = getUserFromRequest(request);
@@ -187,7 +199,7 @@ export async function GET(request: NextRequest) {
           description: row.description,
           priority: row.priority,
           status: row.status,
-          sourceChannel: row.source_channel,
+          sourceChannel: mapSourceChannelLabel(row.source_channel),
           customerWaId: row.customer_wa_id,
           linkedOrderId: row.linked_order_id,
           evidenceSummary: row.evidence_summary,
