@@ -47,6 +47,40 @@ function getMediaCopy(kind: MediaKind) {
   };
 }
 
+function findMessageAreaFromHeader(header: Element) {
+  const bubble = header.parentElement;
+  const row = bubble?.parentElement;
+  const messageArea = row?.parentElement;
+
+  return messageArea instanceof HTMLElement ? messageArea : null;
+}
+
+function makeMessageAreaScrollable(messageArea: HTMLElement | null) {
+  if (!messageArea || messageArea.dataset.scrollableConversationMessages === 'true') return;
+
+  messageArea.dataset.scrollableConversationMessages = 'true';
+  messageArea.style.maxHeight = '620px';
+  messageArea.style.overflowY = 'auto';
+  messageArea.style.overscrollBehavior = 'contain';
+  messageArea.style.paddingRight = '10px';
+  messageArea.style.scrollBehavior = 'smooth';
+
+  window.setTimeout(() => {
+    messageArea.scrollTop = messageArea.scrollHeight;
+  }, 100);
+}
+
+function applyScrollableMessageArea() {
+  const messageHeaders = Array.from(document.querySelectorAll('div')).filter((node) => {
+    const text = String(node.textContent || '').trim().toLowerCase();
+    return text.startsWith('müşteri ·') || text.startsWith('ai asistan ·') || text.startsWith('operatör ·') || text.startsWith('sistem ·');
+  });
+
+  const firstHeader = messageHeaders[0];
+  const messageArea = firstHeader ? findMessageAreaFromHeader(firstHeader) : null;
+  makeMessageAreaScrollable(messageArea);
+}
+
 function addMediaCards() {
   const headers = Array.from(document.querySelectorAll('div'));
 
@@ -119,9 +153,13 @@ function addMediaCards() {
 
 export function MediaMessageEnhancer() {
   useEffect(() => {
+    applyScrollableMessageArea();
     addMediaCards();
 
-    const observer = new MutationObserver(() => addMediaCards());
+    const observer = new MutationObserver(() => {
+      applyScrollableMessageArea();
+      addMediaCards();
+    });
     observer.observe(document.body, { childList: true, subtree: true });
 
     return () => observer.disconnect();
