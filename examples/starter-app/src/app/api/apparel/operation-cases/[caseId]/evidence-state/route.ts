@@ -15,6 +15,8 @@ type OperationCaseEvidenceStateRow = {
   updated_at: Date | string | null;
 };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 const ALLOWED_EVIDENCE_STATES = new Set([
   "requested",
   "received",
@@ -39,6 +41,48 @@ function toIso(value: Date | string | null | undefined): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+async function updateEvidenceStateByUuid(
+  tenantId: string,
+  caseId: string,
+  evidenceState: string,
+) {
+  return prisma.$queryRaw<OperationCaseEvidenceStateRow[]>`
+    update public.operation_cases
+    set
+      evidence_state = ${evidenceState},
+      updated_at = now()
+    where id = CAST(${caseId} AS uuid)
+      and tenant_id = CAST(${tenantId} AS uuid)
+    returning
+      id,
+      case_no,
+      evidence_state,
+      evidence_summary,
+      updated_at
+  `;
+}
+
+async function updateEvidenceStateByCaseNo(
+  tenantId: string,
+  caseNo: string,
+  evidenceState: string,
+) {
+  return prisma.$queryRaw<OperationCaseEvidenceStateRow[]>`
+    update public.operation_cases
+    set
+      evidence_state = ${evidenceState},
+      updated_at = now()
+    where case_no = ${caseNo}
+      and tenant_id = CAST(${tenantId} AS uuid)
+    returning
+      id,
+      case_no,
+      evidence_state,
+      evidence_summary,
+      updated_at
+  `;
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ caseId: string }> },
@@ -57,8 +101,19 @@ export async function POST(
     }
 
     const { caseId } = await params;
+    const normalizedCaseId = String(caseId || "").trim();
     const body = (await request.json().catch(() => ({}))) as OperationCaseEvidenceStateBody;
     const evidenceState = normalizeEvidenceState(body.evidenceState);
+
+    if (!normalizedCaseId) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "caseId is required",
+        },
+        { status: 400 },
+      );
+    }
 
     if (!evidenceState) {
       return NextResponse.json(
@@ -83,20 +138,9 @@ export async function POST(
       );
     }
 
-    const rows = await prisma.$queryRaw<OperationCaseEvidenceStateRow[]>`
-      update public.operation_cases
-      set
-        evidence_state = ${evidenceState},
-        updated_at = now()
-      where id = CAST(${caseId} AS uuid)
-        and tenant_id = CAST(${tenant.tenantId} AS uuid)
-      returning
-        id,
-        case_no,
-        evidence_state,
-        evidence_summary,
-        updated_at
-    `;
+    const rows = UUID_RE.test(normalizedCaseId)
+      ? await updateEvidenceStateByUuid(tenant.tenantId, normalizedCaseId, evidenceState)
+      : await updateEvidenceStateByCaseNo(tenant.tenantId, normalizedCaseId, evidenceState);
 
     const row = rows[0];
 
