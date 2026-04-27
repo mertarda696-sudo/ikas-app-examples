@@ -5,6 +5,8 @@ import { useEffect } from 'react';
 const DEFAULT_REPLY_HELPER =
   'Müşteriye AI cevap vermiş olabilir; operatör manuel yanıt vermediği veya incelemediği için bu konuşma hâlâ yanıt kuyruğunda.';
 
+const URL_RE = /\bhttps?:\/\/[^\s<>"']+|\bwww\.[^\s<>"']+/i;
+
 type InboxMediaCopy = {
   placeholderLine: string;
   displayLine: string;
@@ -84,11 +86,38 @@ function applyInboxMediaCopy() {
   });
 }
 
+function applyInboxLinkCopy() {
+  if (!isInboxListPage()) return;
+
+  const nodes = Array.from(document.querySelectorAll('div'));
+
+  nodes.forEach((node) => {
+    const text = String(node.textContent || '').trim();
+    if (!text.startsWith('Müşteri: ')) return;
+    if (!URL_RE.test(text)) return;
+
+    const card = findInboxCard(node);
+    if (!card) return;
+
+    node.textContent = 'Müşteri link gönderdi.';
+    replaceExactTextInside(
+      card,
+      DEFAULT_REPLY_HELPER,
+      'Müşteri link gönderdi. Operatör bağlantıyı inceleyip manuel yanıt verebilir veya konuşmayı incelendi olarak işaretleyebilir.',
+    );
+  });
+}
+
+function applyInboxEnhancements() {
+  applyInboxMediaCopy();
+  applyInboxLinkCopy();
+}
+
 export function InboxMediaCopyEnhancer() {
   useEffect(() => {
-    applyInboxMediaCopy();
+    applyInboxEnhancements();
 
-    const observer = new MutationObserver(() => applyInboxMediaCopy());
+    const observer = new MutationObserver(() => applyInboxEnhancements());
     observer.observe(document.body, { childList: true, subtree: true });
 
     return () => observer.disconnect();
