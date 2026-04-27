@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { TokenHelpers } from '@/helpers/token-helpers';
 
 const EVIDENCE_STATE_OPTIONS = [
@@ -37,35 +38,51 @@ function findEvidenceCard() {
   return title?.parentElement || null;
 }
 
+function ensureEvidenceHost() {
+  const card = findEvidenceCard();
+  const hostId = 'operation-evidence-state-updater-host';
+  let host = document.getElementById(hostId);
+
+  if (!card) return null;
+
+  if (!host) {
+    host = document.createElement('div');
+    host.id = hostId;
+    host.style.marginTop = '12px';
+    card.insertBefore(host, card.lastElementChild || null);
+  }
+
+  return host;
+}
+
 export function EvidenceStateEnhancer() {
   const [caseId, setCaseId] = useState('');
   const [value, setValue] = useState('');
   const [status, setStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
-  const [mounted, setMounted] = useState(false);
+  const [host, setHost] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
     setCaseId(getCaseIdFromPath());
     setValue(getCurrentEvidenceState());
-    setMounted(true);
+    setHost(ensureEvidenceHost());
   }, []);
 
   useEffect(() => {
-    if (!mounted) return;
+    if (host) return;
 
-    const card = findEvidenceCard();
-    const hostId = 'operation-evidence-state-updater-host';
-    let host = document.getElementById(hostId);
+    const observer = new MutationObserver(() => {
+      const nextHost = ensureEvidenceHost();
+      if (nextHost) {
+        setHost(nextHost);
+        observer.disconnect();
+      }
+    });
 
-    if (!card) return;
+    observer.observe(document.body, { childList: true, subtree: true });
 
-    if (!host) {
-      host = document.createElement('div');
-      host.id = hostId;
-      host.style.marginTop = '12px';
-      card.insertBefore(host, card.lastElementChild || null);
-    }
-  }, [mounted]);
+    return () => observer.disconnect();
+  }, [host]);
 
   const handleChange = async (nextValue: string) => {
     try {
@@ -104,10 +121,10 @@ export function EvidenceStateEnhancer() {
     }
   };
 
-  if (!mounted || !caseId) return null;
+  if (!host || !caseId) return null;
 
-  return (
-    <div style={{ border: '1px solid #e5e7eb', borderRadius: 14, background: '#f9fafb', padding: 12, marginTop: 12 }}>
+  return createPortal(
+    <div style={{ border: '1px solid #e5e7eb', borderRadius: 14, background: '#f9fafb', padding: 12 }}>
       <div style={{ fontSize: 13, fontWeight: 900, color: '#374151', marginBottom: 8 }}>Kanıt Durumu Güncelle</div>
       <select
         value={value || ''}
@@ -125,6 +142,7 @@ export function EvidenceStateEnhancer() {
           {message}
         </div>
       ) : null}
-    </div>
+    </div>,
+    host,
   );
 }
