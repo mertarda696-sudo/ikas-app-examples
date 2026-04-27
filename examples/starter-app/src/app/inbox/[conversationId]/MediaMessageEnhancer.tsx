@@ -4,6 +4,13 @@ import { useEffect } from 'react';
 
 type MediaKind = 'audio' | 'video' | 'image' | 'document';
 
+const MESSAGE_HEADER_RE = /^(müşteri|ai asistan|operatör|sistem) · (metin|görsel|video|ses|doküman|bilinmiyor)$/i;
+
+function isExactMessageHeader(node: Element) {
+  const text = String(node.textContent || '').trim().toLowerCase();
+  return MESSAGE_HEADER_RE.test(text);
+}
+
 function getMediaKind(label: string): MediaKind | null {
   const normalized = label.toLowerCase();
 
@@ -56,7 +63,7 @@ function findMessageAreaFromHeader(header: Element) {
 }
 
 function makeMessageAreaScrollable(messageArea: HTMLElement | null) {
-  if (!messageArea || messageArea.dataset.scrollableConversationMessages === 'true') return;
+  if (!messageArea) return;
 
   messageArea.dataset.scrollableConversationMessages = 'true';
   messageArea.style.maxHeight = '620px';
@@ -71,18 +78,15 @@ function makeMessageAreaScrollable(messageArea: HTMLElement | null) {
 }
 
 function applyScrollableMessageArea() {
-  const messageHeaders = Array.from(document.querySelectorAll('div')).filter((node) => {
-    const text = String(node.textContent || '').trim().toLowerCase();
-    return text.startsWith('müşteri ·') || text.startsWith('ai asistan ·') || text.startsWith('operatör ·') || text.startsWith('sistem ·');
-  });
-
+  const messageHeaders = Array.from(document.querySelectorAll('div')).filter(isExactMessageHeader);
   const firstHeader = messageHeaders[0];
   const messageArea = firstHeader ? findMessageAreaFromHeader(firstHeader) : null;
+
   makeMessageAreaScrollable(messageArea);
 }
 
 function addMediaCards() {
-  const headers = Array.from(document.querySelectorAll('div'));
+  const headers = Array.from(document.querySelectorAll('div')).filter(isExactMessageHeader);
 
   headers.forEach((header) => {
     const headerText = String(header.textContent || '').trim();
