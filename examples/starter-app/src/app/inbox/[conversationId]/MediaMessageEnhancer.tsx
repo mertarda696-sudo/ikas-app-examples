@@ -2,8 +2,9 @@
 
 import { useEffect } from 'react';
 
-type MediaKind = 'audio' | 'video' | 'image' | 'document';
+type MessageKind = 'audio' | 'video' | 'image' | 'document' | 'link';
 
+const URL_RE = /\bhttps?:\/\/[^\s<>"']+|\bwww\.[^\s<>"']+/i;
 const MESSAGE_HEADER_RE = /^(müşteri|ai asistan|operatör|sistem) · (metin|görsel|video|ses|doküman|bilinmiyor)$/i;
 
 function isExactMessageHeader(node: Element) {
@@ -11,7 +12,7 @@ function isExactMessageHeader(node: Element) {
   return MESSAGE_HEADER_RE.test(text);
 }
 
-function getMediaKind(label: string): MediaKind | null {
+function getMessageKindFromHeader(label: string, header?: Element): MessageKind | null {
   const normalized = label.toLowerCase();
 
   if (normalized.includes('· ses')) return 'audio';
@@ -19,10 +20,16 @@ function getMediaKind(label: string): MediaKind | null {
   if (normalized.includes('· görsel')) return 'image';
   if (normalized.includes('· doküman')) return 'document';
 
+  if (normalized.includes('· metin') && header) {
+    const bubble = header.parentElement;
+    const bubbleText = String(bubble?.textContent || '');
+    if (URL_RE.test(bubbleText)) return 'link';
+  }
+
   return null;
 }
 
-function getMediaCopy(kind: MediaKind) {
+function getMessageCopy(kind: MessageKind) {
   if (kind === 'audio') {
     return {
       title: 'Sesli mesaj',
@@ -56,6 +63,18 @@ function getMediaCopy(kind: MediaKind) {
       reviewHelper: 'Bu işlem WhatsApp mesajı göndermez; yalnızca görselin operatör tarafından incelendiğini işaretler.',
       operatorHelper: 'Müşteri görsel gönderdi. Operatör görseli inceleyip manuel yanıt verebilir veya konuşmayı incelendi olarak işaretleyebilir.',
       flowHelper: 'Görsel incelendiyse “İncelendi olarak işaretle”; dönüş gerekiyorsa manuel cevap gönder.',
+    };
+  }
+
+  if (kind === 'link') {
+    return {
+      title: 'Link mesajı',
+      body: 'Bu link konuşma akışına alındı. Operatör bağlantıyı inceleyip manuel yanıt verebilir veya konuşmayı incelendi olarak işaretleyebilir.',
+      badge: 'Link',
+      reviewTitle: 'Link incelendiyse müşteriye mesaj göndermeden kuyruğu temizleyebilirsiniz.',
+      reviewHelper: 'Bu işlem WhatsApp mesajı göndermez; yalnızca linkin operatör tarafından incelendiğini işaretler.',
+      operatorHelper: 'Müşteri link gönderdi. Operatör bağlantıyı inceleyip manuel yanıt verebilir veya konuşmayı incelendi olarak işaretleyebilir.',
+      flowHelper: 'Link incelendiyse “İncelendi olarak işaretle”; dönüş gerekiyorsa manuel cevap gönder.',
     };
   }
 
@@ -101,13 +120,13 @@ function applyScrollableMessageArea() {
   makeMessageAreaScrollable(messageArea);
 }
 
-function getLatestCustomerMediaKind() {
+function getLatestCustomerMessageKind() {
   const messageHeaders = Array.from(document.querySelectorAll('div')).filter(isExactMessageHeader);
   const lastHeader = [...messageHeaders].reverse().find((header) =>
     String(header.textContent || '').trim().toLowerCase().startsWith('müşteri ·'),
   );
 
-  return lastHeader ? getMediaKind(String(lastHeader.textContent || '')) : null;
+  return lastHeader ? getMessageKindFromHeader(String(lastHeader.textContent || ''), lastHeader) : null;
 }
 
 function replaceExactText(from: string, to: string) {
@@ -120,11 +139,11 @@ function replaceExactText(from: string, to: string) {
   });
 }
 
-function applyMediaAwareOperatorCopy() {
-  const mediaKind = getLatestCustomerMediaKind();
-  if (!mediaKind) return;
+function applyMessageAwareOperatorCopy() {
+  const kind = getLatestCustomerMessageKind();
+  if (!kind) return;
 
-  const copy = getMediaCopy(mediaKind);
+  const copy = getMessageCopy(kind);
 
   replaceExactText(
     'AI cevabı yeterliyse müşteriye tekrar mesaj göndermeden kuyruğu temizleyebilirsiniz.',
@@ -144,19 +163,19 @@ function applyMediaAwareOperatorCopy() {
   );
 }
 
-function addMediaCards() {
+function addMessageCards() {
   const headers = Array.from(document.querySelectorAll('div')).filter(isExactMessageHeader);
 
   headers.forEach((header) => {
     const headerText = String(header.textContent || '').trim();
-    const kind = getMediaKind(headerText);
+    const kind = getMessageKindFromHeader(headerText, header);
 
     if (!kind) return;
 
     const bubble = header.parentElement;
     if (!bubble || bubble.querySelector('[data-media-message-card="true"]')) return;
 
-    const copy = getMediaCopy(kind);
+    const copy = getMessageCopy(kind);
 
     const card = document.createElement('div');
     card.dataset.mediaMessageCard = 'true';
@@ -217,13 +236,13 @@ function addMediaCards() {
 export function MediaMessageEnhancer() {
   useEffect(() => {
     applyScrollableMessageArea();
-    addMediaCards();
-    applyMediaAwareOperatorCopy();
+    addMessageCards();
+    applyMessageAwareOperatorCopy();
 
     const observer = new MutationObserver(() => {
       applyScrollableMessageArea();
-      addMediaCards();
-      applyMediaAwareOperatorCopy();
+      addMessageCards();
+      applyMessageAwareOperatorCopy();
     });
     observer.observe(document.body, { childList: true, subtree: true });
 
