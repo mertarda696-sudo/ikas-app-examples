@@ -28,6 +28,10 @@ function getMediaCopy(kind: MediaKind) {
       title: 'Sesli mesaj',
       body: 'Bu sesli mesaj konuşma akışına alındı. Oynatma ve transkript desteği medya ingestion fazında eklenecek.',
       badge: 'Mesaj medyası',
+      reviewTitle: 'Sesli mesaj incelendiyse müşteriye mesaj göndermeden kuyruğu temizleyebilirsiniz.',
+      reviewHelper: 'Bu işlem WhatsApp mesajı göndermez; yalnızca sesli mesajın operatör tarafından incelendiğini işaretler.',
+      operatorHelper: 'Müşteri sesli mesaj gönderdi. Operatör sesli mesajı inceleyip manuel yanıt verebilir veya konuşmayı incelendi olarak işaretleyebilir.',
+      flowHelper: 'Sesli mesaj incelendiyse “İncelendi olarak işaretle”; dönüş gerekiyorsa manuel cevap gönder.',
     };
   }
 
@@ -36,6 +40,10 @@ function getMediaCopy(kind: MediaKind) {
       title: 'Video mesajı',
       body: 'Bu video mesajı konuşma akışına alındı. Operasyon kanıtıysa vaka detayına ayrıca bağlanabilir.',
       badge: 'Video',
+      reviewTitle: 'Video mesajı incelendiyse müşteriye mesaj göndermeden kuyruğu temizleyebilirsiniz.',
+      reviewHelper: 'Bu işlem WhatsApp mesajı göndermez; yalnızca video mesajının operatör tarafından incelendiğini işaretler.',
+      operatorHelper: 'Müşteri video gönderdi. Operatör videoyu inceleyip manuel yanıt verebilir veya konuşmayı incelendi olarak işaretleyebilir.',
+      flowHelper: 'Video incelendiyse “İncelendi olarak işaretle”; dönüş gerekiyorsa manuel cevap gönder.',
     };
   }
 
@@ -44,6 +52,10 @@ function getMediaCopy(kind: MediaKind) {
       title: 'Görsel mesaj',
       body: 'Bu görsel konuşma akışına alındı. Hasar, dekont veya iade kanıtı ise ilgili operasyon vakasına bağlanabilir.',
       badge: 'Görsel',
+      reviewTitle: 'Görsel mesaj incelendiyse müşteriye mesaj göndermeden kuyruğu temizleyebilirsiniz.',
+      reviewHelper: 'Bu işlem WhatsApp mesajı göndermez; yalnızca görselin operatör tarafından incelendiğini işaretler.',
+      operatorHelper: 'Müşteri görsel gönderdi. Operatör görseli inceleyip manuel yanıt verebilir veya konuşmayı incelendi olarak işaretleyebilir.',
+      flowHelper: 'Görsel incelendiyse “İncelendi olarak işaretle”; dönüş gerekiyorsa manuel cevap gönder.',
     };
   }
 
@@ -51,6 +63,10 @@ function getMediaCopy(kind: MediaKind) {
     title: 'Doküman / PDF',
     body: 'Bu doküman konuşma akışına alındı. Fatura, dekont veya kargo etiketi ise ilgili operasyon vakasına bağlanabilir.',
     badge: 'Doküman',
+    reviewTitle: 'Doküman incelendiyse müşteriye mesaj göndermeden kuyruğu temizleyebilirsiniz.',
+    reviewHelper: 'Bu işlem WhatsApp mesajı göndermez; yalnızca dokümanın operatör tarafından incelendiğini işaretler.',
+    operatorHelper: 'Müşteri doküman gönderdi. Operatör dokümanı inceleyip manuel yanıt verebilir veya konuşmayı incelendi olarak işaretleyebilir.',
+    flowHelper: 'Doküman incelendiyse “İncelendi olarak işaretle”; dönüş gerekiyorsa manuel cevap gönder.',
   };
 }
 
@@ -83,6 +99,49 @@ function applyScrollableMessageArea() {
   const messageArea = firstHeader ? findMessageAreaFromHeader(firstHeader) : null;
 
   makeMessageAreaScrollable(messageArea);
+}
+
+function getLatestCustomerMediaKind() {
+  const messageHeaders = Array.from(document.querySelectorAll('div')).filter(isExactMessageHeader);
+  const lastHeader = [...messageHeaders].reverse().find((header) =>
+    String(header.textContent || '').trim().toLowerCase().startsWith('müşteri ·'),
+  );
+
+  return lastHeader ? getMediaKind(String(lastHeader.textContent || '')) : null;
+}
+
+function replaceExactText(from: string, to: string) {
+  const nodes = Array.from(document.querySelectorAll('div'));
+
+  nodes.forEach((node) => {
+    if (String(node.textContent || '').trim() === from) {
+      node.textContent = to;
+    }
+  });
+}
+
+function applyMediaAwareOperatorCopy() {
+  const mediaKind = getLatestCustomerMediaKind();
+  if (!mediaKind) return;
+
+  const copy = getMediaCopy(mediaKind);
+
+  replaceExactText(
+    'AI cevabı yeterliyse müşteriye tekrar mesaj göndermeden kuyruğu temizleyebilirsiniz.',
+    copy.reviewTitle,
+  );
+  replaceExactText(
+    'Bu işlem WhatsApp mesajı göndermez; yalnızca konuşmayı operatör tarafından incelendi olarak işaretler.',
+    copy.reviewHelper,
+  );
+  replaceExactText(
+    'Müşteriye AI cevap vermiş olabilir; operatör manuel yanıt vermediği veya incelemediği için bu konuşma hâlâ yanıt kuyruğunda.',
+    copy.operatorHelper,
+  );
+  replaceExactText(
+    'AI cevabı yeterliyse “İncelendi olarak işaretle”; değilse manuel cevap gönder.',
+    copy.flowHelper,
+  );
 }
 
 function addMediaCards() {
@@ -159,10 +218,12 @@ export function MediaMessageEnhancer() {
   useEffect(() => {
     applyScrollableMessageArea();
     addMediaCards();
+    applyMediaAwareOperatorCopy();
 
     const observer = new MutationObserver(() => {
       applyScrollableMessageArea();
       addMediaCards();
+      applyMediaAwareOperatorCopy();
     });
     observer.observe(document.body, { childList: true, subtree: true });
 
