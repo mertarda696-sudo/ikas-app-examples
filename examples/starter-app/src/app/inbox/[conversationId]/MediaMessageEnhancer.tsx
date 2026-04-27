@@ -104,6 +104,19 @@ function getMessageCopy(kind: MessageKind) {
   };
 }
 
+function getEvidenceLabel(kind: MessageKind) {
+  if (kind === 'image') return 'görsel';
+  if (kind === 'video') return 'video';
+  if (kind === 'audio') return 'sesli mesaj';
+  if (kind === 'document') return 'doküman';
+  return 'link';
+}
+
+function getEvidenceSummary(kind: MessageKind) {
+  const label = getEvidenceLabel(kind);
+  return `Müşteri konuşma içinde ${label} gönderdi. Operatör tarafından kanıt olarak işaretlendi.`;
+}
+
 function findMessageAreaFromHeader(header: Element) {
   const bubble = header.parentElement;
   const row = bubble?.parentElement;
@@ -248,16 +261,158 @@ function addMessageCards() {
   });
 }
 
+function findOperationCaseSection() {
+  const candidates = Array.from(document.querySelectorAll('section, div')).filter((node) => {
+    const text = String(node.textContent || '');
+    return (
+      text.includes('Operasyon Kaydı Oluştur') &&
+      text.includes('Vaka tipi') &&
+      text.includes('Operasyon kaydı oluştur')
+    );
+  });
+
+  return candidates
+    .filter((node): node is HTMLElement => node instanceof HTMLElement)
+    .sort((a, b) => String(a.textContent || '').length - String(b.textContent || '').length)[0] || null;
+}
+
+function applyManualEvidenceBox() {
+  const kind = getLatestCustomerMessageKind();
+  const existing = document.querySelector<HTMLElement>('[data-manual-evidence-box="true"]');
+
+  if (!kind) {
+    existing?.remove();
+    return;
+  }
+
+  const section = findOperationCaseSection();
+  if (!section) return;
+
+  if (existing) {
+    const checkbox = existing.querySelector<HTMLInputElement>('input[data-manual-evidence-checkbox="true"]');
+    if (checkbox) checkbox.dataset.evidenceKind = kind;
+    const label = existing.querySelector<HTMLElement>('[data-manual-evidence-label="true"]');
+    if (label) label.textContent = `Son ${getEvidenceLabel(kind)} mesajını bu operasyon için kanıt olarak işaretle`;
+    return;
+  }
+
+  const box = document.createElement('div');
+  box.dataset.manualEvidenceBox = 'true';
+  box.style.marginTop = '12px';
+  box.style.border = '1px solid #fde68a';
+  box.style.background = '#fffbeb';
+  box.style.borderRadius = '14px';
+  box.style.padding = '12px';
+  box.style.display = 'grid';
+  box.style.gap = '8px';
+
+  const row = document.createElement('label');
+  row.style.display = 'flex';
+  row.style.alignItems = 'flex-start';
+  row.style.gap = '10px';
+  row.style.cursor = 'pointer';
+
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.dataset.manualEvidenceCheckbox = 'true';
+  checkbox.dataset.evidenceKind = kind;
+  checkbox.style.marginTop = '3px';
+
+  const textWrap = document.createElement('div');
+  textWrap.style.display = 'grid';
+  textWrap.style.gap = '4px';
+
+  const title = document.createElement('div');
+  title.dataset.manualEvidenceLabel = 'true';
+  title.textContent = `Son ${getEvidenceLabel(kind)} mesajını bu operasyon için kanıt olarak işaretle`;
+  title.style.fontSize = '13px';
+  title.style.fontWeight = '900';
+  title.style.color = '#92400e';
+
+  const helper = document.createElement('div');
+  helper.textContent = 'Bu içerik otomatik kanıt sayılmaz. Yalnızca bu kutu işaretlenirse oluşturulan operasyon kaydı kanıt durumuyla açılır.';
+  helper.style.fontSize = '12px';
+  helper.style.lineHeight = '1.55';
+  helper.style.color = '#92400e';
+
+  textWrap.appendChild(title);
+  textWrap.appendChild(helper);
+  row.appendChild(checkbox);
+  row.appendChild(textWrap);
+  box.appendChild(row);
+
+  section.appendChild(box);
+}
+
+function getManualEvidencePayload() {
+  const checkbox = document.querySelector<HTMLInputElement>('input[data-manual-evidence-checkbox="true"]');
+  if (!checkbox?.checked) return null;
+
+  const kind = checkbox.dataset.evidenceKind as MessageKind | undefined;
+  if (!kind) return null;
+
+  return {
+    evidenceState: 'received',
+    evidenceSummary: getEvidenceSummary(kind),
+  };
+}
+
+function patchOperationCaseFetch() {
+  const win = window as typeof window & {
+    __manualEvidenceFetchPatched?: boolean;
+  };
+
+  if (win.__manualEvidenceFetchPatched) return;
+
+  const originalFetch = window.fetch.bind(window);
+  win.__manualEvidenceFetchPatched = true;
+
+  window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    const method = String(init?.method || 'GET').toUpperCase();
+
+    if (
+      method === 'POST' &&
+      url.includes('/api/apparel/conversations/') &&
+      url.includes('/operation-case') &&
+      typeof init?.body === 'string'
+    ) {
+      const evidencePayload = getManualEvidencePayload();
+
+      if (evidencePayload) {
+        try {
+          const parsed = JSON.parse(init.body);
+          return originalFetch(input, {
+            ...init,
+            body: JSON.stringify({
+              ...parsed,
+              evidenceState: parsed.evidenceState || evidencePayload.evidenceState,
+              evidenceSummary: parsed.evidenceSummary || evidencePayload.evidenceSummary,
+            }),
+          });
+        } catch {
+          return originalFetch(input, init);
+        }
+      }
+    }
+
+    return originalFetch(input, init);
+  };
+}
+
 export function MediaMessageEnhancer() {
   useEffect(() => {
+    patchOperationCaseFetch();
     applyScrollableMessageArea();
     addMessageCards();
     applyMessageAwareOperatorCopy();
+    applyManualEvidenceBox();
 
     const observer = new MutationObserver(() => {
       applyScrollableMessageArea();
       addMessageCards();
       applyMessageAwareOperatorCopy();
+      applyManualEvidenceBox();
     });
     observer.observe(document.body, { childList: true, subtree: true });
 
