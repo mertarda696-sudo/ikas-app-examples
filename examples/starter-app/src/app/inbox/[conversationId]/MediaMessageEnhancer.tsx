@@ -12,6 +12,22 @@ function isExactMessageHeader(node: Element) {
   return MESSAGE_HEADER_RE.test(text);
 }
 
+function getNearText(header?: Element) {
+  if (!header) return '';
+
+  const parts: string[] = [];
+  let current: Element | null = header;
+
+  for (let depth = 0; depth < 5 && current; depth += 1) {
+    parts.push(String(current.textContent || ''));
+    if (current.nextElementSibling) parts.push(String(current.nextElementSibling.textContent || ''));
+    if (current.previousElementSibling) parts.push(String(current.previousElementSibling.textContent || ''));
+    current = current.parentElement;
+  }
+
+  return parts.join(' ');
+}
+
 function getMessageKindFromHeader(label: string, header?: Element): MessageKind | null {
   const normalized = label.toLowerCase();
 
@@ -21,9 +37,8 @@ function getMessageKindFromHeader(label: string, header?: Element): MessageKind 
   if (normalized.includes('· doküman')) return 'document';
 
   if (normalized.includes('· metin') && header) {
-    const bubble = header.parentElement;
-    const bubbleText = String(bubble?.textContent || '');
-    if (URL_RE.test(bubbleText)) return 'link';
+    const nearbyText = getNearText(header);
+    if (URL_RE.test(nearbyText)) return 'link';
   }
 
   return null;
