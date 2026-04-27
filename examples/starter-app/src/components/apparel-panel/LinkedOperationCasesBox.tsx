@@ -265,17 +265,17 @@ export function LinkedOperationCasesBox({
                 </div>
 
                 <Link
-                  href="/operations"
+                  href={`/operations/${caseItem.caseNo || caseItem.id}`}
                   style={{
                     display: 'inline-block',
                     marginTop: 10,
                     textDecoration: 'none',
                     fontSize: 13,
                     fontWeight: 800,
-                    color: '#111827',
+                    color: '#2563eb',
                   }}
                 >
-                  Operasyonlar ekranında gör →
+                  Vaka Detayına Git →
                 </Link>
               </div>
             ))}
