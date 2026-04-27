@@ -6,7 +6,18 @@ import { AppShell } from '@/components/apparel-panel/AppShell';
 import { CustomerProfileLink } from '@/components/apparel-panel/CustomerProfileLink';
 import { TokenHelpers } from '@/helpers/token-helpers';
 
-type EvidenceFilter = 'all' | 'has_evidence' | 'damaged_product' | 'payment_proof' | 'shipping_delivery' | 'return_exchange';
+type EvidenceFilter =
+  | 'all'
+  | 'has_evidence'
+  | 'requested'
+  | 'received'
+  | 'verified'
+  | 'missing'
+  | 'rejected'
+  | 'damaged_product'
+  | 'payment_proof'
+  | 'shipping_delivery'
+  | 'return_exchange';
 
 type OperationCaseItem = {
   id: string;
@@ -50,11 +61,24 @@ type OperationCasesResponse = {
 const FILTERS: Array<{ key: EvidenceFilter; label: string }> = [
   { key: 'all', label: 'Tümü' },
   { key: 'has_evidence', label: 'Kanıt / Not İçeren' },
+  { key: 'requested', label: 'Kanıt İstendi' },
+  { key: 'received', label: 'Kanıt Alındı' },
+  { key: 'verified', label: 'Doğrulandı' },
+  { key: 'missing', label: 'Eksik' },
+  { key: 'rejected', label: 'Reddedildi' },
   { key: 'damaged_product', label: 'Hasarlı Ürün' },
   { key: 'payment_proof', label: 'Ödeme / Dekont' },
   { key: 'shipping_delivery', label: 'Kargo / Teslimat' },
   { key: 'return_exchange', label: 'İade / Değişim' },
 ];
+
+const EVIDENCE_STATE_FILTERS = new Set<EvidenceFilter>([
+  'requested',
+  'received',
+  'verified',
+  'missing',
+  'rejected',
+]);
 
 function formatDate(value: string | null | undefined) {
   if (!value) return '-';
@@ -229,19 +253,19 @@ export default function EvidencePage() {
 
   const metrics = useMemo(() => {
     const evidenceCandidateCount = items.filter(hasEvidenceSignal).length;
+    const requestedCount = items.filter((item) => item.evidenceState === 'requested').length;
+    const receivedCount = items.filter((item) => item.evidenceState === 'received').length;
+    const verifiedCount = items.filter((item) => item.evidenceState === 'verified').length;
+    const problemEvidenceCount = items.filter((item) => item.evidenceState === 'missing' || item.evidenceState === 'rejected').length;
     const damagedCount = items.filter((item) => item.caseType === 'damaged_product').length;
-    const paymentProofCount = items.filter((item) => item.caseType === 'payment_proof').length;
-    const shippingCount = items.filter((item) => item.caseType === 'shipping_delivery').length;
-    const returnExchangeCount = items.filter((item) => item.caseType === 'return_exchange').length;
-    const missingEvidenceCount = items.filter((item) => item.evidenceState === 'requested' || item.evidenceState === 'missing').length;
 
     return {
       evidenceCandidateCount,
+      requestedCount,
+      receivedCount,
+      verifiedCount,
+      problemEvidenceCount,
       damagedCount,
-      paymentProofCount,
-      shippingCount,
-      returnExchangeCount,
-      missingEvidenceCount,
     };
   }, [items]);
 
@@ -249,6 +273,7 @@ export default function EvidencePage() {
     const filtered = items.filter((item) => {
       if (activeFilter === 'all') return true;
       if (activeFilter === 'has_evidence') return hasEvidenceSignal(item);
+      if (EVIDENCE_STATE_FILTERS.has(activeFilter)) return item.evidenceState === activeFilter;
       return item.caseType === activeFilter;
     });
 
@@ -308,19 +333,19 @@ export default function EvidencePage() {
         ) : (
           <div style={{ display: 'grid', gap: 16 }}>
             <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
-              <MetricCard label="Kanıt Adayı" value={metrics.evidenceCandidateCount} helper="Kanıt özeti, kanıt durumu veya medya gerektirebilecek operasyon kayıtları" tone={metrics.evidenceCandidateCount > 0 ? 'info' : 'neutral'} />
+              <MetricCard label="Toplam Kanıt Adayı" value={metrics.evidenceCandidateCount} helper="Kanıt özeti, kanıt durumu veya medya gerektirebilecek operasyon kayıtları" tone={metrics.evidenceCandidateCount > 0 ? 'info' : 'neutral'} />
+              <MetricCard label="Kanıt İstendi" value={metrics.requestedCount} helper="Müşteriden belge, görsel veya ek bilgi beklenen vakalar" tone={metrics.requestedCount > 0 ? 'warning' : 'success'} />
+              <MetricCard label="Kanıt Alındı" value={metrics.receivedCount} helper="Operatör doğrulaması bekleyen kanıt kayıtları" tone={metrics.receivedCount > 0 ? 'info' : 'neutral'} />
+              <MetricCard label="Doğrulandı" value={metrics.verifiedCount} helper="Kanıtı onaylanmış operasyon vakaları" tone={metrics.verifiedCount > 0 ? 'success' : 'neutral'} />
+              <MetricCard label="Eksik / Reddedildi" value={metrics.problemEvidenceCount} helper="Eksik veya reddedilmiş kanıt süreci olan vakalar" tone={metrics.problemEvidenceCount > 0 ? 'danger' : 'success'} />
               <MetricCard label="Hasarlı Ürün" value={metrics.damagedCount} helper="Fotoğraf/video kanıtı gerektirebilecek hasarlı ürün vakaları" tone={metrics.damagedCount > 0 ? 'warning' : 'success'} />
-              <MetricCard label="Ödeme / Dekont" value={metrics.paymentProofCount} helper="Dekont veya ödeme kanıtı gerektirebilecek vakalar" tone={metrics.paymentProofCount > 0 ? 'info' : 'success'} />
-              <MetricCard label="Kargo / Teslimat" value={metrics.shippingCount} helper="Kargo paketi, teslimat veya takip kanıtı ile ilişkili vakalar" tone={metrics.shippingCount > 0 ? 'info' : 'success'} />
-              <MetricCard label="İade / Değişim" value={metrics.returnExchangeCount} helper="İade/değişim sürecinde ek kanıt isteyebilecek vakalar" tone={metrics.returnExchangeCount > 0 ? 'warning' : 'success'} />
-              <MetricCard label="Eksik / İstenen" value={metrics.missingEvidenceCount} helper="Kanıt istenmiş veya eksik işaretlenmiş vakalar" tone={metrics.missingEvidenceCount > 0 ? 'danger' : 'success'} />
             </section>
 
             <section style={{ border: '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', padding: 18 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
                 <div>
                   <div style={{ fontSize: 18, fontWeight: 900, color: '#111827' }}>Kanıt Kuyruğu</div>
-                  <div style={{ color: '#6b7280', fontSize: 13, marginTop: 4 }}>Operasyon vakalarını kanıt/medya ihtiyacına göre takip edin.</div>
+                  <div style={{ color: '#6b7280', fontSize: 13, marginTop: 4 }}>Operasyon vakalarını kanıt/medya ihtiyacına ve kanıt durumuna göre takip edin.</div>
                 </div>
                 <Pill label={`${rows.length} kayıt`} tone="neutral" />
               </div>
@@ -392,6 +417,7 @@ export default function EvidencePage() {
                             <div><strong>Sipariş:</strong> {item.linkedOrderId || '-'}</div>
                             <div><strong>Konuşma:</strong> {item.conversationId ? 'Bağlı' : 'Bağ yok'}</div>
                             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
+                              <Link href={`/operations/${item.caseNo || item.id}`} style={{ color: '#2563eb', fontWeight: 900, textDecoration: 'none' }}>Vaka Detayına Git →</Link>
                               {item.conversationId ? <Link href={`/inbox/${item.conversationId}`} style={{ color: '#111827', fontWeight: 900, textDecoration: 'none' }}>Konuşmaya Git →</Link> : null}
                               <CustomerProfileLink customerWaId={item.customerWaId} compact />
                               {item.linkedOrderId ? <Link href={`/orders/${item.linkedOrderId}`} style={{ color: '#111827', fontWeight: 900, textDecoration: 'none' }}>Siparişe Git →</Link> : null}
