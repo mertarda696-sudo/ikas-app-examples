@@ -6,6 +6,10 @@ import { useParams } from 'next/navigation';
 import { AppShell } from '@/components/apparel-panel/AppShell';
 import { LinkedOperationCasesBox } from '@/components/apparel-panel/LinkedOperationCasesBox';
 import { CustomerProfileLink } from '@/components/apparel-panel/CustomerProfileLink';
+import {
+  OperationCaseEvidenceOption,
+  getLatestEvidenceOption,
+} from './OperationCaseEvidenceOption';
 import { TokenHelpers } from '@/helpers/token-helpers';
 import type { ConversationDetailResponse } from '@/lib/apparel-panel/types';
 import {
@@ -167,6 +171,7 @@ export default function ConversationDetailPage() {
 const [caseTitle, setCaseTitle] = useState('');
 const [caseDescription, setCaseDescription] = useState('');
 const [casePriority, setCasePriority] = useState('normal');
+const [markLastMessageAsEvidence, setMarkLastMessageAsEvidence] = useState(false);
 const [creatingCase, setCreatingCase] = useState(false);
   const [sending, setSending] = useState(false);
   const [reviewing, setReviewing] = useState(false);
@@ -223,6 +228,14 @@ const [creatingCase, setCreatingCase] = useState(false);
   const responseState = getResponseState(conversation);
   const suggestions = quickReplySuggestions(conversation?.contextProductName);
   const hasWhatsAppLine = Boolean(data?.tenant?.waPhoneNumberId);
+  const operationCaseEvidenceOption = useMemo(
+    () => getLatestEvidenceOption(conversation?.messages),
+    [conversation?.messages],
+  );
+
+  useEffect(() => {
+    setMarkLastMessageAsEvidence(false);
+  }, [operationCaseEvidenceOption?.summary]);
 
   const handleReviewConversation = async () => {
     try {
@@ -318,6 +331,12 @@ const [creatingCase, setCreatingCase] = useState(false);
         title: normalizedTitle,
         description: caseDescription,
         priority: casePriority,
+        ...(markLastMessageAsEvidence && operationCaseEvidenceOption
+          ? {
+              evidenceState: 'received',
+              evidenceSummary: operationCaseEvidenceOption.summary,
+            }
+          : {}),
       }),
     });
 
@@ -331,6 +350,7 @@ const [creatingCase, setCreatingCase] = useState(false);
     setCaseDescription('');
     setCaseType('general');
     setCasePriority('normal');
+    setMarkLastMessageAsEvidence(false);
 
     await loadConversation({ silent: true });
   } catch (error) {
@@ -624,6 +644,12 @@ const [creatingCase, setCreatingCase] = useState(false);
       Açıklama
       <textarea value={caseDescription} onChange={(event) => setCaseDescription(event.target.value)} placeholder="Örn: Ürün kullanılmamış olduğunu söyledi, sipariş numarası istenecek." style={{ width: '100%', minHeight: 92, borderRadius: 14, border: '1px solid #d1d5db', padding: 12, fontSize: 14, lineHeight: 1.6, resize: 'vertical', outline: 'none', background: '#ffffff' }} />
     </label>
+
+    <OperationCaseEvidenceOption
+      evidenceOption={operationCaseEvidenceOption}
+      checked={markLastMessageAsEvidence}
+      onCheckedChange={setMarkLastMessageAsEvidence}
+    />
 
     <button onClick={handleCreateOperationCase} disabled={creatingCase} style={{ border: 'none', borderRadius: 12, padding: '10px 14px', background: creatingCase ? '#9ca3af' : '#111827', color: '#ffffff', fontWeight: 800, cursor: creatingCase ? 'not-allowed' : 'pointer' }}>
       {creatingCase ? 'Oluşturuluyor...' : 'Operasyon kaydı oluştur'}
