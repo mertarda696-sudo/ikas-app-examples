@@ -3,7 +3,7 @@ import { getUserFromRequest } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
 import { getTenantPanelContextByMerchantId } from "@/lib/apparel-panel/queries";
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
 
 type OperationCaseDetailRow = {
   id: string;
@@ -64,7 +64,7 @@ async function findCaseByUuid(tenantId: string, caseId: string) {
       oc.status,
       oc.source_channel,
       oc.customer_wa_id,
-      oc.linked_order_id,
+      coalesce(oc.linked_order_id, co.order_no) as linked_order_id,
       oc.evidence_summary,
       oc.evidence_state,
       oc.assigned_to,
@@ -85,8 +85,12 @@ async function findCaseByUuid(tenantId: string, caseId: string) {
     left join public.customer_crm_profiles ccp
       on ccp.tenant_id = oc.tenant_id
      and ccp.customer_wa_id = oc.customer_wa_id
+    left join public.commerce_orders co
+      on co.tenant_id = oc.tenant_id
+     and co.conversation_id = oc.conversation_id
     where oc.tenant_id = CAST(${tenantId} AS uuid)
       and oc.id = CAST(${caseId} AS uuid)
+    order by co.updated_at desc nulls last, co.created_at desc nulls last
     limit 1
   `;
 }
@@ -103,7 +107,7 @@ async function findCaseByCaseNo(tenantId: string, caseId: string) {
       oc.status,
       oc.source_channel,
       oc.customer_wa_id,
-      oc.linked_order_id,
+      coalesce(oc.linked_order_id, co.order_no) as linked_order_id,
       oc.evidence_summary,
       oc.evidence_state,
       oc.assigned_to,
@@ -124,8 +128,12 @@ async function findCaseByCaseNo(tenantId: string, caseId: string) {
     left join public.customer_crm_profiles ccp
       on ccp.tenant_id = oc.tenant_id
      and ccp.customer_wa_id = oc.customer_wa_id
+    left join public.commerce_orders co
+      on co.tenant_id = oc.tenant_id
+     and co.conversation_id = oc.conversation_id
     where oc.tenant_id = CAST(${tenantId} AS uuid)
       and oc.case_no = ${caseId}
+    order by co.updated_at desc nulls last, co.created_at desc nulls last
     limit 1
   `;
 }
