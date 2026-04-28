@@ -43,7 +43,7 @@ function Badge({ label, tone }: { label: string; tone: 'success' | 'warning' | '
 
 function InfoCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section style={{ border: '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', padding: 18 }}>
+    <section style={{ border: '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', padding: 18, minWidth: 0 }}>
       <div style={{ fontSize: 18, fontWeight: 900, color: '#111827', marginBottom: 12 }}>{title}</div>
       {children}
     </section>
@@ -150,7 +150,7 @@ export default function CatalogProductDetailPage() {
 
   return (
     <AppShell>
-      <main style={{ maxWidth: 1220, margin: '0 auto', padding: 24, minHeight: '100vh' }}>
+      <main style={{ width: '100%', maxWidth: 1120, margin: '0 auto', padding: 24, minHeight: '100vh', boxSizing: 'border-box' }}>
         <div style={{ marginBottom: 18 }}>
           <Link href="/catalog" style={{ display: 'inline-block', textDecoration: 'none', borderRadius: 10, padding: '8px 12px', background: '#ffffff', color: '#111827', border: '1px solid #e5e7eb', fontWeight: 900, marginBottom: 14 }}>
             ← Kataloğa dön
@@ -174,58 +174,21 @@ export default function CatalogProductDetailPage() {
         ) : !product ? (
           <ProductNotFound productId={String(productId || '-')} />
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(320px, 0.85fr)', gap: 16, alignItems: 'start' }}>
-            <div style={{ display: 'grid', gap: 16 }}>
-              <InfoCard title="Ürün Özeti">
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-                  <Badge label={product.category || 'Kategori yok'} tone="info" />
-                  <Badge label={product.subcategory || 'Alt kategori yok'} tone="warning" />
-                  <Badge label={mapStockLabel(product.stockStatus, totalStock)} tone={mapStockTone(product.stockStatus, totalStock)} />
-                  <Badge label={`${product.variantCount} varyant`} tone="neutral" />
-                </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 16, alignItems: 'start', minWidth: 0 }}>
+            <InfoCard title="Ürün Özeti">
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+                <Badge label={product.category || 'Kategori yok'} tone="info" />
+                <Badge label={product.subcategory || 'Alt kategori yok'} tone="warning" />
+                <Badge label={mapStockLabel(product.stockStatus, totalStock)} tone={mapStockTone(product.stockStatus, totalStock)} />
+                <Badge label={`${product.variantCount} varyant`} tone="neutral" />
+              </div>
 
-                <div style={{ fontSize: 22, fontWeight: 900, color: '#111827', marginBottom: 8 }}>{product.name}</div>
-                <div style={{ color: '#4b5563', fontSize: 14, lineHeight: 1.7 }}>{product.shortDescription || 'Açıklama bulunmuyor.'}</div>
-              </InfoCard>
+              <div style={{ fontSize: 22, fontWeight: 900, color: '#111827', marginBottom: 8 }}>{product.name}</div>
+              <div style={{ color: '#4b5563', fontSize: 14, lineHeight: 1.7 }}>{product.shortDescription || 'Açıklama bulunmuyor.'}</div>
+            </InfoCard>
 
-              <InfoCard title="Varyantlar">
-                {productVariants.length === 0 ? (
-                  <div style={{ color: '#6b7280' }}>Bu ürün için varyant görünmüyor.</div>
-                ) : (
-                  <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
-                      <thead>
-                        <tr style={{ background: '#f9fafb' }}>
-                          {['SKU', 'Başlık', 'Renk', 'Beden', 'Stok', 'Fiyat', 'Aktif'].map((header) => (
-                            <th key={header} style={{ textAlign: 'left', padding: 12, fontSize: 13, color: '#6b7280', fontWeight: 900, borderBottom: '1px solid #e5e7eb' }}>{header}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {productVariants.map((variant) => (
-                          <tr key={variant.id}>
-                            <td style={{ padding: 12, borderBottom: '1px solid #f3f4f6', fontWeight: 900 }}>{variant.sku || '-'}</td>
-                            <td style={{ padding: 12, borderBottom: '1px solid #f3f4f6' }}>{variant.title || '-'}</td>
-                            <td style={{ padding: 12, borderBottom: '1px solid #f3f4f6' }}>{variant.color || '-'}</td>
-                            <td style={{ padding: 12, borderBottom: '1px solid #f3f4f6' }}>{variant.size || '-'}</td>
-                            <td style={{ padding: 12, borderBottom: '1px solid #f3f4f6' }}>
-                              <Badge label={`${mapStockLabel(variant.stockStatus, variant.stockQty)} · ${variant.stockQty}`} tone={mapStockTone(variant.stockStatus, variant.stockQty)} />
-                            </td>
-                            <td style={{ padding: 12, borderBottom: '1px solid #f3f4f6' }}>{formatPrice(variant.price, product.currency)}</td>
-                            <td style={{ padding: 12, borderBottom: '1px solid #f3f4f6' }}>
-                              <Badge label={variant.isActive ? 'Aktif' : 'Pasif'} tone={variant.isActive ? 'success' : 'neutral'} />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </InfoCard>
-            </div>
-
-            <aside style={{ display: 'grid', gap: 16 }}>
-              <InfoCard title="Ürün Bilgileri">
+            <InfoCard title="Ürün Bilgileri">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '0 18px' }}>
                 <FieldRow label="Ürün ID" value={product.id} />
                 <FieldRow label="Handle" value={product.handle || '-'} />
                 <FieldRow label="Kategori" value={`${product.category || '-'} / ${product.subcategory || '-'}`} />
@@ -234,16 +197,51 @@ export default function CatalogProductDetailPage() {
                 <FieldRow label="Toplam stok" value={totalStock} />
                 <FieldRow label="Varyant" value={product.variantCount} />
                 <FieldRow label="Fiyatlı varyant" value={pricedVariantCount} />
-              </InfoCard>
+              </div>
+            </InfoCard>
 
-              <InfoCard title="Hızlı Geçişler">
-                <div style={{ display: 'grid', gap: 10 }}>
-                  <Link href="/catalog" style={{ textDecoration: 'none', border: '1px solid #e5e7eb', borderRadius: 12, padding: '10px 14px', background: '#ffffff', color: '#111827', fontWeight: 900 }}>Katalog Listesine Git →</Link>
-                  <Link href="/orders" style={{ textDecoration: 'none', border: '1px solid #e5e7eb', borderRadius: 12, padding: '10px 14px', background: '#ffffff', color: '#111827', fontWeight: 900 }}>Siparişlere Git →</Link>
-                  <Link href="/inbox" style={{ textDecoration: 'none', border: '1px solid #e5e7eb', borderRadius: 12, padding: '10px 14px', background: '#ffffff', color: '#111827', fontWeight: 900 }}>Mesajlara Git →</Link>
+            <InfoCard title="Varyantlar">
+              {productVariants.length === 0 ? (
+                <div style={{ color: '#6b7280' }}>Bu ürün için varyant görünmüyor.</div>
+              ) : (
+                <div style={{ width: '100%', overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
+                    <thead>
+                      <tr style={{ background: '#f9fafb' }}>
+                        {['SKU', 'Başlık', 'Renk', 'Beden', 'Stok', 'Fiyat', 'Aktif'].map((header) => (
+                          <th key={header} style={{ textAlign: 'left', padding: 12, fontSize: 13, color: '#6b7280', fontWeight: 900, borderBottom: '1px solid #e5e7eb' }}>{header}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {productVariants.map((variant) => (
+                        <tr key={variant.id}>
+                          <td style={{ padding: 12, borderBottom: '1px solid #f3f4f6', fontWeight: 900, whiteSpace: 'nowrap' }}>{variant.sku || '-'}</td>
+                          <td style={{ padding: 12, borderBottom: '1px solid #f3f4f6' }}>{variant.title || '-'}</td>
+                          <td style={{ padding: 12, borderBottom: '1px solid #f3f4f6' }}>{variant.color || '-'}</td>
+                          <td style={{ padding: 12, borderBottom: '1px solid #f3f4f6' }}>{variant.size || '-'}</td>
+                          <td style={{ padding: 12, borderBottom: '1px solid #f3f4f6' }}>
+                            <Badge label={`${mapStockLabel(variant.stockStatus, variant.stockQty)} · ${variant.stockQty}`} tone={mapStockTone(variant.stockStatus, variant.stockQty)} />
+                          </td>
+                          <td style={{ padding: 12, borderBottom: '1px solid #f3f4f6' }}>{formatPrice(variant.price, product.currency)}</td>
+                          <td style={{ padding: 12, borderBottom: '1px solid #f3f4f6' }}>
+                            <Badge label={variant.isActive ? 'Aktif' : 'Pasif'} tone={variant.isActive ? 'success' : 'neutral'} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              </InfoCard>
-            </aside>
+              )}
+            </InfoCard>
+
+            <InfoCard title="Hızlı Geçişler">
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <Link href="/catalog" style={{ textDecoration: 'none', border: '1px solid #e5e7eb', borderRadius: 12, padding: '10px 14px', background: '#ffffff', color: '#111827', fontWeight: 900 }}>Katalog Listesine Git →</Link>
+                <Link href="/orders" style={{ textDecoration: 'none', border: '1px solid #e5e7eb', borderRadius: 12, padding: '10px 14px', background: '#ffffff', color: '#111827', fontWeight: 900 }}>Siparişlere Git →</Link>
+                <Link href="/inbox" style={{ textDecoration: 'none', border: '1px solid #e5e7eb', borderRadius: 12, padding: '10px 14px', background: '#ffffff', color: '#111827', fontWeight: 900 }}>Mesajlara Git →</Link>
+              </div>
+            </InfoCard>
           </div>
         )}
       </main>
