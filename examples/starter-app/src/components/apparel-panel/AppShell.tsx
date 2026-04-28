@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import React from 'react';
 import { DashboardOperationsHub } from '@/components/apparel-panel/DashboardOperationsHub';
+import { CatalogProductLinksEnhancer } from '@/components/apparel-panel/CatalogProductLinksEnhancer';
 
 type NavItem = {
   href: string;
@@ -71,6 +72,7 @@ function isActivePath(pathname: string, href: string) {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const showDashboardOperationsHub = pathname === '/dashboard';
+  const showCatalogProductLinksEnhancer = pathname === '/catalog';
 
   return (
     <div
@@ -79,6 +81,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         background: '#f3f4f6',
       }}
     >
+      {showCatalogProductLinksEnhancer ? <CatalogProductLinksEnhancer /> : null}
+
       <div
         style={{
           display: 'grid',
