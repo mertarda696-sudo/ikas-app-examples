@@ -79,20 +79,34 @@ export function EvidenceStateEnhancer() {
   const [summaryMessage, setSummaryMessage] = useState('');
   const [host, setHost] = useState<HTMLElement | null>(null);
 
+  const syncCurrentEvidenceValues = () => {
+    const currentState = getCurrentEvidenceState();
+    const currentSummary = getCurrentEvidenceSummary();
+
+    setValue((previous) => previous || currentState);
+    setSummary((previous) => previous || currentSummary);
+  };
+
   useEffect(() => {
     setCaseId(getCaseIdFromPath());
-    setValue(getCurrentEvidenceState());
-    setSummary(getCurrentEvidenceSummary());
     setHost(ensureActionHost());
+    syncCurrentEvidenceValues();
+
+    const timer = window.setTimeout(syncCurrentEvidenceValues, 250);
+    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
-    if (host) return;
+    if (host) {
+      syncCurrentEvidenceValues();
+      return;
+    }
 
     const observer = new MutationObserver(() => {
       const nextHost = ensureActionHost();
       if (nextHost) {
         setHost(nextHost);
+        syncCurrentEvidenceValues();
         observer.disconnect();
       }
     });
