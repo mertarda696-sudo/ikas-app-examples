@@ -34,10 +34,40 @@ type OperationCaseDetailRow = {
   crm_updated_at: Date | string | null;
 };
 
+type OperationCaseAttachmentRow = {
+  id: string;
+  message_id: string | null;
+  kind: string | null;
+  mime_type: string | null;
+  file_name: string | null;
+  storage_path: string | null;
+  size_bytes: number | bigint | string | null;
+  meta: unknown;
+  created_at: Date | string | null;
+};
+
 function toIso(value: Date | string | null | undefined): string | null {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function toNumber(value: number | bigint | string | null | undefined): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function toMetaObject(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
+function getMetaString(meta: Record<string, unknown>, key: string): string | null {
+  const value = meta[key];
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  return text || null;
 }
 
 function mapSourceChannelLabel(channel: string | null | undefined) {
@@ -50,6 +80,30 @@ function mapSourceChannelLabel(channel: string | null | undefined) {
   if (normalized === "webchat") return "Web Chat";
 
   return channel || "Kanal bilgisi yok";
+}
+
+function mapAttachmentRow(row: OperationCaseAttachmentRow) {
+  const meta = toMetaObject(row.meta);
+
+  return {
+    id: row.id,
+    messageId: row.message_id,
+    kind: row.kind,
+    mimeType: row.mime_type,
+    fileName: row.file_name,
+    storagePath: row.storage_path,
+    sizeBytes: toNumber(row.size_bytes),
+    whatsappMediaId: getMetaString(meta, "whatsapp_media_id"),
+    mediaSha256: getMetaString(meta, "media_sha256"),
+    externalMessageId: getMetaString(meta, "external_message_id"),
+    caption: getMetaString(meta, "caption"),
+    customerWaId: getMetaString(meta, "customer_wa_id"),
+    linkedOrderId: getMetaString(meta, "linked_order_id"),
+    caseNo: getMetaString(meta, "case_no"),
+    caseType: getMetaString(meta, "case_type"),
+    captureStatus: getMetaString(meta, "capture_status"),
+    createdAt: toIso(row.created_at),
+  };
 }
 
 async function findCaseByUuid(tenantId: string, caseId: string) {
@@ -138,6 +192,31 @@ async function findCaseByCaseNo(tenantId: string, caseId: string) {
   `;
 }
 
+async function findAttachmentsForCase(tenantId: string, operationCaseId: string, caseNo: string | null) {
+  const caseNoValue = String(caseNo || "").trim();
+
+  return prisma.$queryRaw<OperationCaseAttachmentRow[]>`
+    select
+      id,
+      message_id,
+      kind,
+      mime_type,
+      file_name,
+      storage_path,
+      size_bytes,
+      meta,
+      created_at
+    from public.attachments
+    where tenant_id = CAST(${tenantId} AS uuid)
+      and (
+        meta->>'operation_case_id' = ${operationCaseId}
+        or (${caseNoValue} <> '' and meta->>'case_no' = ${caseNoValue})
+      )
+    order by created_at desc nulls last
+    limit 50
+  `;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ caseId: string }> },
@@ -208,6 +287,9 @@ export async function GET(
       );
     }
 
+    const attachmentRows = await findAttachmentsForCase(tenant.tenantId, row.id, row.case_no);
+    const attachments = attachmentRows.map(mapAttachmentRow);
+
     return NextResponse.json(
       {
         ok: true,
@@ -240,6 +322,7 @@ export async function GET(
           crmInternalNote: row.crm_internal_note,
           crmReviewedAt: toIso(row.crm_reviewed_at),
           crmUpdatedAt: toIso(row.crm_updated_at),
+          attachments,
         },
       },
       { status: 200 },
