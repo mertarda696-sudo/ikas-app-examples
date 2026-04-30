@@ -213,7 +213,7 @@ export async function GET(
           and order_id = CAST(${order.id} AS uuid)
         order by created_at asc, id asc
       `,
-      prisma.$queryRaw<LinkedCaseRow[]>`
+            prisma.$queryRaw<LinkedCaseRow[]>`
         select
           id,
           case_no,
@@ -228,13 +228,7 @@ export async function GET(
           updated_at
         from public.operation_cases
         where tenant_id = CAST(${tenant.tenantId} AS uuid)
-          and (
-            linked_order_id = ${order.order_no}
-            or (
-              ${order.conversation_id}::uuid is not null
-              and conversation_id = ${order.conversation_id}::uuid
-            )
-          )
+          and linked_order_id = ${order.order_no}
         order by
           case
             when priority = 'critical' then 4
@@ -263,6 +257,14 @@ export async function GET(
         : Promise.resolve([]),
     ]);
 
+        const itemsSubtotalAmount = itemRows.reduce((sum, item) => {
+      return sum + toNumber(item.total_amount);
+    }, 0);
+
+    const safeSubtotalAmount =
+      toNumber(order.subtotal_amount) > 0
+        ? toNumber(order.subtotal_amount)
+        : itemsSubtotalAmount;
     return NextResponse.json(
       {
         ok: true,
@@ -281,7 +283,7 @@ export async function GET(
           financialStatus: order.financial_status,
           fulfillmentStatus: order.fulfillment_status,
           currency: order.currency,
-          subtotalAmount: toNumber(order.subtotal_amount),
+          subtotalAmount: safeSubtotalAmount,
           discountAmount: toNumber(order.discount_amount),
           shippingAmount: toNumber(order.shipping_amount),
           taxAmount: toNumber(order.tax_amount),
