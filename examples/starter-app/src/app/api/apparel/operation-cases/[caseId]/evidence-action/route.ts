@@ -27,6 +27,24 @@ const ACTIONS = new Set([
   "resolve_case",
 ]);
 
+const ACTION_META: Record<string, { label: string }> = {
+  verify_evidence: {
+    label: "Kanıtı Doğrula",
+  },
+  request_more_evidence: {
+    label: "Ek Kanıt İste",
+  },
+  mark_evidence_insufficient: {
+    label: "Kanıt Yetersiz",
+  },
+  start_review: {
+    label: "İncelemeye Al",
+  },
+  resolve_case: {
+    label: "Çözüldü Yap",
+  },
+};
+
 function toIso(value: Date | string | null | undefined): string | null {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
@@ -157,6 +175,37 @@ export async function POST(
     if (!row) {
       return NextResponse.json({ ok: false, error: "Operation case not found for merchant" }, { status: 404 });
     }
+
+    const actionMeta = ACTION_META[action] || { label: action };
+
+await prisma.$executeRaw`
+  insert into public.operation_case_events (
+    tenant_id,
+    operation_case_id,
+    event_type,
+    event_label,
+    event_note,
+    actor_type,
+    actor_id,
+    source,
+    payload
+  )
+  values (
+    CAST(${tenant.tenantId} AS uuid),
+    CAST(${row.id} AS uuid),
+    ${action},
+    ${actionMeta.label},
+    ${defaults.summary},
+    'operator',
+    ${String(user.merchantId || '')},
+    'panel',
+    CAST(${JSON.stringify({
+      status: row.status,
+      evidence_state: row.evidence_state,
+      case_no: row.case_no,
+    })} AS jsonb)
+  )
+`;
 
     return NextResponse.json(
       {
