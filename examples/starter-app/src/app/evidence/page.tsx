@@ -181,7 +181,7 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function EvidenceMediaCard({ item }: { item: EvidenceMediaItem }) {
+function EvidenceMediaCard({ item, onBackfill, backfillState }: { item: EvidenceMediaItem; onBackfill: (item: EvidenceMediaItem) => void; backfillState?: { loading?: boolean; error?: string | null; success?: string | null } }) {
   const isImage = isImageItem(item);
   const hasPreview = isPreviewableItem(item);
   const caseHref = item.caseNo || item.operationCaseId ? `/operations/${item.caseNo || item.operationCaseId}` : null;
@@ -220,8 +220,13 @@ function EvidenceMediaCard({ item }: { item: EvidenceMediaItem }) {
       )}
 
       {needsDownloadLater ? (
-        <div style={{ border: '1px solid #fde68a', background: '#fffbeb', color: '#92400e', borderRadius: 12, padding: 10, fontSize: 13, fontWeight: 800, lineHeight: 1.55 }}>
-          Yeniden indirme aksiyonu sonraki fazda eklenecek. Bu kayıt şimdilik metadata olarak korunuyor.
+        <div style={{ border: '1px solid #fde68a', background: '#fffbeb', color: '#92400e', borderRadius: 12, padding: 10, fontSize: 13, fontWeight: 800, lineHeight: 1.55, display: 'grid', gap: 10 }}>
+          <div>Bu kayıt metadata olarak korunuyor. Dosyayı tekrar indirip Storage’a almak için yeniden indirme aksiyonunu çalıştırabilirsiniz.</div>
+          <button onClick={() => onBackfill(item)} disabled={Boolean(backfillState?.loading)} style={{ justifySelf: 'start', border: '1px solid #d97706', background: backfillState?.loading ? '#f3f4f6' : '#ffffff', color: backfillState?.loading ? '#6b7280' : '#92400e', borderRadius: 999, padding: '9px 13px', fontSize: 13, fontWeight: 900, cursor: backfillState?.loading ? 'not-allowed' : 'pointer' }}>
+            {backfillState?.loading ? 'Yeniden indiriliyor...' : 'Yeniden İndir ve Storage’a Al'}
+          </button>
+          {backfillState?.error ? <div style={{ color: '#991b1b' }}>{backfillState.error}</div> : null}
+          {backfillState?.success ? <div style={{ color: '#166534' }}>{backfillState.success}</div> : null}
         </div>
       ) : null}
 
@@ -254,24 +259,27 @@ export default function EvidencePage() {
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<EvidenceFilter>('all');
   const [query, setQuery] = useState('');
+  const [backfillById, setBackfillById] = useState<Record<string, { loading?: boolean; error?: string | null; success?: string | null }>>({});
+
+  const loadEvidence = async (options?: { silent?: boolean }) => {
+    try {
+      if (!options?.silent) setLoading(true);
+      const iframeToken = await TokenHelpers.getTokenForIframeApp();
+      if (!iframeToken) {
+        setData({ ok: false, fetchedAt: new Date().toISOString(), tenant: null, metrics: { total: 0, stored: 0, metadataOnly: 0, images: 0, linkedCases: 0, damagedProduct: 0 }, items: [], error: 'iFrame JWT token alınamadı.' });
+        return;
+      }
+      const response = await fetch('/api/apparel/evidence-media', { cache: 'no-store', headers: { Authorization: 'JWT ' + iframeToken } });
+      setData((await response.json()) as EvidenceMediaResponse);
+    } catch (error) {
+      setData({ ok: false, fetchedAt: new Date().toISOString(), tenant: null, metrics: { total: 0, stored: 0, metadataOnly: 0, images: 0, linkedCases: 0, damagedProduct: 0 }, items: [], error: error instanceof Error ? error.message : 'Unknown error' });
+    } finally {
+      if (!options?.silent) setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const run = async () => {
-      try {
-        const iframeToken = await TokenHelpers.getTokenForIframeApp();
-        if (!iframeToken) {
-          setData({ ok: false, fetchedAt: new Date().toISOString(), tenant: null, metrics: { total: 0, stored: 0, metadataOnly: 0, images: 0, linkedCases: 0, damagedProduct: 0 }, items: [], error: 'iFrame JWT token alınamadı.' });
-          return;
-        }
-        const response = await fetch('/api/apparel/evidence-media', { cache: 'no-store', headers: { Authorization: 'JWT ' + iframeToken } });
-        setData((await response.json()) as EvidenceMediaResponse);
-      } catch (error) {
-        setData({ ok: false, fetchedAt: new Date().toISOString(), tenant: null, metrics: { total: 0, stored: 0, metadataOnly: 0, images: 0, linkedCases: 0, damagedProduct: 0 }, items: [], error: error instanceof Error ? error.message : 'Unknown error' });
-      } finally {
-        setLoading(false);
-      }
-    };
-    run();
+    loadEvidence();
   }, []);
 
   const items = data?.items || [];
@@ -307,6 +315,28 @@ export default function EvidencePage() {
     });
   }, [activeFilter, items, query]);
 
+  const handleBackfill = async (item: EvidenceMediaItem) => {
+    try {
+      setBackfillById((current) => ({ ...current, [item.id]: { loading: true, error: null, success: null } }));
+      const iframeToken = await TokenHelpers.getTokenForIframeApp();
+      if (!iframeToken) throw new Error('iFrame JWT token alınamadı.');
+
+      const response = await fetch('/api/apparel/evidence-media/backfill', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { Authorization: 'JWT ' + iframeToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attachmentId: item.id }),
+      });
+      const raw = await response.json();
+      if (!response.ok || !raw?.ok) throw new Error(raw?.error || 'Yeniden indirme başarısız oldu.');
+
+      setBackfillById((current) => ({ ...current, [item.id]: { loading: false, error: null, success: raw?.status === 'skipped' ? 'Kayıt zaten Storage’da.' : 'Dosya Storage’a alındı.' } }));
+      await loadEvidence({ silent: true });
+    } catch (error) {
+      setBackfillById((current) => ({ ...current, [item.id]: { loading: false, error: error instanceof Error ? error.message : 'Yeniden indirme sırasında hata oluştu.', success: null } }));
+    }
+  };
+
   return (
     <AppShell>
       <main style={{ maxWidth: 1280, margin: '0 auto', padding: 24, minHeight: '100vh' }}>
@@ -328,7 +358,7 @@ export default function EvidencePage() {
               <MetricCard label="Toplam Medya" value={data?.metrics.total || 0} helper="attachments tablosundaki tüm kayıtlar" tone="info" onClick={() => setActiveFilter('all')} />
               <MetricCard label="Önizlemeli Görsel" value={localMetrics.previewable} helper="Panelde doğrudan görülebilen Storage görselleri" tone={localMetrics.previewable > 0 ? 'success' : 'neutral'} onClick={() => setActiveFilter('previewable')} />
               <MetricCard label="Storage’da" value={data?.metrics.stored || 0} helper="Dosyası indirilip bucket’a yüklenenler" tone={(data?.metrics.stored || 0) > 0 ? 'success' : 'neutral'} onClick={() => setActiveFilter('stored')} />
-              <MetricCard label="Metadata Only" value={data?.metrics.metadataOnly || 0} helper="Sonraki fazda yeniden indir aksiyonu adayları" tone={(data?.metrics.metadataOnly || 0) > 0 ? 'warning' : 'success'} onClick={() => setActiveFilter('metadata_only')} />
+              <MetricCard label="Metadata Only" value={data?.metrics.metadataOnly || 0} helper="Yeniden indir aksiyonu adayları" tone={(data?.metrics.metadataOnly || 0) > 0 ? 'warning' : 'success'} onClick={() => setActiveFilter('metadata_only')} />
               <MetricCard label="Hasarlı Ürün Fotoğrafı" value={localMetrics.damagedProductImages} helper="Öncelikli operasyon kanıtları" tone={localMetrics.damagedProductImages > 0 ? 'warning' : 'neutral'} onClick={() => setActiveFilter('damaged_product_images')} />
               <MetricCard label="Vaka Bağlı" value={data?.metrics.linkedCases || 0} helper="Operation case ile eşleşen medya" tone="success" />
             </section>
@@ -359,7 +389,7 @@ export default function EvidencePage() {
                 })}
               </div>
 
-              {rows.length === 0 ? <div style={{ border: '1px dashed #d1d5db', borderRadius: 16, padding: 18, color: '#6b7280', background: '#f9fafb' }}>Seçili filtre için medya kaydı bulunmuyor.</div> : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 14 }}>{rows.map((item) => <EvidenceMediaCard key={item.id} item={item} />)}</div>}
+              {rows.length === 0 ? <div style={{ border: '1px dashed #d1d5db', borderRadius: 16, padding: 18, color: '#6b7280', background: '#f9fafb' }}>Seçili filtre için medya kaydı bulunmuyor.</div> : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 14 }}>{rows.map((item) => <EvidenceMediaCard key={item.id} item={item} onBackfill={handleBackfill} backfillState={backfillById[item.id]} />)}</div>}
             </section>
           </div>
         )}
