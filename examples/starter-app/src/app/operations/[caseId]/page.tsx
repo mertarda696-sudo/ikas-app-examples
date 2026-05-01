@@ -16,6 +16,26 @@ import {
   mapStatusLabel,
 } from '@/lib/apparel-panel/labels';
 
+type OperationCaseAttachment = {
+  id: string;
+  messageId: string | null;
+  kind: string | null;
+  mimeType: string | null;
+  fileName: string | null;
+  storagePath: string | null;
+  sizeBytes: number | null;
+  whatsappMediaId: string | null;
+  mediaSha256: string | null;
+  externalMessageId: string | null;
+  caption: string | null;
+  customerWaId: string | null;
+  linkedOrderId: string | null;
+  caseNo: string | null;
+  caseType: string | null;
+  captureStatus: string | null;
+  createdAt: string | null;
+};
+
 type OperationCaseDetail = {
   id: string;
   caseNo: string | null;
@@ -43,6 +63,7 @@ type OperationCaseDetail = {
   crmInternalNote: string | null;
   crmReviewedAt: string | null;
   crmUpdatedAt: string | null;
+  attachments?: OperationCaseAttachment[];
 };
 
 type OperationCaseDetailResponse = {
@@ -68,6 +89,50 @@ function formatDate(value: string | null | undefined) {
   } catch {
     return value;
   }
+}
+
+function formatBytes(value: number | null | undefined) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '-';
+  if (value === 0) return '0 B';
+
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
+  const size = value / Math.pow(1024, index);
+
+  return `${size.toFixed(size >= 10 || index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
+function mapAttachmentKindLabel(kind: string | null | undefined) {
+  const normalized = String(kind || '').toLowerCase();
+
+  if (normalized === 'image') return 'Fotoğraf';
+  if (normalized === 'video') return 'Video';
+  if (normalized === 'audio') return 'Ses kaydı';
+  if (normalized === 'document') return 'Doküman';
+  if (normalized === 'sticker') return 'Sticker';
+
+  return kind || 'Medya';
+}
+
+function mapCaptureStatusLabel(status: string | null | undefined) {
+  const normalized = String(status || '').toLowerCase();
+
+  if (normalized === 'metadata_only') return 'Metadata kaydedildi';
+  if (normalized === 'downloaded') return 'Dosya indirildi';
+  if (normalized === 'stored') return 'Storage’a yüklendi';
+  if (normalized === 'failed') return 'İşleme hatası';
+
+  return status || 'Durum bilinmiyor';
+}
+
+function captureStatusTone(status: string | null | undefined): 'neutral' | 'success' | 'warning' | 'info' | 'danger' {
+  const normalized = String(status || '').toLowerCase();
+
+  if (normalized === 'stored' || normalized === 'downloaded') return 'success';
+  if (normalized === 'metadata_only') return 'info';
+  if (normalized === 'failed') return 'danger';
+
+  return 'neutral';
 }
 
 function Badge({ label, tone }: { label: string; tone: 'neutral' | 'success' | 'warning' | 'info' | 'danger' }) {
@@ -138,6 +203,55 @@ function FieldRow({ label, value }: { label: string; value: React.ReactNode }) {
       <div style={{ color: '#6b7280', fontWeight: 800 }}>{label}</div>
       <div style={{ color: '#111827', lineHeight: 1.6, minWidth: 0, overflowWrap: 'anywhere' }}>{value}</div>
     </div>
+  );
+}
+
+function AttachmentField({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div style={{ display: 'grid', gap: 3, minWidth: 0 }}>
+      <div style={{ color: '#6b7280', fontSize: 11, fontWeight: 900, textTransform: 'uppercase', letterSpacing: 0.35 }}>{label}</div>
+      <div style={{ color: '#111827', fontSize: 13, lineHeight: 1.55, minWidth: 0, overflowWrap: 'anywhere' }}>{value || '-'}</div>
+    </div>
+  );
+}
+
+function AttachmentCard({ attachment, index }: { attachment: OperationCaseAttachment; index: number }) {
+  const storageValue = attachment.storagePath || 'metadata_only / dosya henüz indirilmedi';
+
+  return (
+    <article style={{ border: '1px solid #e5e7eb', borderRadius: 16, background: '#f9fafb', padding: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 12 }}>
+        <div>
+          <div style={{ color: '#111827', fontSize: 15, fontWeight: 900 }}>
+            {mapAttachmentKindLabel(attachment.kind)} #{index + 1}
+          </div>
+          <div style={{ color: '#6b7280', fontSize: 12, marginTop: 3 }}>
+            {attachment.mimeType || 'MIME bilgisi yok'} · {formatDate(attachment.createdAt)}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Badge label={mapAttachmentKindLabel(attachment.kind)} tone="neutral" />
+          <Badge label={mapCaptureStatusLabel(attachment.captureStatus)} tone={captureStatusTone(attachment.captureStatus)} />
+        </div>
+      </div>
+
+      {attachment.caption ? (
+        <div style={{ border: '1px solid #dbeafe', background: '#eff6ff', color: '#1e3a8a', borderRadius: 12, padding: 10, fontSize: 13, fontWeight: 800, lineHeight: 1.55, marginBottom: 12 }}>
+          Caption: {attachment.caption}
+        </div>
+      ) : null}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
+        <AttachmentField label="WhatsApp Media ID" value={attachment.whatsappMediaId || '-'} />
+        <AttachmentField label="Message ID" value={attachment.messageId || '-'} />
+        <AttachmentField label="External Message ID" value={attachment.externalMessageId || '-'} />
+        <AttachmentField label="Dosya adı" value={attachment.fileName || '-'} />
+        <AttachmentField label="Dosya boyutu" value={formatBytes(attachment.sizeBytes)} />
+        <AttachmentField label="Storage path" value={storageValue} />
+        <AttachmentField label="Media SHA256" value={attachment.mediaSha256 || '-'} />
+        <AttachmentField label="Bağlı sipariş" value={attachment.linkedOrderId || '-'} />
+      </div>
+    </article>
   );
 }
 
@@ -226,6 +340,7 @@ export default function OperationCaseDetailPage() {
 
   const operationCase = data?.operationCase || null;
   const recommendation = useMemo(() => (operationCase ? getRecommendedAction(operationCase) : null), [operationCase]);
+  const attachments = operationCase?.attachments || [];
 
   const handleStatusChange = async (status: string) => {
     try {
@@ -319,7 +434,32 @@ export default function OperationCaseDetailPage() {
               <InfoCard title="Kanıt / Medya Bilgisi">
                 <FieldRow label="Kanıt durumu" value={mapEvidenceStateLabel(operationCase.evidenceState)} />
                 <FieldRow label="Kanıt özeti" value={operationCase.evidenceSummary || 'Henüz kanıt özeti yok.'} />
-                <div style={{ marginTop: 12 }}>
+
+                <div style={{ marginTop: 18, borderTop: '1px solid #f3f4f6', paddingTop: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+                    <div>
+                      <div style={{ color: '#111827', fontSize: 16, fontWeight: 900 }}>Bağlı Medya Kayıtları</div>
+                      <div style={{ color: '#6b7280', fontSize: 13, lineHeight: 1.6 }}>
+                        Bu bölüm şimdilik WhatsApp medya metadata kayıtlarını gösterir. Dosya indirme ve önizleme sonraki fazdadır.
+                      </div>
+                    </div>
+                    <Badge label={`${attachments.length} kayıt`} tone={attachments.length > 0 ? 'info' : 'neutral'} />
+                  </div>
+
+                  {attachments.length > 0 ? (
+                    <div style={{ display: 'grid', gap: 12 }}>
+                      {attachments.map((attachment, index) => (
+                        <AttachmentCard key={attachment.id || `${attachment.messageId}-${index}`} attachment={attachment} index={index} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ border: '1px dashed #d1d5db', borderRadius: 14, padding: 14, background: '#f9fafb', color: '#6b7280', fontSize: 14, lineHeight: 1.7 }}>
+                      Bu vakaya bağlı medya kaydı görünmüyor. Kanıt gönderildiyse attachment meta içinde operation_case_id veya case_no eşleşmesi kontrol edilmeli.
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ marginTop: 14 }}>
                   <Link href="/evidence" style={{ textDecoration: 'none', borderRadius: 12, padding: '10px 14px', background: '#111827', color: '#ffffff', fontWeight: 900, display: 'inline-block' }}>
                     Kanıtlar / Medya Merkezine Git →
                   </Link>
