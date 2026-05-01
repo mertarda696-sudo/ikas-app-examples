@@ -6,7 +6,7 @@ import { AppShell } from '@/components/apparel-panel/AppShell';
 import { CustomerProfileLink } from '@/components/apparel-panel/CustomerProfileLink';
 import { TokenHelpers } from '@/helpers/token-helpers';
 
-type EvidenceFilter = 'all' | 'stored' | 'metadata_only' | 'image' | 'damaged_product' | 'payment_proof' | 'unlinked';
+type EvidenceFilter = 'all' | 'previewable' | 'stored' | 'metadata_only' | 'image' | 'damaged_product_images' | 'damaged_product' | 'payment_proof' | 'unlinked';
 
 type EvidenceMediaItem = {
   id: string;
@@ -56,10 +56,12 @@ type EvidenceMediaResponse = {
 
 const FILTERS: Array<{ key: EvidenceFilter; label: string }> = [
   { key: 'all', label: 'Tüm Medyalar' },
+  { key: 'previewable', label: 'Önizlemeli Görseller' },
   { key: 'stored', label: 'Storage’a Yüklenenler' },
   { key: 'metadata_only', label: 'Sadece Metadata' },
-  { key: 'image', label: 'Fotoğraflar' },
-  { key: 'damaged_product', label: 'Hasarlı Ürün' },
+  { key: 'image', label: 'Tüm Fotoğraflar' },
+  { key: 'damaged_product_images', label: 'Hasarlı Ürün Fotoğrafları' },
+  { key: 'damaged_product', label: 'Hasarlı Ürün Vakaları' },
   { key: 'payment_proof', label: 'Ödeme / Dekont' },
   { key: 'unlinked', label: 'Vakasız Medya' },
 ];
@@ -80,6 +82,14 @@ function formatBytes(value: number | null | undefined) {
   const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
   const size = value / Math.pow(1024, index);
   return `${size.toFixed(size >= 10 || index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
+function isImageItem(item: EvidenceMediaItem) {
+  return String(item.kind || '').toLowerCase() === 'image' || String(item.mimeType || '').toLowerCase().startsWith('image/');
+}
+
+function isPreviewableItem(item: EvidenceMediaItem) {
+  return Boolean(isImageItem(item) && item.signedUrl);
 }
 
 function mapCaseTypeLabel(type: string | null | undefined) {
@@ -151,14 +161,14 @@ function Pill({ label, tone }: { label: string; tone: 'neutral' | 'success' | 'w
   return <span style={{ display: 'inline-flex', borderRadius: 999, padding: '5px 10px', fontSize: 12, fontWeight: 900, ...styles }}>{label}</span>;
 }
 
-function MetricCard({ label, value, helper, tone }: { label: string; value: number; helper: string; tone: 'neutral' | 'success' | 'warning' | 'info' | 'danger' }) {
+function MetricCard({ label, value, helper, tone, onClick }: { label: string; value: number; helper: string; tone: 'neutral' | 'success' | 'warning' | 'info' | 'danger'; onClick?: () => void }) {
   const borderColor = tone === 'danger' ? '#fecaca' : tone === 'warning' ? '#fde68a' : tone === 'success' ? '#bbf7d0' : tone === 'info' ? '#bfdbfe' : '#e5e7eb';
   return (
-    <div style={{ border: `1px solid ${borderColor}`, borderRadius: 18, background: '#ffffff', padding: 18 }}>
+    <button onClick={onClick} style={{ textAlign: 'left', border: `1px solid ${borderColor}`, borderRadius: 18, background: '#ffffff', padding: 18, cursor: onClick ? 'pointer' : 'default' }}>
       <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 8, fontWeight: 800 }}>{label}</div>
       <div style={{ fontSize: 28, fontWeight: 900, color: '#111827' }}>{value}</div>
       <div style={{ marginTop: 8, fontSize: 13, color: '#6b7280', lineHeight: 1.6 }}>{helper}</div>
-    </div>
+    </button>
   );
 }
 
@@ -172,12 +182,13 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 function EvidenceMediaCard({ item }: { item: EvidenceMediaItem }) {
-  const isImage = String(item.kind || '').toLowerCase() === 'image' || String(item.mimeType || '').toLowerCase().startsWith('image/');
-  const hasPreview = Boolean(isImage && item.signedUrl);
+  const isImage = isImageItem(item);
+  const hasPreview = isPreviewableItem(item);
   const caseHref = item.caseNo || item.operationCaseId ? `/operations/${item.caseNo || item.operationCaseId}` : null;
+  const needsDownloadLater = item.captureStatus === 'metadata_only' && !item.storagePath;
 
   return (
-    <article style={{ border: '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', padding: 14, display: 'grid', gap: 12 }}>
+    <article style={{ border: item.caseType === 'damaged_product' ? '1px solid #fed7aa' : '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', padding: 14, display: 'grid', gap: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontSize: 17, fontWeight: 900, color: '#111827' }}>{mapAttachmentKindLabel(item.kind)}</div>
@@ -185,8 +196,15 @@ function EvidenceMediaCard({ item }: { item: EvidenceMediaItem }) {
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Pill label={mapCaptureStatusLabel(item.captureStatus)} tone={toneForStatus(item.captureStatus)} />
-          {item.caseType ? <Pill label={mapCaseTypeLabel(item.caseType)} tone="warning" /> : <Pill label="Vakasız" tone="neutral" />}
+          {hasPreview ? <Pill label="Önizleme var" tone="success" /> : null}
+          {item.caseType ? <Pill label={mapCaseTypeLabel(item.caseType)} tone={item.caseType === 'damaged_product' ? 'warning' : 'info'} /> : <Pill label="Vakasız" tone="neutral" />}
         </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 8, border: '1px solid #f3f4f6', background: '#f9fafb', borderRadius: 14, padding: 10 }}>
+        <Field label="Vaka türü" value={mapCaseTypeLabel(item.caseType)} />
+        <Field label="Sipariş" value={item.linkedOrderId || '-'} />
+        <Field label="Müşteri" value={item.customerWaId || '-'} />
       </div>
 
       {hasPreview ? (
@@ -201,6 +219,12 @@ function EvidenceMediaCard({ item }: { item: EvidenceMediaItem }) {
         <div style={{ border: '1px dashed #d1d5db', background: '#f9fafb', color: '#6b7280', borderRadius: 12, padding: 12, fontSize: 13, fontWeight: 800 }}>Dosya henüz Storage’a alınmadı; metadata kaydı mevcut.</div>
       )}
 
+      {needsDownloadLater ? (
+        <div style={{ border: '1px solid #fde68a', background: '#fffbeb', color: '#92400e', borderRadius: 12, padding: 10, fontSize: 13, fontWeight: 800, lineHeight: 1.55 }}>
+          Yeniden indirme aksiyonu sonraki fazda eklenecek. Bu kayıt şimdilik metadata olarak korunuyor.
+        </div>
+      ) : null}
+
       {item.caption ? <div style={{ border: '1px solid #dbeafe', background: '#eff6ff', color: '#1e3a8a', borderRadius: 12, padding: 10, fontSize: 13, fontWeight: 800, lineHeight: 1.55 }}>{item.caption}</div> : null}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
@@ -208,8 +232,6 @@ function EvidenceMediaCard({ item }: { item: EvidenceMediaItem }) {
         <Field label="Vaka Başlığı" value={item.caseTitle || '-'} />
         <Field label="Vaka Durumu" value={mapStatusLabel(item.caseStatus)} />
         <Field label="Kanıt Durumu" value={mapEvidenceStateLabel(item.evidenceState)} />
-        <Field label="Müşteri" value={item.customerWaId || '-'} />
-        <Field label="Sipariş" value={item.linkedOrderId || '-'} />
         <Field label="Storage bucket" value={item.storageBucket || '-'} />
         <Field label="Storage path" value={item.storagePath || 'metadata_only / dosya henüz indirilmedi'} />
         <Field label="WhatsApp Media ID" value={item.whatsappMediaId || '-'} />
@@ -253,21 +275,31 @@ export default function EvidencePage() {
   }, []);
 
   const items = data?.items || [];
+  const localMetrics = useMemo(() => {
+    const previewable = items.filter(isPreviewableItem).length;
+    const damagedProductImages = items.filter((item) => item.caseType === 'damaged_product' && isImageItem(item)).length;
+    return { previewable, damagedProductImages };
+  }, [items]);
+
   const rows = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return items.filter((item) => {
       const matchesFilter =
         activeFilter === 'all'
           ? true
-          : activeFilter === 'stored'
-            ? item.captureStatus === 'stored'
-            : activeFilter === 'metadata_only'
-              ? item.captureStatus === 'metadata_only'
-              : activeFilter === 'image'
-                ? String(item.kind || '').toLowerCase() === 'image' || String(item.mimeType || '').toLowerCase().startsWith('image/')
-                : activeFilter === 'unlinked'
-                  ? !item.caseNo && !item.operationCaseId
-                  : item.caseType === activeFilter;
+          : activeFilter === 'previewable'
+            ? isPreviewableItem(item)
+            : activeFilter === 'stored'
+              ? item.captureStatus === 'stored'
+              : activeFilter === 'metadata_only'
+                ? item.captureStatus === 'metadata_only'
+                : activeFilter === 'image'
+                  ? isImageItem(item)
+                  : activeFilter === 'damaged_product_images'
+                    ? item.caseType === 'damaged_product' && isImageItem(item)
+                    : activeFilter === 'unlinked'
+                      ? !item.caseNo && !item.operationCaseId
+                      : item.caseType === activeFilter;
       if (!matchesFilter) return false;
       if (!needle) return true;
       const haystack = [item.caption, item.caseNo, item.caseType, item.caseTitle, item.customerWaId, item.linkedOrderId, item.whatsappMediaId, item.messageId, item.externalMessageId].filter(Boolean).join(' ').toLowerCase();
@@ -293,12 +325,20 @@ export default function EvidencePage() {
         {loading ? <div>Yükleniyor...</div> : data?.error ? <div style={{ border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b', borderRadius: 14, padding: 16, fontWeight: 800 }}>{data.error}</div> : (
           <div style={{ display: 'grid', gap: 16 }}>
             <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
-              <MetricCard label="Toplam Medya" value={data?.metrics.total || 0} helper="attachments tablosundaki tüm kayıtlar" tone="info" />
-              <MetricCard label="Storage’da" value={data?.metrics.stored || 0} helper="Dosyası indirilip bucket’a yüklenenler" tone={(data?.metrics.stored || 0) > 0 ? 'success' : 'neutral'} />
-              <MetricCard label="Metadata Only" value={data?.metrics.metadataOnly || 0} helper="Dosyası henüz indirilmemiş kayıtlar" tone={(data?.metrics.metadataOnly || 0) > 0 ? 'warning' : 'success'} />
-              <MetricCard label="Fotoğraf" value={data?.metrics.images || 0} helper="Görsel medya kayıtları" tone="info" />
+              <MetricCard label="Toplam Medya" value={data?.metrics.total || 0} helper="attachments tablosundaki tüm kayıtlar" tone="info" onClick={() => setActiveFilter('all')} />
+              <MetricCard label="Önizlemeli Görsel" value={localMetrics.previewable} helper="Panelde doğrudan görülebilen Storage görselleri" tone={localMetrics.previewable > 0 ? 'success' : 'neutral'} onClick={() => setActiveFilter('previewable')} />
+              <MetricCard label="Storage’da" value={data?.metrics.stored || 0} helper="Dosyası indirilip bucket’a yüklenenler" tone={(data?.metrics.stored || 0) > 0 ? 'success' : 'neutral'} onClick={() => setActiveFilter('stored')} />
+              <MetricCard label="Metadata Only" value={data?.metrics.metadataOnly || 0} helper="Sonraki fazda yeniden indir aksiyonu adayları" tone={(data?.metrics.metadataOnly || 0) > 0 ? 'warning' : 'success'} onClick={() => setActiveFilter('metadata_only')} />
+              <MetricCard label="Hasarlı Ürün Fotoğrafı" value={localMetrics.damagedProductImages} helper="Öncelikli operasyon kanıtları" tone={localMetrics.damagedProductImages > 0 ? 'warning' : 'neutral'} onClick={() => setActiveFilter('damaged_product_images')} />
               <MetricCard label="Vaka Bağlı" value={data?.metrics.linkedCases || 0} helper="Operation case ile eşleşen medya" tone="success" />
-              <MetricCard label="Hasarlı Ürün" value={data?.metrics.damagedProduct || 0} helper="Hasarlı ürün kanıtları" tone="warning" />
+            </section>
+
+            <section style={{ border: '1px solid #fed7aa', background: '#fff7ed', borderRadius: 18, padding: 16, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ color: '#9a3412', fontSize: 17, fontWeight: 900 }}>Hasarlı Ürün Fotoğrafları</div>
+                <div style={{ color: '#7c2d12', fontSize: 13, marginTop: 4, lineHeight: 1.6 }}>Operatörün en hızlı bakması gereken görsel kanıtlar. Bu hızlı filtre sadece hasarlı ürün vakalarındaki fotoğrafları listeler.</div>
+              </div>
+              <button onClick={() => setActiveFilter('damaged_product_images')} style={{ border: '1px solid #ea580c', background: activeFilter === 'damaged_product_images' ? '#ea580c' : '#ffffff', color: activeFilter === 'damaged_product_images' ? '#ffffff' : '#9a3412', borderRadius: 999, padding: '11px 16px', fontSize: 13, fontWeight: 900, cursor: 'pointer' }}>Hasarlı Ürün Fotoğraflarını Göster →</button>
             </section>
 
             <section style={{ border: '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', padding: 18 }}>
