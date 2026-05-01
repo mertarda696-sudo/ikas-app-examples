@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import React from 'react';
 import { DashboardOperationsHub } from '@/components/apparel-panel/DashboardOperationsHub';
 import { CatalogProductLinksEnhancer } from '@/components/apparel-panel/CatalogProductLinksEnhancer';
+import { OperationCaseActionFeedbackEnhancer } from '@/components/apparel-panel/OperationCaseActionFeedbackEnhancer';
 
 type NavItem = {
   href: string;
@@ -73,6 +74,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const showDashboardOperationsHub = pathname === '/dashboard';
   const showCatalogProductLinksEnhancer = pathname === '/catalog';
+  const showOperationCaseActionFeedback = /^\/operations\/[^/]+$/.test(pathname || '');
 
   return (
     <div
@@ -82,6 +84,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       }}
     >
       {showCatalogProductLinksEnhancer ? <CatalogProductLinksEnhancer /> : null}
+      {showOperationCaseActionFeedback ? <OperationCaseActionFeedbackEnhancer /> : null}
 
       <div
         style={{
