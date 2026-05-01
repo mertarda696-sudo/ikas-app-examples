@@ -23,6 +23,7 @@ type OperationCaseAttachment = {
   mimeType: string | null;
   fileName: string | null;
   storagePath: string | null;
+  storageBucket?: string | null;
   sizeBytes: number | null;
   whatsappMediaId: string | null;
   mediaSha256: string | null;
@@ -33,6 +34,8 @@ type OperationCaseAttachment = {
   caseNo: string | null;
   caseType: string | null;
   captureStatus: string | null;
+  signedUrl?: string | null;
+  signedUrlError?: string | null;
   createdAt: string | null;
 };
 
@@ -217,6 +220,8 @@ function AttachmentField({ label, value }: { label: string; value: React.ReactNo
 
 function AttachmentCard({ attachment, index }: { attachment: OperationCaseAttachment; index: number }) {
   const storageValue = attachment.storagePath || 'metadata_only / dosya henüz indirilmedi';
+  const isImage = String(attachment.kind || '').toLowerCase() === 'image' || String(attachment.mimeType || '').toLowerCase().startsWith('image/');
+  const hasPreview = Boolean(isImage && attachment.signedUrl);
 
   return (
     <article style={{ border: '1px solid #e5e7eb', borderRadius: 16, background: '#f9fafb', padding: 14 }}>
@@ -235,6 +240,31 @@ function AttachmentCard({ attachment, index }: { attachment: OperationCaseAttach
         </div>
       </div>
 
+      {hasPreview ? (
+        <div style={{ marginBottom: 12 }}>
+          <a href={attachment.signedUrl || '#'} target="_blank" rel="noreferrer" style={{ display: 'block', textDecoration: 'none' }}>
+            <img
+              src={attachment.signedUrl || ''}
+              alt={attachment.caption || `Medya kaydı ${index + 1}`}
+              style={{ width: '100%', maxHeight: 360, objectFit: 'contain', borderRadius: 14, border: '1px solid #e5e7eb', background: '#ffffff' }}
+            />
+          </a>
+          <div style={{ marginTop: 8, color: '#6b7280', fontSize: 12, fontWeight: 800 }}>
+            Görsel özel Storage bucket’tan geçici imzalı bağlantıyla gösteriliyor.
+          </div>
+        </div>
+      ) : attachment.storagePath && attachment.signedUrl ? (
+        <div style={{ marginBottom: 12 }}>
+          <a href={attachment.signedUrl} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: '#111827', fontWeight: 900 }}>
+            Dosyayı aç →
+          </a>
+        </div>
+      ) : attachment.storagePath && attachment.signedUrlError ? (
+        <div style={{ border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b', borderRadius: 12, padding: 10, fontSize: 13, fontWeight: 800, lineHeight: 1.55, marginBottom: 12 }}>
+          Önizleme bağlantısı üretilemedi: {attachment.signedUrlError}
+        </div>
+      ) : null}
+
       {attachment.caption ? (
         <div style={{ border: '1px solid #dbeafe', background: '#eff6ff', color: '#1e3a8a', borderRadius: 12, padding: 10, fontSize: 13, fontWeight: 800, lineHeight: 1.55, marginBottom: 12 }}>
           Caption: {attachment.caption}
@@ -247,6 +277,7 @@ function AttachmentCard({ attachment, index }: { attachment: OperationCaseAttach
         <AttachmentField label="External Message ID" value={attachment.externalMessageId || '-'} />
         <AttachmentField label="Dosya adı" value={attachment.fileName || '-'} />
         <AttachmentField label="Dosya boyutu" value={formatBytes(attachment.sizeBytes)} />
+        <AttachmentField label="Storage bucket" value={attachment.storageBucket || '-'} />
         <AttachmentField label="Storage path" value={storageValue} />
         <AttachmentField label="Media SHA256" value={attachment.mediaSha256 || '-'} />
         <AttachmentField label="Bağlı sipariş" value={attachment.linkedOrderId || '-'} />
@@ -440,7 +471,7 @@ export default function OperationCaseDetailPage() {
                     <div>
                       <div style={{ color: '#111827', fontSize: 16, fontWeight: 900 }}>Bağlı Medya Kayıtları</div>
                       <div style={{ color: '#6b7280', fontSize: 13, lineHeight: 1.6 }}>
-                        Bu bölüm şimdilik WhatsApp medya metadata kayıtlarını gösterir. Dosya indirme ve önizleme sonraki fazdadır.
+                        Storage’a alınan dosyalar önizleme olarak gösterilir. Henüz yüklenmeyen kayıtlar metadata olarak kalır.
                       </div>
                     </div>
                     <Badge label={`${attachments.length} kayıt`} tone={attachments.length > 0 ? 'info' : 'neutral'} />
