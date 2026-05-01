@@ -77,12 +77,47 @@ type OperationCaseDetailResponse = {
   error?: string;
 };
 
+type EvidenceActionKey = 'verify_evidence' | 'request_more_evidence' | 'mark_evidence_insufficient' | 'start_review' | 'resolve_case';
+
 const STATUS_OPTIONS = [
   { value: 'open', label: 'Açık' },
   { value: 'in_progress', label: 'İnceleniyor' },
   { value: 'waiting_customer', label: 'Müşteri Bekleniyor' },
   { value: 'resolved', label: 'Çözüldü' },
   { value: 'closed', label: 'Kapalı' },
+];
+
+const EVIDENCE_ACTIONS: Array<{ action: EvidenceActionKey; label: string; helper: string; tone: 'neutral' | 'success' | 'warning' | 'info' | 'danger' }> = [
+  {
+    action: 'verify_evidence',
+    label: 'Kanıtı Doğrula',
+    helper: 'Fotoğraf/dekont yeterli görünüyor. Kanıt doğrulandı, vaka incelemeye alınır.',
+    tone: 'success',
+  },
+  {
+    action: 'request_more_evidence',
+    label: 'Ek Kanıt İste',
+    helper: 'Müşteriden yeni fotoğraf, video veya belge istenecek. Vaka müşteri bekliyor olur.',
+    tone: 'warning',
+  },
+  {
+    action: 'mark_evidence_insufficient',
+    label: 'Kanıt Yetersiz',
+    helper: 'Mevcut medya yeterli değil. Kanıt yetersiz olarak işaretlenir.',
+    tone: 'danger',
+  },
+  {
+    action: 'start_review',
+    label: 'İncelemeye Al',
+    helper: 'Vaka operasyon ekibi tarafından inceleniyor olarak işaretlenir.',
+    tone: 'info',
+  },
+  {
+    action: 'resolve_case',
+    label: 'Çözüldü Yap',
+    helper: 'Kanıt incelemesi tamamlandıysa vaka çözüldü olarak işaretlenir.',
+    tone: 'success',
+  },
 ];
 
 function formatDate(value: string | null | undefined) {
@@ -218,6 +253,39 @@ function AttachmentField({ label, value }: { label: string; value: React.ReactNo
   );
 }
 
+function ActionButton({ label, tone, disabled, onClick }: { label: string; tone: 'neutral' | 'success' | 'warning' | 'info' | 'danger'; disabled?: boolean; onClick: () => void }) {
+  const styles =
+    tone === 'success'
+      ? { border: '1px solid #16a34a', color: '#166534', background: '#f0fdf4' }
+      : tone === 'warning'
+        ? { border: '1px solid #d97706', color: '#92400e', background: '#fffbeb' }
+        : tone === 'danger'
+          ? { border: '1px solid #dc2626', color: '#991b1b', background: '#fef2f2' }
+          : tone === 'info'
+            ? { border: '1px solid #2563eb', color: '#1d4ed8', background: '#eff6ff' }
+            : { border: '1px solid #d1d5db', color: '#111827', background: '#ffffff' };
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        ...styles,
+        width: '100%',
+        borderRadius: 12,
+        padding: '10px 12px',
+        fontSize: 13,
+        fontWeight: 900,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.65 : 1,
+        textAlign: 'left',
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
 function AttachmentCard({ attachment, index }: { attachment: OperationCaseAttachment; index: number }) {
   const storageValue = attachment.storagePath || 'metadata_only / dosya henüz indirilmedi';
   const isImage = String(attachment.kind || '').toLowerCase() === 'image' || String(attachment.mimeType || '').toLowerCase().startsWith('image/');
@@ -333,6 +401,7 @@ export default function OperationCaseDetailPage() {
   const [data, setData] = useState<OperationCaseDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [runningEvidenceAction, setRunningEvidenceAction] = useState<EvidenceActionKey | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
@@ -408,6 +477,45 @@ export default function OperationCaseDetailPage() {
       setUpdatingStatus(false);
     }
   };
+
+  const handleEvidenceAction = async (action: EvidenceActionKey) => {
+    try {
+      if (!operationCase) return;
+      setActionError(null);
+      setActionSuccess(null);
+      setRunningEvidenceAction(action);
+
+      const iframeToken = await TokenHelpers.getTokenForIframeApp();
+
+      if (!iframeToken) {
+        setActionError('iFrame JWT token alınamadı.');
+        return;
+      }
+
+      const selected = EVIDENCE_ACTIONS.find((item) => item.action === action);
+      const response = await fetch(`/api/apparel/operation-cases/${operationCase.id}/evidence-action`, {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { Authorization: 'JWT ' + iframeToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+
+      const raw = await response.json();
+
+      if (!response.ok || !raw?.ok) {
+        throw new Error(raw?.error || 'Kanıt aksiyonu uygulanamadı.');
+      }
+
+      setActionSuccess(`${selected?.label || 'Kanıt aksiyonu'} uygulandı.`);
+      await loadCase({ silent: true });
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Kanıt aksiyonu uygulanırken hata oluştu.');
+    } finally {
+      setRunningEvidenceAction(null);
+    }
+  };
+
+  const actionDisabled = updatingStatus || Boolean(runningEvidenceAction);
 
   return (
     <AppShell>
@@ -507,6 +615,20 @@ export default function OperationCaseDetailPage() {
                   </div>
                 </InfoCard>
               ) : null}
+
+              <InfoCard title="Kanıt İnceleme Aksiyonları">
+                <div style={{ display: 'grid', gap: 10 }}>
+                  <div style={{ color: '#4b5563', fontSize: 13, lineHeight: 1.65 }}>
+                    Bu aksiyonlar vaka durumunu ve kanıt durumunu birlikte günceller. Müşteriye otomatik mesaj göndermez; sadece operasyon kaydını düzenler.
+                  </div>
+                  {EVIDENCE_ACTIONS.map((item) => (
+                    <div key={item.action} style={{ display: 'grid', gap: 5 }}>
+                      <ActionButton label={runningEvidenceAction === item.action ? 'Uygulanıyor...' : item.label} tone={item.tone} disabled={actionDisabled} onClick={() => handleEvidenceAction(item.action)} />
+                      <div style={{ color: '#6b7280', fontSize: 12, lineHeight: 1.5 }}>{item.helper}</div>
+                    </div>
+                  ))}
+                </div>
+              </InfoCard>
 
               <InfoCard title="Durum Güncelle">
                 <div style={{ display: 'grid', gap: 10 }}>
