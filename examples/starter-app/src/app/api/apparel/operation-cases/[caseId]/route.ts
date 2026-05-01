@@ -4,6 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { getTenantPanelContextByMerchantId } from "@/lib/apparel-panel/queries";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
+const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "https://wnougygablrqpfgoqzsm.supabase.co").replace(/\/$/, "");
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_KEY || "";
+const DEFAULT_EVIDENCE_BUCKET = "case-evidence";
 
 type OperationCaseDetailRow = {
   id: string;
@@ -70,6 +73,64 @@ function getMetaString(meta: Record<string, unknown>, key: string): string | nul
   return text || null;
 }
 
+function encodeStoragePath(path: string) {
+  return path
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
+function normalizeSignedUrl(raw: string | null) {
+  if (!raw) return null;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.startsWith("/storage/v1")) return `${SUPABASE_URL}${raw}`;
+  if (raw.startsWith("/")) return `${SUPABASE_URL}/storage/v1${raw}`;
+  return `${SUPABASE_URL}/storage/v1/${raw}`;
+}
+
+async function createStorageSignedUrl(bucket: string, storagePath: string | null) {
+  const safeBucket = String(bucket || DEFAULT_EVIDENCE_BUCKET).trim();
+  const safePath = String(storagePath || "").trim();
+
+  if (!safePath) {
+    return { signedUrl: null as string | null, signedUrlError: null as string | null };
+  }
+
+  if (!SUPABASE_SERVICE_ROLE_KEY) {
+    return { signedUrl: null as string | null, signedUrlError: "missing_supabase_service_role_key" };
+  }
+
+  try {
+    const response = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/${encodeURIComponent(safeBucket)}/${encodeStoragePath(safePath)}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        apikey: SUPABASE_SERVICE_ROLE_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ expiresIn: 60 * 30 }),
+      cache: "no-store",
+    });
+
+    const payload = (await response.json().catch(() => null)) as { signedURL?: string; signedUrl?: string; url?: string; message?: string; error?: string } | null;
+
+    if (!response.ok) {
+      return {
+        signedUrl: null as string | null,
+        signedUrlError: payload?.message || payload?.error || `storage_sign_failed_${response.status}`,
+      };
+    }
+
+    const rawSignedUrl = payload?.signedURL || payload?.signedUrl || payload?.url || null;
+    return { signedUrl: normalizeSignedUrl(rawSignedUrl), signedUrlError: null as string | null };
+  } catch (error) {
+    return {
+      signedUrl: null as string | null,
+      signedUrlError: error instanceof Error ? error.message : "storage_sign_unknown_error",
+    };
+  }
+}
+
 function mapSourceChannelLabel(channel: string | null | undefined) {
   const normalized = String(channel || "").toLowerCase();
 
@@ -82,8 +143,11 @@ function mapSourceChannelLabel(channel: string | null | undefined) {
   return channel || "Kanal bilgisi yok";
 }
 
-function mapAttachmentRow(row: OperationCaseAttachmentRow) {
+async function mapAttachmentRow(row: OperationCaseAttachmentRow) {
   const meta = toMetaObject(row.meta);
+  const storageBucket = getMetaString(meta, "storage_bucket") || DEFAULT_EVIDENCE_BUCKET;
+  const storagePath = row.storage_path || getMetaString(meta, "storage_path");
+  const signed = await createStorageSignedUrl(storageBucket, storagePath);
 
   return {
     id: row.id,
@@ -91,7 +155,8 @@ function mapAttachmentRow(row: OperationCaseAttachmentRow) {
     kind: row.kind,
     mimeType: row.mime_type,
     fileName: row.file_name,
-    storagePath: row.storage_path,
+    storagePath,
+    storageBucket,
     sizeBytes: toNumber(row.size_bytes),
     whatsappMediaId: getMetaString(meta, "whatsapp_media_id"),
     mediaSha256: getMetaString(meta, "media_sha256"),
@@ -102,6 +167,8 @@ function mapAttachmentRow(row: OperationCaseAttachmentRow) {
     caseNo: getMetaString(meta, "case_no"),
     caseType: getMetaString(meta, "case_type"),
     captureStatus: getMetaString(meta, "capture_status"),
+    signedUrl: signed.signedUrl,
+    signedUrlError: signed.signedUrlError,
     createdAt: toIso(row.created_at),
   };
 }
@@ -288,7 +355,7 @@ export async function GET(
     }
 
     const attachmentRows = await findAttachmentsForCase(tenant.tenantId, row.id, row.case_no);
-    const attachments = attachmentRows.map(mapAttachmentRow);
+    const attachments = await Promise.all(attachmentRows.map(mapAttachmentRow));
 
     return NextResponse.json(
       {
