@@ -452,6 +452,9 @@ export default function OperationsPage() {
           <div>
             <h1 style={{ fontSize: 30, fontWeight: 800, marginBottom: 8 }}>Operasyonlar</h1>
             <p style={{ color: '#4b5563', margin: 0, lineHeight: 1.7 }}>
+              <div style={{ marginTop: 8, fontSize: 12, color: '#6b7280', fontWeight: 800 }}>
+  UI sürümü: operations-debug-b492
+</div>
               Konuşmalardan oluşturulan iade, kargo, ödeme, beden ve destek vakalarını canlı operasyon kuyruğunda izleyin.
             </p>
           </div>
