@@ -437,7 +437,7 @@ export async function GET(
           fetchedAt: new Date().toISOString(),
           tenant,
           operationCase: null,
-          error: "Operation case not found for merchant",
+          error: `Operation case not found for merchant | caseId=${normalizedCaseId} | tenantId=${tenant.tenantId}`,
         },
         { status: 404 },
       );
