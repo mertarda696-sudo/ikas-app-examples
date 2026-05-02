@@ -143,11 +143,12 @@ export async function GET(request: NextRequest) {
           and status in ('open', 'in_progress', 'waiting_customer')
       `,
       prisma.$queryRaw<CountRow[]>`
-        select count(*)::int as count
-        from public.operation_cases
-        where tenant_id = CAST(${tenantId} AS uuid)
-          and priority in ('high', 'critical')
-      `,
+  select count(*)::int as count
+  from public.operation_cases
+  where tenant_id = CAST(${tenantId} AS uuid)
+    and status in ('open', 'in_progress', 'waiting_customer')
+    and priority in ('high', 'critical')
+`,
       prisma.$queryRaw<CountRow[]>`
         select count(*)::int as count
         from public.operation_cases
@@ -204,13 +205,13 @@ export async function GET(request: NextRequest) {
         left join public.customer_crm_profiles ccp
           on ccp.tenant_id = oc.tenant_id
          and ccp.customer_wa_id = oc.customer_wa_id
-        where oc.tenant_id = CAST(${tenantId} AS uuid)
-          and (
-            oc.status in ('open', 'in_progress', 'waiting_customer')
-            or oc.priority in ('high', 'critical')
-            or coalesce(ccp.risk_level, 'normal') in ('high', 'critical')
-            or coalesce(ccp.followup_status, 'none') = 'operator_action_required'
-          )
+       where oc.tenant_id = CAST(${tenantId} AS uuid)
+  and oc.status in ('open', 'in_progress', 'waiting_customer')
+  and (
+    oc.priority in ('high', 'critical')
+    or coalesce(ccp.risk_level, 'normal') in ('high', 'critical')
+    or coalesce(ccp.followup_status, 'none') = 'operator_action_required'
+  )
         order by
           case
             when oc.priority = 'critical' then 5
