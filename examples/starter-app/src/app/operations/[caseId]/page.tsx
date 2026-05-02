@@ -39,6 +39,18 @@ type OperationCaseAttachment = {
   createdAt: string | null;
 };
 
+type OperationCaseEvent = {
+  id: string;
+  eventType: string | null;
+  eventLabel: string | null;
+  eventNote: string | null;
+  actorType: string | null;
+  actorId: string | null;
+  source: string | null;
+  payload: Record<string, unknown> | null;
+  createdAt: string | null;
+};
+
 type OperationCaseDetail = {
   id: string;
   caseNo: string | null;
@@ -67,6 +79,7 @@ type OperationCaseDetail = {
   crmReviewedAt: string | null;
   crmUpdatedAt: string | null;
   attachments?: OperationCaseAttachment[];
+  events?: OperationCaseEvent[];
 };
 
 type OperationCaseDetailResponse = {
@@ -441,6 +454,7 @@ export default function OperationCaseDetailPage() {
   const operationCase = data?.operationCase || null;
   const recommendation = useMemo(() => (operationCase ? getRecommendedAction(operationCase) : null), [operationCase]);
   const attachments = operationCase?.attachments || [];
+  const events = operationCase?.events || [];
 
   const handleStatusChange = async (status: string) => {
     try {
@@ -569,6 +583,68 @@ export default function OperationCaseDetailPage() {
                 <FieldRow label="Çözülme" value={formatDate(operationCase.resolvedAt)} />
                 <FieldRow label="Kapanış" value={formatDate(operationCase.closedAt)} />
               </InfoCard>
+
+              <InfoCard title="Vaka Geçmişi / Aksiyon Zaman Çizelgesi">
+  {events.length > 0 ? (
+    <div style={{ display: 'grid', gap: 10 }}>
+      {events.map((event) => (
+        <article
+          key={event.id}
+          style={{
+            border: '1px solid #e5e7eb',
+            borderRadius: 14,
+            background: '#f9fafb',
+            padding: 12,
+            display: 'grid',
+            gap: 8,
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ color: '#111827', fontSize: 14, fontWeight: 900 }}>
+                {event.eventLabel || event.eventType || 'Vaka aksiyonu'}
+              </div>
+              <div style={{ color: '#6b7280', fontSize: 12, marginTop: 3 }}>
+                {formatDate(event.createdAt)}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <Badge label={event.source || 'panel'} tone="info" />
+              <Badge label={event.actorType || 'operator'} tone="neutral" />
+            </div>
+          </div>
+
+          {event.eventNote ? (
+            <div style={{ color: '#4b5563', fontSize: 13, lineHeight: 1.6 }}>
+              {event.eventNote}
+            </div>
+          ) : null}
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8 }}>
+            <AttachmentField label="Aksiyon tipi" value={event.eventType || '-'} />
+            <AttachmentField label="Aktör" value={event.actorId || '-'} />
+            <AttachmentField label="Kaynak" value={event.source || '-'} />
+          </div>
+        </article>
+      ))}
+    </div>
+  ) : (
+    <div
+      style={{
+        border: '1px dashed #d1d5db',
+        borderRadius: 14,
+        background: '#f9fafb',
+        color: '#6b7280',
+        padding: 14,
+        fontSize: 14,
+        lineHeight: 1.7,
+      }}
+    >
+      Bu vaka için henüz aksiyon geçmişi kaydı görünmüyor.
+    </div>
+  )}
+</InfoCard>
 
               <InfoCard title="Kanıt / Medya Bilgisi">
                 <FieldRow label="Kanıt durumu" value={mapEvidenceStateLabel(operationCase.evidenceState)} />
