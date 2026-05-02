@@ -133,6 +133,12 @@ const EVIDENCE_ACTIONS: Array<{ action: EvidenceActionKey; label: string; helper
   },
 ];
 
+const OPERATOR_REPLY_TEMPLATES = [
+  'Fotoğrafınızı aldık, ekibimiz kontrol ediyor. En kısa sürede sizi bilgilendireceğiz.',
+  'Ek bir fotoğraf daha paylaşabilir misiniz? Ürünün hasarlı bölümü daha net görünürse süreci hızlandırabiliriz.',
+  'İade/değişim süreci için kaydınızı incelemeye aldık. Ekibimiz kontrol sonrası sizi bilgilendirecek.',
+];
+
 function formatDate(value: string | null | undefined) {
   if (!value) return '-';
   try {
@@ -421,6 +427,10 @@ export default function OperationCaseDetailPage() {
   const [savingOperatorNote, setSavingOperatorNote] = useState(false);
   const [operatorNoteError, setOperatorNoteError] = useState<string | null>(null);
   const [operatorNoteSuccess, setOperatorNoteSuccess] = useState<string | null>(null);
+  const [operatorReply, setOperatorReply] = useState('');
+  const [sendingOperatorReply, setSendingOperatorReply] = useState(false);
+  const [operatorReplyError, setOperatorReplyError] = useState<string | null>(null);
+  const [operatorReplySuccess, setOperatorReplySuccess] = useState<string | null>(null);
 
   const loadCase = async (options?: { silent?: boolean }) => {
     try {
@@ -582,6 +592,55 @@ export default function OperationCaseDetailPage() {
   }
 };
 
+const handleOperatorReplySend = async () => {
+  try {
+    if (!operationCase) return;
+
+    const message = operatorReply.trim();
+
+    setOperatorReplyError(null);
+    setOperatorReplySuccess(null);
+
+    if (!message) {
+      setOperatorReplyError('Müşteriye gönderilecek mesaj boş olamaz.');
+      return;
+    }
+
+    setSendingOperatorReply(true);
+
+    const iframeToken = await TokenHelpers.getTokenForIframeApp();
+
+    if (!iframeToken) {
+      setOperatorReplyError('iFrame JWT token alınamadı.');
+      return;
+    }
+
+    const response = await fetch(`/api/apparel/operation-cases/${operationCase.id}/operator-reply`, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        Authorization: 'JWT ' + iframeToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ message }),
+    });
+
+    const raw = await response.json();
+
+    if (!response.ok || !raw?.ok) {
+      throw new Error(raw?.error || 'Operatör yanıtı gönderilemedi.');
+    }
+
+    setOperatorReply('');
+    setOperatorReplySuccess('Mesaj müşteriye gönderildi ve vaka geçmişine kaydedildi.');
+    await loadCase({ silent: true });
+  } catch (error) {
+    setOperatorReplyError(error instanceof Error ? error.message : 'Operatör yanıtı gönderilirken hata oluştu.');
+  } finally {
+    setSendingOperatorReply(false);
+  }
+};
+  
   const actionDisabled = updatingStatus || Boolean(runningEvidenceAction);
 
   return (
@@ -758,6 +817,95 @@ export default function OperationCaseDetailPage() {
                   ))}
                 </div>
               </InfoCard>
+
+              <InfoCard title="Müşteriye Yanıt Gönder">
+  <div style={{ display: 'grid', gap: 10 }}>
+    <div style={{ color: '#4b5563', fontSize: 13, lineHeight: 1.65 }}>
+      Bu alan müşteriye WhatsApp mesajı gönderir. Mesaj aynı zamanda konuşma geçmişine ve vaka geçmişine kaydedilir.
+    </div>
+
+    <div style={{ display: 'grid', gap: 8 }}>
+      {OPERATOR_REPLY_TEMPLATES.map((template) => (
+        <button
+          key={template}
+          type="button"
+          onClick={() => setOperatorReply(template)}
+          disabled={sendingOperatorReply}
+          style={{
+            border: '1px solid #d1d5db',
+            borderRadius: 12,
+            padding: '9px 11px',
+            background: '#ffffff',
+            color: '#111827',
+            fontSize: 12,
+            fontWeight: 800,
+            lineHeight: 1.5,
+            cursor: sendingOperatorReply ? 'not-allowed' : 'pointer',
+            textAlign: 'left',
+          }}
+        >
+          {template}
+        </button>
+      ))}
+    </div>
+
+    <textarea
+      value={operatorReply}
+      onChange={(event) => setOperatorReply(event.target.value.slice(0, 1200))}
+      disabled={sendingOperatorReply}
+      placeholder="Müşteriye gönderilecek WhatsApp mesajını yazın..."
+      style={{
+        width: '100%',
+        minHeight: 120,
+        border: '1px solid #d1d5db',
+        borderRadius: 12,
+        padding: 12,
+        background: sendingOperatorReply ? '#f3f4f6' : '#ffffff',
+        color: '#111827',
+        fontSize: 14,
+        lineHeight: 1.6,
+        resize: 'vertical',
+        outline: 'none',
+        boxSizing: 'border-box',
+      }}
+    />
+
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+      <span style={{ fontSize: 12, color: '#6b7280', fontWeight: 700 }}>
+        {operatorReply.length}/1200 karakter
+      </span>
+
+      <button
+        type="button"
+        onClick={handleOperatorReplySend}
+        disabled={sendingOperatorReply}
+        style={{
+          border: 'none',
+          borderRadius: 12,
+          padding: '9px 13px',
+          background: sendingOperatorReply ? '#9ca3af' : '#111827',
+          color: '#ffffff',
+          fontWeight: 900,
+          cursor: sendingOperatorReply ? 'not-allowed' : 'pointer',
+        }}
+      >
+        {sendingOperatorReply ? 'Gönderiliyor...' : 'WhatsApp Yanıtı Gönder'}
+      </button>
+    </div>
+
+    {operatorReplyError ? (
+      <div style={{ border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b', borderRadius: 12, padding: 12, fontSize: 13, fontWeight: 800 }}>
+        {operatorReplyError}
+      </div>
+    ) : null}
+
+    {operatorReplySuccess ? (
+      <div style={{ border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#166534', borderRadius: 12, padding: 12, fontSize: 13, fontWeight: 800 }}>
+        {operatorReplySuccess}
+      </div>
+    ) : null}
+  </div>
+</InfoCard>
 
               <InfoCard title="Operatör İç Notu">
   <div style={{ display: 'grid', gap: 10 }}>
