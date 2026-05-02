@@ -398,15 +398,24 @@ export default function CustomerProfilePage() {
                             <Pill label={caseItem.caseNo || 'Vaka'} tone="info" />
                             <Pill label={mapCaseTypeLabel(caseItem.caseType)} tone="warning" />
                             <Pill label={mapCaseStatusLabel(caseItem.status)} tone={toneForStatus(caseItem.status)} />
-                            <Pill label={`Öncelik: ${mapPriorityLabel(caseItem.priority)}`} tone={toneForPriority(caseItem.priority)} />
+{caseItem.status === 'resolved' || caseItem.status === 'closed' ? (
+  <Pill label="Arşiv" tone="success" />
+) : null}
+<Pill label={`Öncelik: ${mapPriorityLabel(caseItem.priority)}`} tone={toneForPriority(caseItem.priority)} />
                           </div>
                           <div style={{ fontWeight: 900 }}>{caseItem.title || 'Başlıksız operasyon kaydı'}</div>
                           {caseItem.description ? <div style={{ marginTop: 6, color: '#4b5563', fontSize: 13, lineHeight: 1.5 }}>{caseItem.description}</div> : null}
                           <div style={{ marginTop: 8, color: '#6b7280', fontSize: 12 }}>Son güncelleme: {formatDate(caseItem.updatedAt || caseItem.createdAt)}</div>
-                          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
-                            {caseItem.linkedOrderId ? <Link href={`/orders/${caseItem.linkedOrderId}`} style={{ color: '#111827', fontWeight: 800, textDecoration: 'none', fontSize: 13 }}>Siparişe Git →</Link> : null}
-                            {caseItem.conversationId ? <Link href={`/inbox/${caseItem.conversationId}`} style={{ color: '#111827', fontWeight: 800, textDecoration: 'none', fontSize: 13 }}>Konuşmaya Git →</Link> : null}
-                          </div>
+                         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
+  <Link
+    href={`/operations/${encodeURIComponent(caseItem.caseNo || caseItem.id)}`}
+    style={{ color: '#2563eb', fontWeight: 900, textDecoration: 'none', fontSize: 13 }}
+  >
+    Vaka Detayına Git →
+  </Link>
+  {caseItem.linkedOrderId ? <Link href={`/orders/${caseItem.linkedOrderId}`} style={{ color: '#111827', fontWeight: 800, textDecoration: 'none', fontSize: 13 }}>Siparişe Git →</Link> : null}
+  {caseItem.conversationId ? <Link href={`/inbox/${caseItem.conversationId}`} style={{ color: '#111827', fontWeight: 800, textDecoration: 'none', fontSize: 13 }}>Konuşmaya Git →</Link> : null}
+</div>
                         </div>
                       ))}
                     </div>
@@ -423,9 +432,17 @@ export default function CustomerProfilePage() {
                     <div><strong>Son konuşma:</strong> {latestConversation ? formatDate(latestConversation.lastMessageAt || latestConversation.createdAt) : '-'}</div>
                     <div><strong>Son sipariş:</strong> {latestOrder ? latestOrder.orderNo : '-'}</div>
                     <div><strong>Son vaka:</strong> {latestCase ? latestCase.caseNo || latestCase.title || '-' : '-'}</div>
-                    {latestConversation ? <Link href={`/inbox/${latestConversation.id}`} style={{ color: '#111827', fontWeight: 800, textDecoration: 'none' }}>Son konuşmaya git →</Link> : null}
-                    {latestOrder ? <Link href={`/orders/${latestOrder.id}`} style={{ color: '#111827', fontWeight: 800, textDecoration: 'none' }}>Son siparişe git →</Link> : null}
-                    <Link href="/operations" style={{ color: '#111827', fontWeight: 800, textDecoration: 'none' }}>Operasyonlara git →</Link>
+{latestConversation ? <Link href={`/inbox/${latestConversation.id}`} style={{ color: '#111827', fontWeight: 800, textDecoration: 'none' }}>Son konuşmaya git →</Link> : null}
+{latestOrder ? <Link href={`/orders/${latestOrder.id}`} style={{ color: '#111827', fontWeight: 800, textDecoration: 'none' }}>Son siparişe git →</Link> : null}
+{latestCase ? (
+  <Link
+    href={`/operations/${encodeURIComponent(latestCase.caseNo || latestCase.id)}`}
+    style={{ color: '#2563eb', fontWeight: 900, textDecoration: 'none' }}
+  >
+    Son vakaya git →
+  </Link>
+) : null}
+<Link href="/operations" style={{ color: '#111827', fontWeight: 800, textDecoration: 'none' }}>Operasyonlara git →</Link>
                   </div>
                 </InfoCard>
 
