@@ -49,6 +49,18 @@ type OperationCaseAttachmentRow = {
   created_at: Date | string | null;
 };
 
+type OperationCaseEventRow = {
+  id: string;
+  event_type: string | null;
+  event_label: string | null;
+  event_note: string | null;
+  actor_type: string | null;
+  actor_id: string | null;
+  source: string | null;
+  payload: unknown;
+  created_at: Date | string | null;
+};
+
 function toIso(value: Date | string | null | undefined): string | null {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
@@ -173,6 +185,20 @@ async function mapAttachmentRow(row: OperationCaseAttachmentRow) {
   };
 }
 
+function mapEventRow(row: OperationCaseEventRow) {
+  return {
+    id: row.id,
+    eventType: row.event_type,
+    eventLabel: row.event_label,
+    eventNote: row.event_note,
+    actorType: row.actor_type,
+    actorId: row.actor_id,
+    source: row.source,
+    payload: toMetaObject(row.payload),
+    createdAt: toIso(row.created_at),
+  };
+}
+
 async function findCaseByUuid(tenantId: string, caseId: string) {
   return prisma.$queryRaw<OperationCaseDetailRow[]>`
     select
@@ -284,6 +310,25 @@ async function findAttachmentsForCase(tenantId: string, operationCaseId: string,
   `;
 }
 
+async function findEventsForCase(tenantId: string, operationCaseId: string) {
+  return prisma.$queryRaw<OperationCaseEventRow[]>`
+    select
+      id,
+      event_type,
+      event_label,
+      event_note,
+      actor_type,
+      actor_id,
+      source,
+      payload,
+      created_at
+    from public.operation_case_events
+    where tenant_id = CAST(${tenantId} AS uuid)
+      and operation_case_id = CAST(${operationCaseId} AS uuid)
+    order by created_at desc
+    limit 50
+  `;
+}
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ caseId: string }> },
@@ -356,6 +401,8 @@ export async function GET(
 
     const attachmentRows = await findAttachmentsForCase(tenant.tenantId, row.id, row.case_no);
     const attachments = await Promise.all(attachmentRows.map(mapAttachmentRow));
+    const eventRows = await findEventsForCase(tenant.tenantId, row.id);
+    const events = eventRows.map(mapEventRow);
 
     return NextResponse.json(
       {
@@ -390,6 +437,7 @@ export async function GET(
           crmReviewedAt: toIso(row.crm_reviewed_at),
           crmUpdatedAt: toIso(row.crm_updated_at),
           attachments,
+          events,
         },
       },
       { status: 200 },
