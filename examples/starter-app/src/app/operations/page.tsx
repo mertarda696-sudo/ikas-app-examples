@@ -609,7 +609,7 @@ export default function OperationsPage() {
             row.crmInternalNote)
       );
 
-      const detailHref = `/operations/${encodeURIComponent(row.caseNo || row.id)}`;
+      const detailHref = `/operations/${encodeURIComponent(row.id)}`;
 
       return (
         <tr key={row.id}>
