@@ -323,19 +323,31 @@ export default function OrderDetailPage() {
               </InfoCard>
 
               <InfoCard title="Bağlantılar">
-                <div style={{ display: 'grid', gap: 8 }}>
-                  {order.linkedConversation ? (
-                    <Link href={`/inbox/${order.linkedConversation.id}`} style={{ color: '#111827', fontWeight: 800, textDecoration: 'none' }}>
-                      Konuşmaya Git →
-                    </Link>
-                  ) : (
-                    <span style={{ color: '#6b7280' }}>Konuşma bağlı değil</span>
-                  )}
-                  <Link href="/operations" style={{ color: '#111827', fontWeight: 800, textDecoration: 'none' }}>
-                    Operasyonlara Git →
-                  </Link>
-                </div>
-              </InfoCard>
+  <div style={{ display: 'grid', gap: 8 }}>
+    {order.linkedConversation ? (
+      <Link href={`/inbox/${order.linkedConversation.id}`} style={{ color: '#111827', fontWeight: 800, textDecoration: 'none' }}>
+        Konuşmaya Git →
+      </Link>
+    ) : (
+      <span style={{ color: '#6b7280' }}>Konuşma bağlı değil</span>
+    )}
+
+    {order.linkedOperationCases.length > 0 ? (
+      <Link
+        href={`/operations/${encodeURIComponent(order.linkedOperationCases[0].caseNo || order.linkedOperationCases[0].id)}`}
+        style={{ color: '#2563eb', fontWeight: 900, textDecoration: 'none' }}
+      >
+        Bağlı Vakaya Git →
+      </Link>
+    ) : (
+      <span style={{ color: '#6b7280' }}>Bağlı vaka yok</span>
+    )}
+
+    <Link href="/operations" style={{ color: '#111827', fontWeight: 800, textDecoration: 'none' }}>
+      Operasyonlara Git →
+    </Link>
+  </div>
+</InfoCard>
             </section>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.25fr) minmax(320px, 0.85fr)', gap: 16, alignItems: 'start' }}>
@@ -381,11 +393,30 @@ export default function OrderDetailPage() {
                             <Pill label={caseItem.caseNo || 'Vaka'} tone="info" />
                             <Pill label={mapCaseTypeLabel(caseItem.caseType)} tone="warning" />
                             <Pill label={mapCaseStatusLabel(caseItem.status)} tone={toneForStatus(caseItem.status)} />
-                            <Pill label={`Öncelik: ${mapPriorityLabel(caseItem.priority)}`} tone={toneForPriority(caseItem.priority)} />
+{caseItem.status === 'resolved' || caseItem.status === 'closed' ? (
+  <Pill label="Arşiv" tone="success" />
+) : null}
+<Pill label={`Öncelik: ${mapPriorityLabel(caseItem.priority)}`} tone={toneForPriority(caseItem.priority)} />
                           </div>
                           <div style={{ fontWeight: 900 }}>{caseItem.title || 'Başlıksız operasyon kaydı'}</div>
                           {caseItem.description ? <div style={{ marginTop: 6, color: '#4b5563', fontSize: 13, lineHeight: 1.5 }}>{caseItem.description}</div> : null}
                           <div style={{ marginTop: 8, color: '#6b7280', fontSize: 12 }}>Son güncelleme: {formatDate(caseItem.updatedAt || caseItem.createdAt)}</div>
+                          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
+  <Link
+    href={`/operations/${encodeURIComponent(caseItem.caseNo || caseItem.id)}`}
+    style={{ color: '#2563eb', fontWeight: 900, textDecoration: 'none', fontSize: 13 }}
+  >
+    Vaka Detayına Git →
+  </Link>
+  {caseItem.conversationId ? (
+    <Link
+      href={`/inbox/${caseItem.conversationId}`}
+      style={{ color: '#111827', fontWeight: 800, textDecoration: 'none', fontSize: 13 }}
+    >
+      Konuşmaya Git →
+    </Link>
+  ) : null}
+</div>
                         </div>
                       ))}
                     </div>
