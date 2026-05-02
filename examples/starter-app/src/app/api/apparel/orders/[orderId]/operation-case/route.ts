@@ -216,6 +216,50 @@ export async function POST(
     `;
 
     const row = rows[0];
+        if (!row) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Operation case could not be created",
+        },
+        { status: 500 },
+      );
+    }
+
+    try {
+      await prisma.$executeRaw`
+        insert into public.operation_case_events (
+          tenant_id,
+          operation_case_id,
+          event_type,
+          event_label,
+          event_note,
+          actor_type,
+          actor_id,
+          source,
+          payload
+        )
+        values (
+          CAST(${tenant.tenantId} AS uuid),
+          CAST(${row.id} AS uuid),
+          'create_from_order',
+          'Siparişten Vaka Oluşturuldu',
+          ${`Sipariş detayından manuel operasyon vakası oluşturuldu. Bağlı sipariş: ${order.order_no}`},
+          'operator',
+          ${String(user.merchantId || '')},
+          'panel',
+          CAST(${JSON.stringify({
+            case_no: row.case_no,
+            order_no: order.order_no,
+            case_type: row.case_type,
+            priority: row.priority,
+            status: row.status,
+          })} AS jsonb)
+        )
+      `;
+    } catch (eventError) {
+      console.error("order_operation_case_event_insert_failed", eventError);
+    }
 
     return NextResponse.json(
       {
