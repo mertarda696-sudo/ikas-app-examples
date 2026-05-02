@@ -679,6 +679,53 @@ const handleOperatorReplySend = async () => {
                   <Badge label={mapEvidenceStateLabel(operationCase.evidenceState)} tone={evidenceTone(operationCase.evidenceState)} />
                 </div>
 
+                {operationCase.customerWaId || operationCase.conversationId || operationCase.linkedOrderId ? (
+  <div
+    style={{
+      display: 'flex',
+      gap: 10,
+      flexWrap: 'wrap',
+      marginBottom: 14,
+      padding: 12,
+      border: '1px solid #dbeafe',
+      borderRadius: 14,
+      background: '#eff6ff',
+    }}
+  >
+    {operationCase.customerWaId ? (
+      <CustomerProfileLink customerWaId={operationCase.customerWaId} />
+    ) : null}
+
+    {operationCase.conversationId ? (
+      <Link
+        href={`/inbox/${operationCase.conversationId}`}
+        style={{
+          color: '#111827',
+          fontWeight: 900,
+          textDecoration: 'none',
+          fontSize: 13,
+        }}
+      >
+        Konuşmaya Git →
+      </Link>
+    ) : null}
+
+    {operationCase.linkedOrderId ? (
+      <Link
+        href={`/orders/${encodeURIComponent(operationCase.linkedOrderId)}`}
+        style={{
+          color: '#111827',
+          fontWeight: 900,
+          textDecoration: 'none',
+          fontSize: 13,
+        }}
+      >
+        Siparişe Git →
+      </Link>
+    ) : null}
+  </div>
+) : null}
+
                 <div style={{ fontSize: 20, fontWeight: 900, color: '#111827', marginBottom: 8 }}>{operationCase.title || 'Başlıksız operasyon vakası'}</div>
                 <div style={{ color: '#4b5563', fontSize: 14, lineHeight: 1.7 }}>{operationCase.description || 'Açıklama bulunmuyor.'}</div>
               </InfoCard>
