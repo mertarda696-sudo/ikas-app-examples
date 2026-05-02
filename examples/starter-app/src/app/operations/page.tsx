@@ -362,11 +362,13 @@ export default function OperationsPage() {
     const typeMatches = activeType === 'all' || item.caseType === activeType;
 
     const statusMatches =
-      activeStatusFilter === 'all'
-        ? true
-        : activeStatusFilter === 'active'
-          ? isActiveCaseStatus(item.status)
-          : item.status === activeStatusFilter;
+  needle && activeStatusFilter === 'active'
+    ? true
+    : activeStatusFilter === 'all'
+      ? true
+      : activeStatusFilter === 'active'
+        ? isActiveCaseStatus(item.status)
+        : item.status === activeStatusFilter;
 
     const priority = String(item.priority || 'normal').toLowerCase();
     const priorityMatches =
@@ -601,12 +603,13 @@ export default function OperationsPage() {
                       const hasCrmSignal = Boolean(row.crmProfileExists && (row.crmTag !== 'general' || row.riskLevel !== 'normal' || row.followupStatus !== 'none' || row.crmInternalNote));
                       return (
                         <tr key={row.id}>
-                          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
+                         <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
   <div style={{ display: 'grid', gap: 6, minWidth: 150 }}>
-    <Link href={`/operations/${row.caseNo || row.id}`} style={{ color: '#111827', fontWeight: 900, textDecoration: 'none' }}>
+    <div style={{ color: '#111827', fontWeight: 900 }}>
       {row.caseNo || row.id}
-    </Link>
-    <Link href={`/operations/${row.caseNo || row.id}`} style={{ color: '#2563eb', fontWeight: 900, textDecoration: 'none', fontSize: 13 }}>
+    </div>
+
+    <Link href={`/operations/${row.id}`} style={{ color: '#2563eb', fontWeight: 900, textDecoration: 'none', fontSize: 13 }}>
       Vaka Detayına Git →
     </Link>
   </div>
