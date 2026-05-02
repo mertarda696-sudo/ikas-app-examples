@@ -52,6 +52,19 @@ type OrderItemRow = {
   return_status: string | null;
 };
 
+type LinkedCaseRow = {
+  id: string;
+  case_no: string | null;
+  case_type: string | null;
+  title: string | null;
+  priority: string | null;
+  status: string | null;
+  linked_order_id: string | null;
+  conversation_id: string | null;
+  updated_at: Date | string | null;
+  created_at: Date | string | null;
+};
+
 type CountRow = {
   count: number | string | null;
 };
@@ -118,7 +131,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const [orders, orderItems, totalRows, activeRows, paidRows, unfulfilledRows, revenueRows] = await Promise.all([
+    const [orders, orderItems, linkedCaseRows, totalRows, activeRows, paidRows, unfulfilledRows, revenueRows] = await Promise.all([
       prisma.$queryRaw<OrderRow[]>`
         select
           id,
@@ -178,6 +191,60 @@ export async function GET(request: NextRequest) {
         order by oi.created_at asc, oi.id asc
         limit 500
       `,
+      prisma.$queryRaw<LinkedCaseRow[]>`
+  select
+    oc.id,
+    oc.case_no,
+    oc.case_type,
+    oc.title,
+    oc.priority,
+    oc.status,
+    oc.linked_order_id,
+    oc.conversation_id,
+    oc.updated_at,
+    oc.created_at
+  from public.operation_cases oc
+  where oc.tenant_id = CAST(${tenant.tenantId} AS uuid)
+    and oc.linked_order_id is not null
+  order by
+    case
+      when oc.priority = 'critical' then 4
+      when oc.priority = 'high' then 3
+      when oc.priority = 'normal' then 2
+      when oc.priority = 'low' then 1
+      else 0
+    end desc,
+    oc.updated_at desc nulls last,
+    oc.created_at desc nulls last
+  limit 300
+`,
+      prisma.$queryRaw<LinkedCaseRow[]>`
+  select
+    oc.id,
+    oc.case_no,
+    oc.case_type,
+    oc.title,
+    oc.priority,
+    oc.status,
+    oc.linked_order_id,
+    oc.conversation_id,
+    oc.updated_at,
+    oc.created_at
+  from public.operation_cases oc
+  where oc.tenant_id = CAST(${tenant.tenantId} AS uuid)
+    and oc.linked_order_id is not null
+  order by
+    case
+      when oc.priority = 'critical' then 4
+      when oc.priority = 'high' then 3
+      when oc.priority = 'normal' then 2
+      when oc.priority = 'low' then 1
+      else 0
+    end desc,
+    oc.updated_at desc nulls last,
+    oc.created_at desc nulls last
+  limit 300
+`,
       prisma.$queryRaw<CountRow[]>`
         select count(*)::int as count
         from public.commerce_orders
@@ -217,6 +284,17 @@ export async function GET(request: NextRequest) {
       existing.push(item);
       itemsByOrderId.set(item.order_id, existing);
     }
+
+    const casesByOrderKey = new Map<string, LinkedCaseRow[]>();
+
+for (const caseItem of linkedCaseRows) {
+  const key = String(caseItem.linked_order_id || '').trim();
+  if (!key) continue;
+
+  const existing = casesByOrderKey.get(key) || [];
+  existing.push(caseItem);
+  casesByOrderKey.set(key, existing);
+}
 
     return NextResponse.json(
       {
