@@ -65,16 +65,16 @@ type EvidenceMediaResponse = {
 };
 
 const FILTERS: Array<{ key: EvidenceFilter; label: string }> = [
-  { key: 'evidence', label: 'Gerçek Kanıtlar' },
+  { key: 'evidence', label: 'Vaka Bağlı Kanıtlar' },
   { key: 'damaged_product_images', label: 'Hasarlı Ürün Fotoğrafları' },
   { key: 'previewable', label: 'Önizlemeli Görseller' },
-  { key: 'stored', label: 'Storage’a Yüklenenler' },
-  { key: 'metadata_only', label: 'Sadece Metadata' },
+  { key: 'stored', label: 'Storage’a Alınanlar' },
+  { key: 'metadata_only', label: 'Storage Bekleyenler' },
   { key: 'image', label: 'Tüm Fotoğraflar' },
   { key: 'damaged_product', label: 'Hasarlı Ürün Vakaları' },
   { key: 'payment_proof', label: 'Ödeme / Dekont' },
-  { key: 'unlinked', label: 'Vakasız Medya / Ürün Görselleri' },
-  { key: 'all', label: 'Tüm Medyalar' },
+  { key: 'unlinked', label: 'Vakasız / Ürün Sorusu' },
+  { key: 'all', label: 'Tüm Medya Kayıtları' },
 ];
 
 function formatDate(value: string | null | undefined) {
@@ -105,6 +105,10 @@ function isPreviewableItem(item: EvidenceMediaItem) {
 
 function isCaseLinked(item: EvidenceMediaItem) {
   return Boolean(item.caseNo || item.operationCaseId);
+}
+
+function isArchivedEvidence(item: EvidenceMediaItem) {
+  return isCaseLinked(item) && (item.caseStatus === 'resolved' || item.caseStatus === 'closed');
 }
 
 function mapCaseTypeLabel(type: string | null | undefined) {
@@ -148,7 +152,7 @@ function mapAttachmentKindLabel(kind: string | null | undefined) {
 
 function mapCaptureStatusLabel(status: string | null | undefined) {
   if (status === 'stored') return 'Dosya kaydedildi';
-  if (status === 'metadata_only') return 'Sadece metadata';
+  if (status === 'metadata_only') return 'Storage bekliyor';
   if (status === 'downloaded') return 'Dosya indirildi';
   if (status === 'failed') return 'İşleme hatası';
   return status || 'Durum bilinmiyor';
@@ -201,6 +205,7 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 function EvidenceMediaCard({ item, onBackfill, backfillState }: { item: EvidenceMediaItem; onBackfill: (item: EvidenceMediaItem) => void; backfillState?: { loading?: boolean; error?: string | null; success?: string | null } }) {
   const hasPreview = isPreviewableItem(item);
   const caseLinked = isCaseLinked(item);
+  const archivedEvidence = isArchivedEvidence(item);
   const caseHref = item.caseNo || item.operationCaseId ? `/operations/${item.caseNo || item.operationCaseId}` : null;
   const needsDownloadLater = item.captureStatus === 'metadata_only' && !item.storagePath;
 
@@ -212,15 +217,16 @@ function EvidenceMediaCard({ item, onBackfill, backfillState }: { item: Evidence
           <div style={{ color: '#6b7280', fontSize: 12, marginTop: 3 }}>{item.mimeType || 'MIME yok'} · {formatDate(item.createdAt)}</div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <Pill label={caseLinked ? 'Kanıt medyası' : 'Vakasız medya'} tone={caseLinked ? 'warning' : 'neutral'} />
-          <Pill label={mapCaptureStatusLabel(item.captureStatus)} tone={toneForStatus(item.captureStatus)} />
+          <Pill label={caseLinked ? 'Kanıt medyası' : 'Ürün sorusu / vaka dışı'} tone={caseLinked ? 'warning' : 'neutral'} />
+{archivedEvidence ? <Pill label="Arşiv kanıtı" tone="success" /> : null}
+<Pill label={mapCaptureStatusLabel(item.captureStatus)} tone={toneForStatus(item.captureStatus)} />
           {hasPreview ? <Pill label="Önizleme var" tone="success" /> : null}
           {item.caseType ? <Pill label={mapCaseTypeLabel(item.caseType)} tone={item.caseType === 'damaged_product' ? 'warning' : 'info'} /> : null}
         </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 8, border: '1px solid #f3f4f6', background: '#f9fafb', borderRadius: 14, padding: 10 }}>
-        <Field label="Vaka türü" value={caseLinked ? mapCaseTypeLabel(item.caseType) : 'Vakasız / ürün görseli'} />
+        <Field label="Vaka türü" value={caseLinked ? mapCaseTypeLabel(item.caseType) : 'Ürün sorusu / vaka dışı'} />
         <Field label="Sipariş" value={item.linkedOrderId || '-'} />
         <Field label="Müşteri" value={item.customerWaId || '-'} />
       </div>
@@ -379,17 +385,23 @@ export default function EvidencePage() {
         {loading ? <div>Yükleniyor...</div> : data?.error ? <div style={{ border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b', borderRadius: 14, padding: 16, fontWeight: 800 }}>{data.error}</div> : (
           <div style={{ display: 'grid', gap: 16 }}>
             <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
-              <MetricCard label="Gerçek Kanıt" value={localMetrics.realEvidence} helper="Operasyon vakasına bağlı medya" tone="success" onClick={() => setActiveFilter('evidence')} />
+              <MetricCard label="Vaka Bağlı Kanıt" value={localMetrics.realEvidence} helper="Operasyon vakasına bağlanmış medya" tone="success" onClick={() => setActiveFilter('evidence')} />
               <MetricCard label="Hasarlı Ürün Fotoğrafı" value={localMetrics.damagedProductImages} helper="Öncelikli operasyon kanıtları" tone={localMetrics.damagedProductImages > 0 ? 'warning' : 'neutral'} onClick={() => setActiveFilter('damaged_product_images')} />
               <MetricCard label="Önizlemeli Görsel" value={localMetrics.previewable} helper="Panelde doğrudan görülebilen dosyalar" tone={localMetrics.previewable > 0 ? 'success' : 'neutral'} onClick={() => setActiveFilter('previewable')} />
-              <MetricCard label="Metadata Only" value={data?.metrics.metadataOnly || 0} helper="Yeniden indir aksiyonu adayları" tone={(data?.metrics.metadataOnly || 0) > 0 ? 'warning' : 'success'} onClick={() => setActiveFilter('metadata_only')} />
-              <MetricCard label="Vakasız Medya" value={localMetrics.unlinked} helper="Ürün sorusu / genel görseller" tone={localMetrics.unlinked > 0 ? 'info' : 'neutral'} onClick={() => setActiveFilter('unlinked')} />
+              <MetricCard label="Storage Bekleyen" value={data?.metrics.metadataOnly || 0} helper={(data?.metrics.metadataOnly || 0) > 0 ? 'Yeniden indir aksiyonu adayları' : 'Temiz: Storage bekleyen kayıt yok'} tone={(data?.metrics.metadataOnly || 0) > 0 ? 'warning' : 'success'} onClick={() => setActiveFilter('metadata_only')} />
+              <MetricCard label="Vakasız / Ürün Sorusu" value={localMetrics.unlinked} helper="Vaka dışı ürün sorusu veya genel görseller" tone={localMetrics.unlinked > 0 ? 'info' : 'neutral'} onClick={() => setActiveFilter('unlinked')} />
               <MetricCard label="Toplam Medya" value={data?.metrics.total || 0} helper="Tüm attachment kayıtları" tone="info" onClick={() => setActiveFilter('all')} />
             </section>
 
+            {(data?.metrics.metadataOnly || 0) === 0 ? (
+  <section style={{ border: '1px solid #bbf7d0', background: '#f0fdf4', borderRadius: 18, padding: 14, color: '#166534', fontSize: 13, fontWeight: 800, lineHeight: 1.65 }}>
+    Storage bekleyen medya kalmadı. Uygun kayıtlar dosya/önizleme seviyesine alınmış görünüyor.
+  </section>
+) : null}
+
             <section style={{ border: '1px solid #fed7aa', background: '#fff7ed', borderRadius: 18, padding: 16, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
               <div>
-                <div style={{ color: '#9a3412', fontSize: 17, fontWeight: 900 }}>Varsayılan ekran: gerçek kanıtlar</div>
+                <div style={{ color: '#9a3412', fontSize: 17, fontWeight: 900 }}>Varsayılan ekran: vaka bağlı kanıtlar</div>
                 <div style={{ color: '#7c2d12', fontSize: 13, marginTop: 4, lineHeight: 1.6 }}>
                   Bu ekran operasyon vakasına bağlı fotoğraf, dekont, iade veya hasarlı ürün medyalarını gösterir. Vakasız ürün görselleri ayrı filtrede durur.
                 </div>
@@ -417,7 +429,13 @@ export default function EvidencePage() {
                 })}
               </div>
 
-              {rows.length === 0 ? <div style={{ border: '1px dashed #d1d5db', borderRadius: 16, padding: 18, color: '#6b7280', background: '#f9fafb' }}>Seçili filtre için medya kaydı bulunmuyor.</div> : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 14 }}>{rows.map((item) => <EvidenceMediaCard key={item.id} item={item} onBackfill={handleBackfill} backfillState={backfillById[item.id]} />)}</div>}
+              {rows.length === 0 ? (
+  <div style={{ border: '1px dashed #d1d5db', borderRadius: 16, padding: 18, color: '#6b7280', background: '#f9fafb', lineHeight: 1.7 }}>
+    {activeFilter === 'metadata_only' && (data?.metrics.metadataOnly || 0) === 0
+      ? 'Storage bekleyen medya kalmadı. Tüm uygun kayıtlar dosya/önizleme seviyesine alınmış görünüyor.'
+      : 'Seçili filtre için medya kaydı bulunmuyor.'}
+  </div>
+) : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 14 }}>{rows.map((item) => <EvidenceMediaCard key={item.id} item={item} onBackfill={handleBackfill} backfillState={backfillById[item.id]} />)}</div>}
             </section>
           </div>
         )}
