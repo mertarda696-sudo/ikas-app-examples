@@ -17,6 +17,32 @@ type OperationType =
   | 'damaged_product'
   | 'hot_lead';
 
+type OperationStatusFilter =
+  | 'active'
+  | 'all'
+  | 'open'
+  | 'in_progress'
+  | 'waiting_customer'
+  | 'resolved'
+  | 'closed';
+
+type OperationPriorityFilter =
+  | 'all'
+  | 'critical'
+  | 'high'
+  | 'normal'
+  | 'low';
+
+type OperationEvidenceFilter =
+  | 'all'
+  | 'has_evidence'
+  | 'verified'
+  | 'received'
+  | 'requested'
+  | 'missing'
+  | 'rejected'
+  | 'none';
+
 type OperationCaseItem = {
   id: string;
   caseNo: string | null;
@@ -76,6 +102,35 @@ const STATUS_OPTIONS = [
   { value: 'waiting_customer', label: 'Müşteri Bekleniyor' },
   { value: 'resolved', label: 'Çözüldü' },
   { value: 'closed', label: 'Kapalı' },
+];
+
+const STATUS_FILTER_OPTIONS: Array<{ key: OperationStatusFilter; label: string }> = [
+  { key: 'active', label: 'Aktif Vakalar' },
+  { key: 'all', label: 'Tüm Durumlar' },
+  { key: 'open', label: 'Açık' },
+  { key: 'in_progress', label: 'İnceleniyor' },
+  { key: 'waiting_customer', label: 'Müşteri Bekleniyor' },
+  { key: 'resolved', label: 'Çözüldü' },
+  { key: 'closed', label: 'Kapalı' },
+];
+
+const PRIORITY_FILTER_OPTIONS: Array<{ key: OperationPriorityFilter; label: string }> = [
+  { key: 'all', label: 'Tüm Öncelikler' },
+  { key: 'critical', label: 'Kritik' },
+  { key: 'high', label: 'Yüksek' },
+  { key: 'normal', label: 'Normal' },
+  { key: 'low', label: 'Düşük' },
+];
+
+const EVIDENCE_FILTER_OPTIONS: Array<{ key: OperationEvidenceFilter; label: string }> = [
+  { key: 'all', label: 'Tüm Kanıt Durumları' },
+  { key: 'has_evidence', label: 'Kanıt / Not Var' },
+  { key: 'verified', label: 'Doğrulandı' },
+  { key: 'received', label: 'Kanıt Alındı' },
+  { key: 'requested', label: 'Kanıt İstendi' },
+  { key: 'missing', label: 'Eksik' },
+  { key: 'rejected', label: 'Reddedildi' },
+  { key: 'none', label: 'Kanıt Yok' },
 ];
 
 function formatDate(value: string | null | undefined) {
@@ -212,6 +267,28 @@ function followupTone(status: string | null | undefined) {
   return 'neutral' as const;
 }
 
+function isActiveCaseStatus(status: string | null | undefined) {
+  const normalized = String(status || '').toLowerCase();
+  return normalized === 'open' || normalized === 'in_progress' || normalized === 'waiting_customer';
+}
+
+function hasEvidenceSignal(item: OperationCaseItem) {
+  return Boolean(
+    String(item.evidenceSummary || '').trim() ||
+    String(item.evidenceState || '').trim()
+  );
+}
+
+function matchesEvidenceFilter(item: OperationCaseItem, filter: OperationEvidenceFilter) {
+  const evidenceState = String(item.evidenceState || '').toLowerCase();
+
+  if (filter === 'all') return true;
+  if (filter === 'has_evidence') return hasEvidenceSignal(item);
+  if (filter === 'none') return !hasEvidenceSignal(item);
+
+  return evidenceState === filter;
+}
+
 function MetricCard({
   label,
   value,
@@ -239,6 +316,10 @@ function MetricCard({
 
 export default function OperationsPage() {
   const [activeType, setActiveType] = useState<OperationType>('all');
+  const [activeStatusFilter, setActiveStatusFilter] = useState<OperationStatusFilter>('active');
+  const [activePriorityFilter, setActivePriorityFilter] = useState<OperationPriorityFilter>('all');
+  const [activeEvidenceFilter, setActiveEvidenceFilter] = useState<OperationEvidenceFilter>('all');
+  const [query, setQuery] = useState('');
   const [data, setData] = useState<OperationCasesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [updatingCaseId, setUpdatingCaseId] = useState<string | null>(null);
@@ -275,9 +356,48 @@ export default function OperationsPage() {
   const items = data?.items || [];
 
   const rows = useMemo(() => {
-    if (activeType === 'all') return items;
-    return items.filter((item) => item.caseType === activeType);
-  }, [activeType, items]);
+  const needle = query.trim().toLowerCase();
+
+  return items.filter((item) => {
+    const typeMatches = activeType === 'all' || item.caseType === activeType;
+
+    const statusMatches =
+      activeStatusFilter === 'all'
+        ? true
+        : activeStatusFilter === 'active'
+          ? isActiveCaseStatus(item.status)
+          : item.status === activeStatusFilter;
+
+    const priority = String(item.priority || 'normal').toLowerCase();
+    const priorityMatches =
+      activePriorityFilter === 'all' || priority === activePriorityFilter;
+
+    const evidenceMatches = matchesEvidenceFilter(item, activeEvidenceFilter);
+
+    const haystack = [
+      item.caseNo,
+      item.caseType,
+      item.title,
+      item.description,
+      item.customerWaId,
+      item.linkedOrderId,
+      item.status,
+      item.priority,
+      item.evidenceState,
+      item.evidenceSummary,
+      item.crmTag,
+      item.riskLevel,
+      item.followupStatus,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    const queryMatches = !needle || haystack.includes(needle);
+
+    return typeMatches && statusMatches && priorityMatches && evidenceMatches && queryMatches;
+  });
+}, [activeType, activeStatusFilter, activePriorityFilter, activeEvidenceFilter, items, query]);
 
   const metrics = data?.metrics || { total: 0, open: 0, highPriority: 0, evidence: 0 };
   const crmAlertCount = items.filter((item) => item.crmProfileExists && (item.riskLevel === 'high' || item.riskLevel === 'critical' || item.followupStatus === 'operator_action_required')).length;
@@ -354,18 +474,111 @@ export default function OperationsPage() {
             </section>
 
             <section style={{ border: '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', padding: 18, marginBottom: 16 }}>
-              <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>Vaka Tipleri</div>
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                {TYPE_OPTIONS.map((option) => {
-                  const active = activeType === option.key;
-                  return (
-                    <button key={option.key} onClick={() => setActiveType(option.key)} style={{ border: active ? '1px solid #111827' : '1px solid #d1d5db', background: active ? '#111827' : '#ffffff', color: active ? '#ffffff' : '#111827', borderRadius: 999, padding: '9px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
+  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
+    <div>
+      <div style={{ fontSize: 18, fontWeight: 800, color: '#111827' }}>Operasyon Filtreleri</div>
+      <div style={{ color: '#6b7280', fontSize: 13, marginTop: 4 }}>
+        Aktif filtrelerle {rows.length} vaka gösteriliyor.
+      </div>
+    </div>
+
+    <button
+      type="button"
+      onClick={() => {
+        setActiveType('all');
+        setActiveStatusFilter('active');
+        setActivePriorityFilter('all');
+        setActiveEvidenceFilter('all');
+        setQuery('');
+      }}
+      style={{
+        border: '1px solid #d1d5db',
+        background: '#ffffff',
+        color: '#111827',
+        borderRadius: 999,
+        padding: '9px 14px',
+        fontSize: 13,
+        fontWeight: 800,
+        cursor: 'pointer',
+      }}
+    >
+      Filtreleri Sıfırla
+    </button>
+  </div>
+
+  <input
+    value={query}
+    onChange={(event) => setQuery(event.target.value)}
+    placeholder="Vaka no, müşteri, sipariş, başlık, açıklama veya kanıt durumunda ara..."
+    style={{
+      width: '100%',
+      boxSizing: 'border-box',
+      border: '1px solid #d1d5db',
+      borderRadius: 14,
+      padding: '12px 14px',
+      marginBottom: 14,
+      fontSize: 14,
+    }}
+  />
+
+  <div style={{ display: 'grid', gap: 14 }}>
+    <div>
+      <div style={{ color: '#6b7280', fontSize: 12, fontWeight: 900, marginBottom: 8 }}>Durum</div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {STATUS_FILTER_OPTIONS.map((option) => {
+          const active = activeStatusFilter === option.key;
+          return (
+            <button key={option.key} onClick={() => setActiveStatusFilter(option.key)} style={{ border: active ? '1px solid #111827' : '1px solid #d1d5db', background: active ? '#111827' : '#ffffff', color: active ? '#ffffff' : '#111827', borderRadius: 999, padding: '9px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+
+    <div>
+      <div style={{ color: '#6b7280', fontSize: 12, fontWeight: 900, marginBottom: 8 }}>Vaka Tipi</div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {TYPE_OPTIONS.map((option) => {
+          const active = activeType === option.key;
+          return (
+            <button key={option.key} onClick={() => setActiveType(option.key)} style={{ border: active ? '1px solid #111827' : '1px solid #d1d5db', background: active ? '#111827' : '#ffffff', color: active ? '#ffffff' : '#111827', borderRadius: 999, padding: '9px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+
+    <div>
+      <div style={{ color: '#6b7280', fontSize: 12, fontWeight: 900, marginBottom: 8 }}>Öncelik</div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {PRIORITY_FILTER_OPTIONS.map((option) => {
+          const active = activePriorityFilter === option.key;
+          return (
+            <button key={option.key} onClick={() => setActivePriorityFilter(option.key)} style={{ border: active ? '1px solid #111827' : '1px solid #d1d5db', background: active ? '#111827' : '#ffffff', color: active ? '#ffffff' : '#111827', borderRadius: 999, padding: '9px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+
+    <div>
+      <div style={{ color: '#6b7280', fontSize: 12, fontWeight: 900, marginBottom: 8 }}>Kanıt Durumu</div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {EVIDENCE_FILTER_OPTIONS.map((option) => {
+          const active = activeEvidenceFilter === option.key;
+          return (
+            <button key={option.key} onClick={() => setActiveEvidenceFilter(option.key)} style={{ border: active ? '1px solid #111827' : '1px solid #d1d5db', background: active ? '#111827' : '#ffffff', color: active ? '#ffffff' : '#111827', borderRadius: 999, padding: '9px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  </div>
+</section>
 
             {actionError ? <div style={{ border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b', borderRadius: 14, padding: 14, marginBottom: 16, fontSize: 14, fontWeight: 700 }}>{actionError}</div> : null}
             {actionSuccess ? <div style={{ border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#166534', borderRadius: 14, padding: 14, marginBottom: 16, fontSize: 14, fontWeight: 700 }}>{actionSuccess}</div> : null}
@@ -388,7 +601,16 @@ export default function OperationsPage() {
                       const hasCrmSignal = Boolean(row.crmProfileExists && (row.crmTag !== 'general' || row.riskLevel !== 'normal' || row.followupStatus !== 'none' || row.crmInternalNote));
                       return (
                         <tr key={row.id}>
-                          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6', fontWeight: 700 }}>{row.caseNo || '-'}</td>
+                          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
+  <div style={{ display: 'grid', gap: 6, minWidth: 150 }}>
+    <Link href={`/operations/${row.caseNo || row.id}`} style={{ color: '#111827', fontWeight: 900, textDecoration: 'none' }}>
+      {row.caseNo || row.id}
+    </Link>
+    <Link href={`/operations/${row.caseNo || row.id}`} style={{ color: '#2563eb', fontWeight: 900, textDecoration: 'none', fontSize: 13 }}>
+      Vaka Detayına Git →
+    </Link>
+  </div>
+</td>
                           <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}><Pill label={mapTypeLabel(row.caseType)} tone="info" /></td>
                           <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
                             <div style={{ fontWeight: 800 }}>{row.title || '-'}</div>
@@ -412,6 +634,7 @@ export default function OperationsPage() {
                           <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
                             <div style={{ display: 'grid', gap: 8, minWidth: 170 }}>
                               <Pill label={mapStatusLabel(row.status)} tone={statusTone(row.status)} />
+                              {row.status === 'resolved' || row.status === 'closed' ? <Pill label="Arşiv" tone="success" /> : null}
                               <select value={row.status || 'open'} onChange={(event) => handleUpdateCaseStatus(row.id, event.target.value)} disabled={updatingCaseId === row.id} style={{ border: '1px solid #d1d5db', borderRadius: 10, padding: '8px 10px', background: updatingCaseId === row.id ? '#f3f4f6' : '#ffffff', color: '#111827', fontSize: 13, fontWeight: 700, cursor: updatingCaseId === row.id ? 'not-allowed' : 'pointer' }}>
                                 {STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                               </select>
@@ -439,7 +662,9 @@ export default function OperationsPage() {
 
                     {rows.length === 0 ? (
                       <tr>
-                        <td colSpan={10} style={{ padding: 18, color: '#6b7280' }}>Seçili filtrede gösterilecek operasyon kaydı bulunmuyor.</td>
+                        <td colSpan={10} style={{ padding: 18, color: '#6b7280', lineHeight: 1.7 }}>
+  Seçili filtrelerde gösterilecek operasyon kaydı bulunmuyor. Filtreleri sıfırlayarak tüm vakaları tekrar görebilirsiniz.
+</td>
                       </tr>
                     ) : null}
                   </tbody>
