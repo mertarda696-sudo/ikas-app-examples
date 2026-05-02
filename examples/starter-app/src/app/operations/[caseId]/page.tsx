@@ -417,6 +417,10 @@ export default function OperationCaseDetailPage() {
   const [runningEvidenceAction, setRunningEvidenceAction] = useState<EvidenceActionKey | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [operatorNote, setOperatorNote] = useState('');
+  const [savingOperatorNote, setSavingOperatorNote] = useState(false);
+  const [operatorNoteError, setOperatorNoteError] = useState<string | null>(null);
+  const [operatorNoteSuccess, setOperatorNoteSuccess] = useState<string | null>(null);
 
   const loadCase = async (options?: { silent?: boolean }) => {
     try {
@@ -528,6 +532,55 @@ export default function OperationCaseDetailPage() {
       setRunningEvidenceAction(null);
     }
   };
+
+  const handleOperatorNoteSave = async () => {
+  try {
+    if (!operationCase) return;
+
+    const note = operatorNote.trim();
+
+    setOperatorNoteError(null);
+    setOperatorNoteSuccess(null);
+
+    if (!note) {
+      setOperatorNoteError('Operatör notu boş olamaz.');
+      return;
+    }
+
+    setSavingOperatorNote(true);
+
+    const iframeToken = await TokenHelpers.getTokenForIframeApp();
+
+    if (!iframeToken) {
+      setOperatorNoteError('iFrame JWT token alınamadı.');
+      return;
+    }
+
+    const response = await fetch(`/api/apparel/operation-cases/${operationCase.id}/operator-note`, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        Authorization: 'JWT ' + iframeToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ note }),
+    });
+
+    const raw = await response.json();
+
+    if (!response.ok || !raw?.ok) {
+      throw new Error(raw?.error || 'Operatör notu kaydedilemedi.');
+    }
+
+    setOperatorNote('');
+    setOperatorNoteSuccess('Operatör notu kaydedildi.');
+    await loadCase({ silent: true });
+  } catch (error) {
+    setOperatorNoteError(error instanceof Error ? error.message : 'Operatör notu kaydedilirken hata oluştu.');
+  } finally {
+    setSavingOperatorNote(false);
+  }
+};
 
   const actionDisabled = updatingStatus || Boolean(runningEvidenceAction);
 
@@ -706,6 +759,70 @@ export default function OperationCaseDetailPage() {
                 </div>
               </InfoCard>
 
+              <InfoCard title="Operatör İç Notu">
+  <div style={{ display: 'grid', gap: 10 }}>
+    <div style={{ color: '#4b5563', fontSize: 13, lineHeight: 1.65 }}>
+      Bu not müşteriye gönderilmez. Sadece operasyon ekibinin vaka geçmişinde görmesi için kaydedilir.
+    </div>
+
+    <textarea
+      value={operatorNote}
+      onChange={(event) => setOperatorNote(event.target.value.slice(0, 1200))}
+      disabled={savingOperatorNote}
+      placeholder="Örn: Müşteri fotoğraf gönderdi, ürün hasarlı görünüyor. İade onayı için kontrol edilmeli."
+      style={{
+        width: '100%',
+        minHeight: 110,
+        border: '1px solid #d1d5db',
+        borderRadius: 12,
+        padding: 12,
+        background: savingOperatorNote ? '#f3f4f6' : '#ffffff',
+        color: '#111827',
+        fontSize: 14,
+        lineHeight: 1.6,
+        resize: 'vertical',
+        outline: 'none',
+        boxSizing: 'border-box',
+      }}
+    />
+
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+      <span style={{ fontSize: 12, color: '#6b7280', fontWeight: 700 }}>
+        {operatorNote.length}/1200 karakter
+      </span>
+
+      <button
+        type="button"
+        onClick={handleOperatorNoteSave}
+        disabled={savingOperatorNote}
+        style={{
+          border: 'none',
+          borderRadius: 12,
+          padding: '9px 13px',
+          background: savingOperatorNote ? '#9ca3af' : '#111827',
+          color: '#ffffff',
+          fontWeight: 900,
+          cursor: savingOperatorNote ? 'not-allowed' : 'pointer',
+        }}
+      >
+        {savingOperatorNote ? 'Kaydediliyor...' : 'Notu Kaydet'}
+      </button>
+    </div>
+
+    {operatorNoteError ? (
+      <div style={{ border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b', borderRadius: 12, padding: 12, fontSize: 13, fontWeight: 800 }}>
+        {operatorNoteError}
+      </div>
+    ) : null}
+
+    {operatorNoteSuccess ? (
+      <div style={{ border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#166534', borderRadius: 12, padding: 12, fontSize: 13, fontWeight: 800 }}>
+        {operatorNoteSuccess}
+      </div>
+    ) : null}
+  </div>
+</InfoCard>
+              
               <InfoCard title="Durum Güncelle">
                 <div style={{ display: 'grid', gap: 10 }}>
                   <select value={operationCase.status || 'open'} onChange={(event) => handleStatusChange(event.target.value)} disabled={updatingStatus} style={{ border: '1px solid #d1d5db', borderRadius: 12, padding: '10px 12px', background: updatingStatus ? '#f3f4f6' : '#ffffff', color: '#111827', fontSize: 14, fontWeight: 800, cursor: updatingStatus ? 'not-allowed' : 'pointer' }}>
