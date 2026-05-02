@@ -344,6 +344,21 @@ export default function OrdersPage() {
   };
 
   const currency = rows[0]?.currency || 'TRY';
+  const headers = [
+    'Sipariş No',
+    'Müşteri',
+    'Ürünler',
+    'Tutar',
+    'Sipariş Durumu',
+    'Ödeme',
+    'Hazırlık / Kargo',
+    'Kargo Bilgisi',
+    'Öncelik / Not',
+    'Operasyon',
+    'Konuşma',
+    'Detay',
+    'Son Güncelleme',
+  ];
 
   return (
     <AppShell>
@@ -407,31 +422,11 @@ export default function OrdersPage() {
                 marginBottom: 16,
               }}
             >
-              <MetricCard
-                label="Toplam Sipariş"
-                value={metrics.total}
-                helper="Bu tenant için görünen toplam sipariş sayısı."
-              />
-              <MetricCard
-                label="Aktif Sipariş"
-                value={metrics.active}
-                helper="Bekleyen, onaylı, hazırlanan veya kargodaki siparişler."
-              />
-              <MetricCard
-                label="Ödenmiş Sipariş"
-                value={metrics.paid}
-                helper="Ödemesi alınmış veya kısmi ödeme alınmış siparişler."
-              />
-              <MetricCard
-                label="Hazırlanmayı Bekleyen"
-                value={metrics.unfulfilled}
-                helper="Fulfillment süreci tamamlanmamış siparişler."
-              />
-              <MetricCard
-                label="Toplam Ciro"
-                value={formatMoney(metrics.totalRevenue, currency)}
-                helper="Ödenmiş siparişlerin toplam tutarı."
-              />
+              <MetricCard label="Toplam Sipariş" value={metrics.total} helper="Bu tenant için görünen toplam sipariş sayısı." />
+              <MetricCard label="Aktif Sipariş" value={metrics.active} helper="Bekleyen, onaylı, hazırlanan veya kargodaki siparişler." />
+              <MetricCard label="Ödenmiş Sipariş" value={metrics.paid} helper="Ödemesi alınmış veya kısmi ödeme alınmış siparişler." />
+              <MetricCard label="Hazırlanmayı Bekleyen" value={metrics.unfulfilled} helper="Fulfillment süreci tamamlanmamış siparişler." />
+              <MetricCard label="Toplam Ciro" value={formatMoney(metrics.totalRevenue, currency)} helper="Ödenmiş siparişlerin toplam tutarı." />
             </section>
 
             <section
@@ -457,23 +452,7 @@ export default function OrdersPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1320 }}>
                   <thead>
                     <tr style={{ background: '#f9fafb' }}>
-                      {[
-              [
-  'Sipariş No',
-  'Müşteri',
-  'Ürünler',
-  'Tutar',
-  'Sipariş Durumu',
-  'Ödeme',
-  'Hazırlık / Kargo',
-  'Kargo Bilgisi',
-  'Öncelik / Not',
-  'Operasyon',
-  'Konuşma',
-  'Detay',
-  'Son Güncelleme',
-]
-                        .map((header) => (
+                      {headers.map((header) => (
                         <th
                           key={header}
                           style={{
@@ -494,35 +473,24 @@ export default function OrdersPage() {
                   <tbody>
                     {rows.map((row) => {
                       const attention = getOrderAttention(row);
+                      const linkedCases = row.linkedOperationCases || [];
+                      const firstCase = linkedCases[0];
+                      const hasActiveCase = linkedCases.some((caseItem) =>
+                        caseItem.status === 'open' || caseItem.status === 'in_progress' || caseItem.status === 'waiting_customer',
+                      );
 
                       return (
                         <tr key={row.id}>
-                          <td
-                            style={{
-                              padding: 14,
-                              borderBottom: '1px solid #f3f4f6',
-                              fontWeight: 800,
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            <Link
-                              href={`/orders/${row.id}`}
-                              style={{ textDecoration: 'none', color: '#111827', fontWeight: 900 }}
-                            >
+                          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6', fontWeight: 800, whiteSpace: 'nowrap' }}>
+                            <Link href={`/orders/${row.id}`} style={{ textDecoration: 'none', color: '#111827', fontWeight: 900 }}>
                               {row.orderNo}
                             </Link>
-                            <div style={{ marginTop: 4, color: '#6b7280', fontSize: 12 }}>
-                              {row.sourcePlatform || 'manual'}
-                            </div>
+                            <div style={{ marginTop: 4, color: '#6b7280', fontSize: 12 }}>{row.sourcePlatform || 'manual'}</div>
                           </td>
 
                           <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
-                            <div style={{ fontWeight: 800 }}>
-                              {row.customerName || row.customerWaId || row.customerPhone || '-'}
-                            </div>
-                            <div style={{ marginTop: 4, color: '#6b7280', fontSize: 12 }}>
-                              {row.customerWaId || row.customerPhone || row.customerEmail || '-'}
-                            </div>
+                            <div style={{ fontWeight: 800 }}>{row.customerName || row.customerWaId || row.customerPhone || '-'}</div>
+                            <div style={{ marginTop: 4, color: '#6b7280', fontSize: 12 }}>{row.customerWaId || row.customerPhone || row.customerEmail || '-'}</div>
                           </td>
 
                           <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
@@ -548,43 +516,25 @@ export default function OrdersPage() {
                             </div>
                           </td>
 
-                          <td
-                            style={{
-                              padding: 14,
-                              borderBottom: '1px solid #f3f4f6',
-                              fontWeight: 800,
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
+                          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6', fontWeight: 800, whiteSpace: 'nowrap' }}>
                             {formatMoney(row.totalAmount, row.currency)}
                           </td>
 
                           <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
-                            <Pill
-                              label={mapOrderStatusLabel(row.status)}
-                              tone={statusTone(row.status)}
-                            />
+                            <Pill label={mapOrderStatusLabel(row.status)} tone={statusTone(row.status)} />
                           </td>
 
                           <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
-                            <Pill
-                              label={mapFinancialStatusLabel(row.financialStatus)}
-                              tone={statusTone(row.financialStatus)}
-                            />
+                            <Pill label={mapFinancialStatusLabel(row.financialStatus)} tone={statusTone(row.financialStatus)} />
                           </td>
 
                           <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
-                            <Pill
-                              label={mapFulfillmentStatusLabel(row.fulfillmentStatus)}
-                              tone={statusTone(row.fulfillmentStatus)}
-                            />
+                            <Pill label={mapFulfillmentStatusLabel(row.fulfillmentStatus)} tone={statusTone(row.fulfillmentStatus)} />
                           </td>
 
                           <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
                             <div style={{ fontWeight: 700 }}>{row.cargoCompany || '-'}</div>
-                            <div style={{ marginTop: 4, color: '#6b7280', fontSize: 12 }}>
-                              {row.trackingNumber || row.shippingMethod || '-'}
-                            </div>
+                            <div style={{ marginTop: 4, color: '#6b7280', fontSize: 12 }}>{row.trackingNumber || row.shippingMethod || '-'}</div>
                           </td>
 
                           <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
@@ -618,48 +568,33 @@ export default function OrdersPage() {
                                         : '#374151',
                               }}
                             >
-                              <div style={{ fontWeight: 800, marginBottom: 4 }}>
-                                {attention.title}
-                              </div>
-                              <div style={{ fontSize: 12, lineHeight: 1.5 }}>
-                                {attention.helper}
-                              </div>
+                              <div style={{ fontWeight: 800, marginBottom: 4 }}>{attention.title}</div>
+                              <div style={{ fontSize: 12, lineHeight: 1.5 }}>{attention.helper}</div>
                             </div>
                           </td>
 
                           <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
-  {row.linkedOperationCases && row.linkedOperationCases.length > 0 ? (
-    <div style={{ display: 'grid', gap: 6, minWidth: 170 }}>
-      <Pill
-        label={`${row.linkedOperationCases.length} vaka`}
-        tone={row.linkedOperationCases.some((caseItem) => caseItem.status === 'open' || caseItem.status === 'in_progress' || caseItem.status === 'waiting_customer') ? 'warning' : 'success'}
-      />
-      <Link
-        href={`/operations/${encodeURIComponent(row.linkedOperationCases[0].caseNo || row.linkedOperationCases[0].id)}`}
-        style={{ color: '#2563eb', fontWeight: 900, textDecoration: 'none', fontSize: 13, whiteSpace: 'nowrap' }}
-      >
-        Vaka Detayına Git →
-      </Link>
-      <div style={{ color: '#6b7280', fontSize: 12 }}>
-        {mapCaseTypeLabel(row.linkedOperationCases[0].caseType)} · {mapCaseStatusLabel(row.linkedOperationCases[0].status)}
-      </div>
-    </div>
-  ) : (
-    <span style={{ color: '#6b7280' }}>Vaka yok</span>
-  )}
-</td>
+                            {firstCase ? (
+                              <div style={{ display: 'grid', gap: 6, minWidth: 170 }}>
+                                <Pill label={`${linkedCases.length} vaka`} tone={hasActiveCase ? 'warning' : 'success'} />
+                                <Link
+                                  href={`/operations/${encodeURIComponent(firstCase.caseNo || firstCase.id)}`}
+                                  style={{ color: '#2563eb', fontWeight: 900, textDecoration: 'none', fontSize: 13, whiteSpace: 'nowrap' }}
+                                >
+                                  Vaka Detayına Git →
+                                </Link>
+                                <div style={{ color: '#6b7280', fontSize: 12 }}>
+                                  {mapCaseTypeLabel(firstCase.caseType)} · {mapCaseStatusLabel(firstCase.status)}
+                                </div>
+                              </div>
+                            ) : (
+                              <span style={{ color: '#6b7280' }}>Vaka yok</span>
+                            )}
+                          </td>
 
                           <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
                             {row.conversationId ? (
-                              <Link
-                                href={`/inbox/${row.conversationId}`}
-                                style={{
-                                  textDecoration: 'none',
-                                  color: '#111827',
-                                  fontWeight: 800,
-                                  whiteSpace: 'nowrap',
-                                }}
-                              >
+                              <Link href={`/inbox/${row.conversationId}`} style={{ textDecoration: 'none', color: '#111827', fontWeight: 800, whiteSpace: 'nowrap' }}>
                                 Konuşmaya Git →
                               </Link>
                             ) : (
@@ -668,27 +603,12 @@ export default function OrdersPage() {
                           </td>
 
                           <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
-                            <Link
-                              href={`/orders/${row.id}`}
-                              style={{
-                                textDecoration: 'none',
-                                color: '#111827',
-                                fontWeight: 800,
-                                whiteSpace: 'nowrap',
-                              }}
-                            >
+                            <Link href={`/orders/${row.id}`} style={{ textDecoration: 'none', color: '#111827', fontWeight: 800, whiteSpace: 'nowrap' }}>
                               Detayı Aç →
                             </Link>
                           </td>
 
-                          <td
-                            style={{
-                              padding: 14,
-                              borderBottom: '1px solid #f3f4f6',
-                              color: '#6b7280',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
+                          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6', color: '#6b7280', whiteSpace: 'nowrap' }}>
                             {formatDate(row.updatedAt || row.orderedAt || row.createdAt)}
                           </td>
                         </tr>
