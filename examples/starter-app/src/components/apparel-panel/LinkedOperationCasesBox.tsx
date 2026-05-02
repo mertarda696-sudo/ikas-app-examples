@@ -244,10 +244,13 @@ export function LinkedOperationCasesBox({
                   <Badge label={caseItem.caseNo || 'Vaka'} tone="info" />
                   <Badge label={mapCaseTypeLabel(caseItem.caseType)} tone="warning" />
                   <Badge label={mapStatusLabel(caseItem.status)} tone={statusTone(caseItem.status)} />
-                  <Badge
-                    label={`Öncelik: ${mapPriorityLabel(caseItem.priority)}`}
-                    tone={priorityTone(caseItem.priority)}
-                  />
+{caseItem.status === 'resolved' || caseItem.status === 'closed' ? (
+  <Badge label="Arşiv" tone="success" />
+) : null}
+<Badge
+  label={`Öncelik: ${mapPriorityLabel(caseItem.priority)}`}
+  tone={priorityTone(caseItem.priority)}
+/>
                 </div>
 
                 <div style={{ fontWeight: 800, color: '#111827', lineHeight: 1.4 }}>
@@ -265,18 +268,18 @@ export function LinkedOperationCasesBox({
                 </div>
 
                 <Link
-                  href={`/operations/${caseItem.caseNo || caseItem.id}`}
-                  style={{
-                    display: 'inline-block',
-                    marginTop: 10,
-                    textDecoration: 'none',
-                    fontSize: 13,
-                    fontWeight: 800,
-                    color: '#2563eb',
-                  }}
-                >
-                  Vaka Detayına Git →
-                </Link>
+  href={`/operations/${encodeURIComponent(caseItem.caseNo || caseItem.id)}`}
+  style={{
+    display: 'inline-block',
+    marginTop: 10,
+    textDecoration: 'none',
+    fontSize: 13,
+    fontWeight: 800,
+    color: '#2563eb',
+  }}
+>
+  Vaka Detayına Git →
+</Link>
               </div>
             ))}
           </div>
