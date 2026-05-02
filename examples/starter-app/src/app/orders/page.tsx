@@ -23,6 +23,19 @@ type OrderItem = {
   returnStatus: string | null;
 };
 
+type LinkedOperationCase = {
+  id: string;
+  caseNo: string | null;
+  caseType: string | null;
+  title: string | null;
+  priority: string | null;
+  status: string | null;
+  linkedOrderId: string | null;
+  conversationId: string | null;
+  updatedAt: string | null;
+  createdAt: string | null;
+};
+
 type OrderRow = {
   id: string;
   orderNo: string;
@@ -52,6 +65,7 @@ type OrderRow = {
   createdAt: string | null;
   updatedAt: string | null;
   items: OrderItem[];
+  linkedOperationCases?: LinkedOperationCase[];
 };
 
 type OrdersResponse = {
@@ -127,6 +141,26 @@ function mapFulfillmentStatusLabel(status: string | null | undefined) {
   if (status === 'returned') return 'İade';
   if (status === 'canceled') return 'İptal';
 
+  return status || '-';
+}
+
+function mapCaseTypeLabel(type: string | null | undefined) {
+  if (type === 'damaged_product') return 'Hasarlı Ürün';
+  if (type === 'shipping_delivery') return 'Kargo / Teslimat';
+  if (type === 'payment_proof') return 'Ödeme / Dekont';
+  if (type === 'return_exchange') return 'İade / Değişim';
+  if (type === 'size_consultation') return 'Beden Danışma';
+  if (type === 'order_support') return 'Sipariş Destek';
+  if (type === 'hot_lead') return 'Sıcak Lead';
+  return 'Genel';
+}
+
+function mapCaseStatusLabel(status: string | null | undefined) {
+  if (status === 'open') return 'Açık';
+  if (status === 'in_progress') return 'İnceleniyor';
+  if (status === 'waiting_customer') return 'Müşteri Bekleniyor';
+  if (status === 'resolved') return 'Çözüldü';
+  if (status === 'closed') return 'Kapalı';
   return status || '-';
 }
 
@@ -424,19 +458,22 @@ export default function OrdersPage() {
                   <thead>
                     <tr style={{ background: '#f9fafb' }}>
                       {[
-                        'Sipariş No',
-                        'Müşteri',
-                        'Ürünler',
-                        'Tutar',
-                        'Sipariş Durumu',
-                        'Ödeme',
-                        'Hazırlık / Kargo',
-                        'Kargo Bilgisi',
-                        'Öncelik / Not',
-                        'Konuşma',
-                        'Detay',
-                        'Son Güncelleme',
-                      ].map((header) => (
+              [
+  'Sipariş No',
+  'Müşteri',
+  'Ürünler',
+  'Tutar',
+  'Sipariş Durumu',
+  'Ödeme',
+  'Hazırlık / Kargo',
+  'Kargo Bilgisi',
+  'Öncelik / Not',
+  'Operasyon',
+  'Konuşma',
+  'Detay',
+  'Son Güncelleme',
+]
+                        .map((header) => (
                         <th
                           key={header}
                           style={{
@@ -591,6 +628,28 @@ export default function OrdersPage() {
                           </td>
 
                           <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
+  {row.linkedOperationCases && row.linkedOperationCases.length > 0 ? (
+    <div style={{ display: 'grid', gap: 6, minWidth: 170 }}>
+      <Pill
+        label={`${row.linkedOperationCases.length} vaka`}
+        tone={row.linkedOperationCases.some((caseItem) => caseItem.status === 'open' || caseItem.status === 'in_progress' || caseItem.status === 'waiting_customer') ? 'warning' : 'success'}
+      />
+      <Link
+        href={`/operations/${encodeURIComponent(row.linkedOperationCases[0].caseNo || row.linkedOperationCases[0].id)}`}
+        style={{ color: '#2563eb', fontWeight: 900, textDecoration: 'none', fontSize: 13, whiteSpace: 'nowrap' }}
+      >
+        Vaka Detayına Git →
+      </Link>
+      <div style={{ color: '#6b7280', fontSize: 12 }}>
+        {mapCaseTypeLabel(row.linkedOperationCases[0].caseType)} · {mapCaseStatusLabel(row.linkedOperationCases[0].status)}
+      </div>
+    </div>
+  ) : (
+    <span style={{ color: '#6b7280' }}>Vaka yok</span>
+  )}
+</td>
+
+                          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
                             {row.conversationId ? (
                               <Link
                                 href={`/inbox/${row.conversationId}`}
@@ -638,7 +697,7 @@ export default function OrdersPage() {
 
                     {rows.length === 0 ? (
                       <tr>
-                        <td colSpan={12} style={{ padding: 18, color: '#6b7280' }}>
+                        <td colSpan={13} style={{ padding: 18, color: '#6b7280' }}>
                           Bu tenant için henüz sipariş kaydı görünmüyor.
                         </td>
                       </tr>
