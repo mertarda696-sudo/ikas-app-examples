@@ -591,7 +591,7 @@ export default function OperationsPage() {
             <section style={{ border: '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', overflow: 'hidden' }}>
               <div style={{ padding: 18, borderBottom: '1px solid #e5e7eb', fontSize: 18, fontWeight: 800 }}>Operasyon Listesi</div>
 
-              <div style={{ overflowX: 'auto' }}>
+              <div style={{ overflowX: 'auto', display: rows.length === 0 ? 'none' : 'block' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1180 }}>
                   <thead>
                     <tr style={{ background: '#f9fafb' }}>
@@ -612,7 +612,9 @@ export default function OperationsPage() {
             row.crmInternalNote)
       );
 
-      const detailHref = `/operations/${encodeURIComponent(row.id)}`;
+      const detailHref = row.caseNo
+  ? `/operations/${encodeURIComponent(row.caseNo)}`
+  : `/operations/${encodeURIComponent(row.id)}`;
 
       return (
         <tr key={row.id}>
