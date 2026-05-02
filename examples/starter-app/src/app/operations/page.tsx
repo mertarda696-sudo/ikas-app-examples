@@ -599,78 +599,143 @@ export default function OperationsPage() {
                   </thead>
 
                   <tbody>
-                    {rows.map((row) => {
-                      const hasCrmSignal = Boolean(row.crmProfileExists && (row.crmTag !== 'general' || row.riskLevel !== 'normal' || row.followupStatus !== 'none' || row.crmInternalNote));
-                      return (
-                        <tr key={row.id}>
-                         <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
-  <div style={{ display: 'grid', gap: 6, minWidth: 150 }}>
-    <div style={{ color: '#111827', fontWeight: 900 }}>
-      {row.caseNo || row.id}
-    </div>
+  {rows.length > 0 ? (
+    rows.map((row) => {
+      const hasCrmSignal = Boolean(
+        row.crmProfileExists &&
+          (row.crmTag !== 'general' ||
+            row.riskLevel !== 'normal' ||
+            row.followupStatus !== 'none' ||
+            row.crmInternalNote)
+      );
 
-    <Link href={`/operations/${row.id}`} style={{ color: '#2563eb', fontWeight: 900, textDecoration: 'none', fontSize: 13 }}>
-      Vaka Detayına Git →
-    </Link>
-  </div>
-</td>
-                          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}><Pill label={mapTypeLabel(row.caseType)} tone="info" /></td>
-                          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
-                            <div style={{ fontWeight: 800 }}>{row.title || '-'}</div>
-                            {row.description ? <div style={{ marginTop: 4, color: '#6b7280', fontSize: 13, lineHeight: 1.5 }}>{row.description}</div> : null}
-                          </td>
+      const detailHref = `/operations/${encodeURIComponent(row.caseNo || row.id)}`;
 
-                          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
-                            <div style={{ display: 'grid', gap: 6, minWidth: 190 }}>
-                              <span>{row.customerWaId || '-'}</span>
-                              <CustomerProfileLink customerWaId={row.customerWaId} compact />
-                              {hasCrmSignal ? <Pill label={`CRM: ${mapCrmTagLabel(row.crmTag)}`} tone="info" /> : null}
-                              {hasCrmSignal ? <Pill label={`Risk: ${mapRiskLevelLabel(row.riskLevel)}`} tone={riskTone(row.riskLevel)} /> : null}
-                              {hasCrmSignal ? <Pill label={`Takip: ${mapFollowupStatusLabel(row.followupStatus)}`} tone={followupTone(row.followupStatus)} /> : null}
-                              {row.crmInternalNote ? <Pill label="CRM notu var" tone="neutral" /> : null}
-                            </div>
-                          </td>
+      return (
+        <tr key={row.id}>
+          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
+            <div style={{ display: 'grid', gap: 6, minWidth: 150 }}>
+              <div style={{ color: '#111827', fontWeight: 900 }}>
+                {row.caseNo || row.id}
+              </div>
 
-                          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>{row.linkedOrderId || '-'}</td>
-                          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}><Pill label={mapPriorityLabel(row.priority)} tone={priorityTone(row.priority)} /></td>
+              <Link
+                href={detailHref}
+                style={{
+                  color: '#2563eb',
+                  fontWeight: 900,
+                  textDecoration: 'none',
+                  fontSize: 13,
+                }}
+              >
+                Vaka Detayına Git →
+              </Link>
+            </div>
+          </td>
 
-                          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
-                            <div style={{ display: 'grid', gap: 8, minWidth: 170 }}>
-                              <Pill label={mapStatusLabel(row.status)} tone={statusTone(row.status)} />
-                              {row.status === 'resolved' || row.status === 'closed' ? <Pill label="Arşiv" tone="success" /> : null}
-                              <select value={row.status || 'open'} onChange={(event) => handleUpdateCaseStatus(row.id, event.target.value)} disabled={updatingCaseId === row.id} style={{ border: '1px solid #d1d5db', borderRadius: 10, padding: '8px 10px', background: updatingCaseId === row.id ? '#f3f4f6' : '#ffffff', color: '#111827', fontSize: 13, fontWeight: 700, cursor: updatingCaseId === row.id ? 'not-allowed' : 'pointer' }}>
-                                {STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                              </select>
-                              {updatingCaseId === row.id ? <span style={{ color: '#6b7280', fontSize: 12 }}>Güncelleniyor...</span> : null}
-                            </div>
-                          </td>
+          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
+            <Pill label={mapTypeLabel(row.caseType)} tone="info" />
+          </td>
 
-                          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
-                            {row.evidenceSummary || row.evidenceState ? (
-                              <div style={{ display: 'grid', gap: 4 }}>
-                                <span>{row.evidenceSummary || '-'}</span>
-                                <Pill label={mapEvidenceStateLabel(row.evidenceState)} tone="warning" />
-                              </div>
-                            ) : '-'}
-                          </td>
+          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
+            <div style={{ fontWeight: 800 }}>{row.title || '-'}</div>
+            {row.description ? (
+              <div style={{ marginTop: 4, color: '#6b7280', fontSize: 13, lineHeight: 1.5 }}>
+                {row.description}
+              </div>
+            ) : null}
+          </td>
 
-                          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6', color: '#6b7280' }}>{formatDate(row.updatedAt || row.createdAt)}</td>
+          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
+            <div style={{ display: 'grid', gap: 6, minWidth: 190 }}>
+              <span>{row.customerWaId || '-'}</span>
+              <CustomerProfileLink customerWaId={row.customerWaId} compact />
+              {hasCrmSignal ? <Pill label={`CRM: ${mapCrmTagLabel(row.crmTag)}`} tone="info" /> : null}
+              {hasCrmSignal ? <Pill label={`Risk: ${mapRiskLevelLabel(row.riskLevel)}`} tone={riskTone(row.riskLevel)} /> : null}
+              {hasCrmSignal ? <Pill label={`Takip: ${mapFollowupStatusLabel(row.followupStatus)}`} tone={followupTone(row.followupStatus)} /> : null}
+              {row.crmInternalNote ? <Pill label="CRM notu var" tone="neutral" /> : null}
+            </div>
+          </td>
 
-                          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
-                            {row.conversationId ? <Link href={`/inbox/${row.conversationId}`} style={{ textDecoration: 'none', color: '#111827', fontWeight: 700 }}>Konuşmaya Git →</Link> : '-'}
-                          </td>
-                        </tr>
-                      );
-                    })}
+          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
+            {row.linkedOrderId || '-'}
+          </td>
 
-                    {rows.length === 0 ? (
-                      <tr>
-                        <td colSpan={10} style={{ padding: 18, color: '#6b7280', lineHeight: 1.7 }}>
-  Seçili filtrelerde gösterilecek operasyon kaydı bulunmuyor. Filtreleri sıfırlayarak tüm vakaları tekrar görebilirsiniz.
-</td>
-                      </tr>
-                    ) : null}
-                  </tbody>
+          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
+            <Pill label={mapPriorityLabel(row.priority)} tone={priorityTone(row.priority)} />
+          </td>
+
+          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
+            <div style={{ display: 'grid', gap: 8, minWidth: 170 }}>
+              <Pill label={mapStatusLabel(row.status)} tone={statusTone(row.status)} />
+              {row.status === 'resolved' || row.status === 'closed' ? <Pill label="Arşiv" tone="success" /> : null}
+
+              <select
+                value={row.status || 'open'}
+                onChange={(event) => handleUpdateCaseStatus(row.id, event.target.value)}
+                disabled={updatingCaseId === row.id}
+                style={{
+                  border: '1px solid #d1d5db',
+                  borderRadius: 10,
+                  padding: '8px 10px',
+                  background: updatingCaseId === row.id ? '#f3f4f6' : '#ffffff',
+                  color: '#111827',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: updatingCaseId === row.id ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {STATUS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+
+              {updatingCaseId === row.id ? (
+                <span style={{ color: '#6b7280', fontSize: 12 }}>Güncelleniyor...</span>
+              ) : null}
+            </div>
+          </td>
+
+          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
+            {row.evidenceSummary || row.evidenceState ? (
+              <div style={{ display: 'grid', gap: 4 }}>
+                <span>{row.evidenceSummary || '-'}</span>
+                <Pill label={mapEvidenceStateLabel(row.evidenceState)} tone="warning" />
+              </div>
+            ) : (
+              '-'
+            )}
+          </td>
+
+          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6', color: '#6b7280' }}>
+            {formatDate(row.updatedAt || row.createdAt)}
+          </td>
+
+          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
+            {row.conversationId ? (
+              <Link
+                href={`/inbox/${row.conversationId}`}
+                style={{ textDecoration: 'none', color: '#111827', fontWeight: 700 }}
+              >
+                Konuşmaya Git →
+              </Link>
+            ) : (
+              '-'
+            )}
+          </td>
+        </tr>
+      );
+    })
+  ) : (
+    <tr>
+      <td colSpan={10} style={{ padding: 18, color: '#6b7280', lineHeight: 1.7 }}>
+        Seçili filtrelerde gösterilecek operasyon kaydı bulunmuyor. Filtreleri sıfırlayarak tüm vakaları tekrar görebilirsiniz.
+      </td>
+    </tr>
+  )}
+</tbody>
                 </table>
               </div>
             </section>
