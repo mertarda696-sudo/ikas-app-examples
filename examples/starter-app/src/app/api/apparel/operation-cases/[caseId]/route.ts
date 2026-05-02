@@ -4,6 +4,27 @@ import { prisma } from "@/lib/prisma";
 import { getTenantPanelContextByMerchantId } from "@/lib/apparel-panel/queries";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
+const UUID_LOOKUP_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}/i;
+const CASE_NO_LOOKUP_RE = /OP-\d+/i;
+
+function safeDecodeURIComponent(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function normalizeOperationCaseLookupId(value: string) {
+  const decoded = safeDecodeURIComponent(String(value || "").trim());
+  const caseNoMatch = decoded.match(CASE_NO_LOOKUP_RE);
+  if (caseNoMatch?.[0]) return caseNoMatch[0];
+
+  const uuidMatch = decoded.match(UUID_LOOKUP_RE);
+  if (uuidMatch?.[0]) return uuidMatch[0];
+
+  return decoded.trim();
+}
 const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "https://wnougygablrqpfgoqzsm.supabase.co").replace(/\/$/, "");
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_KEY || "";
 const DEFAULT_EVIDENCE_BUCKET = "case-evidence";
@@ -396,7 +417,8 @@ export async function GET(
     }
 
     const { caseId } = await params;
-    const normalizedCaseId = String(caseId || "").trim();
+    const rawCaseId = String(caseId || "").trim();
+    const normalizedCaseId = normalizeOperationCaseLookupId(rawCaseId);
 
     if (!normalizedCaseId) {
       return NextResponse.json(
@@ -437,7 +459,7 @@ export async function GET(
           fetchedAt: new Date().toISOString(),
           tenant,
           operationCase: null,
-          error: `Operation case not found for merchant | caseId=${normalizedCaseId} | tenantId=${tenant.tenantId}`,
+          error: `Operation case not found for merchant | rawCaseId=${rawCaseId} | normalizedCaseId=${normalizedCaseId} | tenantId=${tenant.tenantId}`,
         },
         { status: 404 },
       );
