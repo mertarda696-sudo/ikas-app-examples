@@ -619,24 +619,20 @@ export default function OperationsPage() {
       return (
         <tr key={row.id}>
           <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
-            <div style={{ display: 'grid', gap: 6, minWidth: 150 }}>
-              <div style={{ color: '#111827', fontWeight: 900 }}>
-                {row.caseNo || row.id}
-              </div>
-
-              <Link
-                href={detailHref}
-                style={{
-                  color: '#2563eb',
-                  fontWeight: 900,
-                  textDecoration: 'none',
-                  fontSize: 13,
-                }}
-              >
-                Vaka Detayına Git →
-              </Link>
-            </div>
-          </td>
+  <Link
+    href={detailHref}
+    style={{
+      color: '#2563eb',
+      fontWeight: 900,
+      textDecoration: 'none',
+      fontSize: 13,
+      display: 'inline-block',
+      minWidth: 150,
+    }}
+  >
+    {row.caseNo || row.id}
+  </Link>
+</td>
 
           <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
             <Pill label={mapTypeLabel(row.caseType)} tone="info" />
