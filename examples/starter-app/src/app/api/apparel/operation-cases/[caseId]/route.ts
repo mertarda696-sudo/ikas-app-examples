@@ -285,6 +285,52 @@ async function findCaseByCaseNo(tenantId: string, caseId: string) {
   `;
 }
 
+async function findCaseByAnyId(tenantId: string, caseId: string) {
+  return prisma.$queryRaw<OperationCaseDetailRow[]>`
+    select
+      oc.id,
+      oc.case_no,
+      oc.case_type,
+      oc.title,
+      oc.description,
+      oc.priority,
+      oc.status,
+      oc.source_channel,
+      oc.customer_wa_id,
+      coalesce(oc.linked_order_id, co.order_no) as linked_order_id,
+      oc.evidence_summary,
+      oc.evidence_state,
+      oc.assigned_to,
+      oc.created_by,
+      oc.conversation_id,
+      oc.created_at,
+      oc.updated_at,
+      oc.resolved_at,
+      oc.closed_at,
+      (ccp.id is not null) as crm_profile_exists,
+      coalesce(ccp.crm_tag, 'general') as crm_tag,
+      coalesce(ccp.risk_level, 'normal') as risk_level,
+      coalesce(ccp.followup_status, 'none') as followup_status,
+      ccp.internal_note as crm_internal_note,
+      ccp.reviewed_at as crm_reviewed_at,
+      ccp.updated_at as crm_updated_at
+    from public.operation_cases oc
+    left join public.customer_crm_profiles ccp
+      on ccp.tenant_id = oc.tenant_id
+     and ccp.customer_wa_id = oc.customer_wa_id
+    left join public.commerce_orders co
+      on co.tenant_id = oc.tenant_id
+     and co.conversation_id = oc.conversation_id
+    where oc.tenant_id = CAST(${tenantId} AS uuid)
+      and (
+        oc.id::text = ${caseId}
+        or oc.case_no = ${caseId}
+      )
+    order by co.updated_at desc nulls last, co.created_at desc nulls last
+    limit 1
+  `;
+}
+
 async function findAttachmentsForCase(tenantId: string, operationCaseId: string, caseNo: string | null) {
   const caseNoValue = String(caseNo || "").trim();
 
@@ -380,9 +426,7 @@ export async function GET(
       );
     }
 
-    const rows = UUID_RE.test(normalizedCaseId)
-      ? await findCaseByUuid(tenant.tenantId, normalizedCaseId)
-      : await findCaseByCaseNo(tenant.tenantId, normalizedCaseId);
+    const rows = await findCaseByAnyId(tenant.tenantId, normalizedCaseId);
 
     const row = rows[0] || null;
 
