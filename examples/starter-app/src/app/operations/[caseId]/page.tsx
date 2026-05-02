@@ -1047,13 +1047,15 @@ const handleOperatorReplySend = async () => {
               </InfoCard>
 
               <InfoCard title="Bağlı Kayıtlar">
-                <div style={{ display: 'grid', gap: 10 }}>
-                  {operationCase.conversationId ? <Link href={`/inbox/${operationCase.conversationId}`} style={{ textDecoration: 'none', color: '#111827', fontWeight: 900 }}>Konuşmaya Git →</Link> : <span style={{ color: '#6b7280' }}>Konuşma bağı yok</span>}
-                  {operationCase.linkedOrderId ? <Link href={`/orders/${operationCase.linkedOrderId}`} style={{ textDecoration: 'none', color: '#111827', fontWeight: 900 }}>Siparişe Git →</Link> : <span style={{ color: '#6b7280' }}>Sipariş bağı yok</span>}
-                  <Link href="/operations" style={{ textDecoration: 'none', color: '#111827', fontWeight: 900 }}>Operasyonlar Listesine Git →</Link>
-                  <Link href="/operator-actions" style={{ textDecoration: 'none', color: '#111827', fontWeight: 900 }}>Aksiyon Merkezine Git →</Link>
-                </div>
-              </InfoCard>
+  <div style={{ display: 'grid', gap: 10 }}>
+    <Link href="/operations" style={{ textDecoration: 'none', color: '#111827', fontWeight: 900 }}>
+      Operasyonlar Listesine Git →
+    </Link>
+    <Link href="/operator-actions" style={{ textDecoration: 'none', color: '#111827', fontWeight: 900 }}>
+      Aksiyon Merkezine Git →
+    </Link>
+  </div>
+</InfoCard>
             </aside>
           </div>
         )}
