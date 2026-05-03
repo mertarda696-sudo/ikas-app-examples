@@ -214,33 +214,34 @@ export async function GET(
         order by created_at asc, id asc
       `,
             prisma.$queryRaw<LinkedCaseRow[]>`
-        select
-          id,
-          case_no,
-          case_type,
-          title,
-          description,
-          priority,
-          status,
-          linked_order_id,
-          conversation_id,
-          created_at,
-          updated_at
-        from public.operation_cases
-        where tenant_id = CAST(${tenant.tenantId} AS uuid)
-          and linked_order_id = ${order.order_no}
-        order by
-          case
-            when priority = 'critical' then 4
-            when priority = 'high' then 3
-            when priority = 'normal' then 2
-            when priority = 'low' then 1
-            else 0
-          end desc,
-          updated_at desc nulls last,
-          created_at desc nulls last
-        limit 20
-      `,
+  select
+    id,
+    case_no,
+    case_type,
+    title,
+    description,
+    priority,
+    status,
+    linked_order_id,
+    conversation_id,
+    created_at,
+    updated_at
+  from public.operation_cases
+  where tenant_id = CAST(${tenant.tenantId} AS uuid)
+    and linked_order_id = ${order.order_no}
+    and coalesce(is_test_record, false) = false
+  order by
+    case
+      when priority = 'critical' then 4
+      when priority = 'high' then 3
+      when priority = 'normal' then 2
+      when priority = 'low' then 1
+      else 0
+    end desc,
+    updated_at desc nulls last,
+    created_at desc nulls last
+  limit 20
+`,
       order.conversation_id
         ? prisma.$queryRaw<ConversationRow[]>`
             select
