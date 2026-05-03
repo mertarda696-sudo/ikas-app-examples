@@ -132,33 +132,37 @@ export async function GET(request: NextRequest) {
       priorityCaseRows,
     ] = await Promise.all([
       prisma.$queryRaw<CountRow[]>`
-        select count(*)::int as count
-        from public.operation_cases
-        where tenant_id = CAST(${tenantId} AS uuid)
-      `,
-      prisma.$queryRaw<CountRow[]>`
-        select count(*)::int as count
-        from public.operation_cases
-        where tenant_id = CAST(${tenantId} AS uuid)
-          and status in ('open', 'in_progress', 'waiting_customer')
-      `,
+  select count(*)::int as count
+  from public.operation_cases
+  where tenant_id = CAST(${tenantId} AS uuid)
+    and coalesce(is_test_record, false) = false
+`,
       prisma.$queryRaw<CountRow[]>`
   select count(*)::int as count
   from public.operation_cases
   where tenant_id = CAST(${tenantId} AS uuid)
+    and coalesce(is_test_record, false) = false
+    and status in ('open', 'in_progress', 'waiting_customer')
+`,
+      prisma.$queryRaw<CountRow[]>`
+  select count(*)::int as count
+  from public.operation_cases
+  where tenant_id = CAST(${tenantId} AS uuid)
+    and coalesce(is_test_record, false) = false
     and status in ('open', 'in_progress', 'waiting_customer')
     and priority in ('high', 'critical')
 `,
       prisma.$queryRaw<CountRow[]>`
-        select count(*)::int as count
-        from public.operation_cases
-        where tenant_id = CAST(${tenantId} AS uuid)
-          and (
-            nullif(trim(coalesce(evidence_summary, '')), '') is not null
-            or nullif(trim(coalesce(evidence_state, '')), '') is not null
-            or nullif(trim(coalesce(description, '')), '') is not null
-          )
-      `,
+  select count(*)::int as count
+  from public.operation_cases
+  where tenant_id = CAST(${tenantId} AS uuid)
+    and coalesce(is_test_record, false) = false
+    and (
+      nullif(trim(coalesce(evidence_summary, '')), '') is not null
+      or nullif(trim(coalesce(evidence_state, '')), '') is not null
+      or nullif(trim(coalesce(description, '')), '') is not null
+    )
+`,
       prisma.$queryRaw<CrmAlertRow[]>`
         with crm_alert_customers as (
           select
@@ -206,6 +210,7 @@ export async function GET(request: NextRequest) {
           on ccp.tenant_id = oc.tenant_id
          and ccp.customer_wa_id = oc.customer_wa_id
        where oc.tenant_id = CAST(${tenantId} AS uuid)
+  and coalesce(oc.is_test_record, false) = false
   and oc.status in ('open', 'in_progress', 'waiting_customer')
   and (
     oc.priority in ('high', 'critical')
@@ -252,7 +257,10 @@ export async function GET(request: NextRequest) {
         ok: true,
         fetchedAt: new Date().toISOString(),
         tenant: inboxResult.tenant,
-        metrics: {
+testMode: {
+  includeTestRecords: false,
+},
+metrics: {
           waitingReplyConversationCount,
           openConversationCount,
           closedConversationCount,
