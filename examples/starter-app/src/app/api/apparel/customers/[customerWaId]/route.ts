@@ -163,12 +163,13 @@ export async function GET(
                 and conversation_id is not null
             )
             or id in (
-              select distinct conversation_id
-              from public.operation_cases
-              where tenant_id = CAST(${tenant.tenantId} AS uuid)
-                and customer_wa_id = ${normalizedCustomerWaId}
-                and conversation_id is not null
-            )
+  select distinct conversation_id
+  from public.operation_cases
+  where tenant_id = CAST(${tenant.tenantId} AS uuid)
+    and customer_wa_id = ${normalizedCustomerWaId}
+    and conversation_id is not null
+    and coalesce(is_test_record, false) = false
+)
           )
         order by last_message_at desc nulls last, created_at desc nulls last
         limit 50
@@ -193,24 +194,25 @@ export async function GET(
         limit 50
       `,
       prisma.$queryRaw<CaseRow[]>`
-        select
-          id,
-          case_no,
-          case_type,
-          title,
-          description,
-          priority,
-          status,
-          linked_order_id,
-          conversation_id,
-          created_at,
-          updated_at
-        from public.operation_cases
-        where tenant_id = CAST(${tenant.tenantId} AS uuid)
-          and customer_wa_id = ${normalizedCustomerWaId}
-        order by updated_at desc nulls last, created_at desc nulls last
-        limit 50
-      `,
+  select
+    id,
+    case_no,
+    case_type,
+    title,
+    description,
+    priority,
+    status,
+    linked_order_id,
+    conversation_id,
+    created_at,
+    updated_at
+  from public.operation_cases
+  where tenant_id = CAST(${tenant.tenantId} AS uuid)
+    and customer_wa_id = ${normalizedCustomerWaId}
+    and coalesce(is_test_record, false) = false
+  order by updated_at desc nulls last, created_at desc nulls last
+  limit 50
+`,
       prisma.$queryRaw<LastMessageRow[]>`
         select
           m.id,
