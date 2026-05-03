@@ -192,32 +192,33 @@ export async function GET(request: NextRequest) {
         limit 500
       `,
       prisma.$queryRaw<LinkedCaseRow[]>`
-        select
-          oc.id,
-          oc.case_no,
-          oc.case_type,
-          oc.title,
-          oc.priority,
-          oc.status,
-          oc.linked_order_id,
-          oc.conversation_id,
-          oc.updated_at,
-          oc.created_at
-        from public.operation_cases oc
-        where oc.tenant_id = CAST(${tenant.tenantId} AS uuid)
-          and oc.linked_order_id is not null
-        order by
-          case
-            when oc.priority = 'critical' then 4
-            when oc.priority = 'high' then 3
-            when oc.priority = 'normal' then 2
-            when oc.priority = 'low' then 1
-            else 0
-          end desc,
-          oc.updated_at desc nulls last,
-          oc.created_at desc nulls last
-        limit 300
-      `,
+  select
+    oc.id,
+    oc.case_no,
+    oc.case_type,
+    oc.title,
+    oc.priority,
+    oc.status,
+    oc.linked_order_id,
+    oc.conversation_id,
+    oc.updated_at,
+    oc.created_at
+  from public.operation_cases oc
+  where oc.tenant_id = CAST(${tenant.tenantId} AS uuid)
+    and oc.linked_order_id is not null
+    and coalesce(oc.is_test_record, false) = false
+  order by
+    case
+      when oc.priority = 'critical' then 4
+      when oc.priority = 'high' then 3
+      when oc.priority = 'normal' then 2
+      when oc.priority = 'low' then 1
+      else 0
+    end desc,
+    oc.updated_at desc nulls last,
+    oc.created_at desc nulls last
+  limit 300
+`,
       prisma.$queryRaw<CountRow[]>`
         select count(*)::int as count
         from public.commerce_orders
