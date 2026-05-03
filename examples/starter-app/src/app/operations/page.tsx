@@ -68,12 +68,18 @@ type OperationCaseItem = {
   crmInternalNote?: string | null;
   crmReviewedAt?: string | null;
   crmUpdatedAt?: string | null;
+  isTestRecord?: boolean;
+  recordOrigin?: string | null;
+  testLabel?: string | null;
 };
 
 type OperationCasesResponse = {
   ok: boolean;
   fetchedAt: string;
   tenant: unknown | null;
+    testMode?: {
+    includeTestRecords?: boolean;
+  };
   metrics: {
     total: number;
     open: number;
@@ -320,6 +326,7 @@ export default function OperationsPage() {
   const [activePriorityFilter, setActivePriorityFilter] = useState<OperationPriorityFilter>('all');
   const [activeEvidenceFilter, setActiveEvidenceFilter] = useState<OperationEvidenceFilter>('all');
   const [query, setQuery] = useState('');
+  const [includeTestRecords, setIncludeTestRecords] = useState(false);
   const [data, setData] = useState<OperationCasesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [updatingCaseId, setUpdatingCaseId] = useState<string | null>(null);
@@ -336,7 +343,11 @@ export default function OperationsPage() {
           return;
         }
 
-        const response = await fetch('/api/apparel/operation-cases', {
+                const listUrl = includeTestRecords
+          ? '/api/apparel/operation-cases?includeTestRecords=true'
+          : '/api/apparel/operation-cases';
+
+        const response = await fetch(listUrl, {
           cache: 'no-store',
           headers: { Authorization: 'JWT ' + iframeToken },
         });
@@ -351,7 +362,7 @@ export default function OperationsPage() {
     };
 
     run();
-  }, []);
+    }, [includeTestRecords]);
 
   const items = data?.items || [];
 
@@ -376,7 +387,7 @@ export default function OperationsPage() {
 
     const evidenceMatches = matchesEvidenceFilter(item, activeEvidenceFilter);
 
-    const haystack = [
+        const haystack = [
       item.caseNo,
       item.caseType,
       item.title,
@@ -390,6 +401,9 @@ export default function OperationsPage() {
       item.crmTag,
       item.riskLevel,
       item.followupStatus,
+      item.recordOrigin,
+      item.testLabel,
+      item.isTestRecord ? 'test qa demo' : null,
     ]
       .filter(Boolean)
       .join(' ')
@@ -430,7 +444,11 @@ export default function OperationsPage() {
         throw new Error(updateRaw?.error || 'Vaka durumu güncellenemedi.');
       }
 
-      const listResponse = await fetch('/api/apparel/operation-cases', {
+            const listUrl = includeTestRecords
+        ? '/api/apparel/operation-cases?includeTestRecords=true'
+        : '/api/apparel/operation-cases';
+
+      const listResponse = await fetch(listUrl, {
         cache: 'no-store',
         headers: { Authorization: 'JWT ' + iframeToken },
       });
@@ -492,6 +510,7 @@ export default function OperationsPage() {
         setActivePriorityFilter('all');
         setActiveEvidenceFilter('all');
         setQuery('');
+        setIncludeTestRecords(false);
       }}
       style={{
         border: '1px solid #d1d5db',
@@ -522,6 +541,34 @@ export default function OperationsPage() {
       fontSize: 14,
     }}
   />
+                <label
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 14,
+      padding: 12,
+      border: '1px solid #fde68a',
+      borderRadius: 14,
+      background: includeTestRecords ? '#fffbeb' : '#ffffff',
+      color: '#111827',
+      fontSize: 13,
+      fontWeight: 800,
+      cursor: 'pointer',
+    }}
+  >
+    <input
+      type="checkbox"
+      checked={includeTestRecords}
+      onChange={(event) => setIncludeTestRecords(event.target.checked)}
+    />
+    Test / QA kayıtlarını göster
+    <span style={{ color: '#6b7280', fontWeight: 600 }}>
+      {includeTestRecords
+        ? 'Test kayıtları listeye dahil.'
+        : 'Varsayılan olarak test kayıtları gizli.'}
+    </span>
+  </label>
 
   <div style={{ display: 'grid', gap: 14 }}>
     <div>
@@ -615,20 +662,25 @@ export default function OperationsPage() {
 
       return (
         <tr key={row.id}>
-          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
-  <Link
-    href={detailHref}
-    style={{
-      color: '#2563eb',
-      fontWeight: 900,
-      textDecoration: 'none',
-      fontSize: 13,
-      display: 'inline-block',
-      minWidth: 150,
-    }}
-  >
-    {row.caseNo || row.id}
-  </Link>
+         <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
+  <div style={{ display: 'grid', gap: 6, minWidth: 150 }}>
+    <Link
+      href={detailHref}
+      style={{
+        color: '#2563eb',
+        fontWeight: 900,
+        textDecoration: 'none',
+        fontSize: 13,
+        display: 'inline-block',
+      }}
+    >
+      {row.caseNo || row.id}
+    </Link>
+
+    {row.isTestRecord ? (
+      <Pill label={`Test: ${row.testLabel || row.recordOrigin || 'qa'}`} tone="warning" />
+    ) : null}
+  </div>
 </td>
 
           <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
