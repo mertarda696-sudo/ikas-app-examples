@@ -28,6 +28,9 @@ type OperationCaseRow = {
   crm_internal_note: string | null;
   crm_reviewed_at: Date | string | null;
   crm_updated_at: Date | string | null;
+  is_test_record: boolean | null;
+  record_origin: string | null;
+  test_label: string | null;
 };
 
 type CountRow = {
@@ -102,6 +105,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
+        const includeTestRecords =
+      request.nextUrl.searchParams.get("includeTestRecords") === "true";
+
     const [rows, totalRows, openRows, highPriorityRows, evidenceRows] = await Promise.all([
       prisma.$queryRaw<OperationCaseRow[]>`
         select
@@ -128,12 +134,19 @@ export async function GET(request: NextRequest) {
           coalesce(ccp.followup_status, 'none') as followup_status,
           ccp.internal_note as crm_internal_note,
           ccp.reviewed_at as crm_reviewed_at,
-          ccp.updated_at as crm_updated_at
+          ccp.updated_at as crm_updated_at,
+          coalesce(oc.is_test_record, false) as is_test_record,
+          coalesce(oc.record_origin, 'live') as record_origin,
+          oc.test_label
         from public.operation_cases oc
         left join public.customer_crm_profiles ccp
           on ccp.tenant_id = oc.tenant_id
          and ccp.customer_wa_id = oc.customer_wa_id
-        where oc.tenant_id = CAST(${tenant.tenantId} AS uuid)
+                where oc.tenant_id = CAST(${tenant.tenantId} AS uuid)
+          and (
+            ${includeTestRecords} = true
+            or coalesce(oc.is_test_record, false) = false
+          )
         order by
           case
             when oc.priority = 'critical' then 4
@@ -156,23 +169,39 @@ export async function GET(request: NextRequest) {
         select count(*)::int as count
         from public.operation_cases
         where tenant_id = CAST(${tenant.tenantId} AS uuid)
+          and (
+            ${includeTestRecords} = true
+            or coalesce(is_test_record, false) = false
+          )
       `,
       prisma.$queryRaw<CountRow[]>`
         select count(*)::int as count
         from public.operation_cases
         where tenant_id = CAST(${tenant.tenantId} AS uuid)
+          and (
+            ${includeTestRecords} = true
+            or coalesce(is_test_record, false) = false
+          )
           and status in ('open', 'in_progress', 'waiting_customer')
       `,
       prisma.$queryRaw<CountRow[]>`
         select count(*)::int as count
         from public.operation_cases
         where tenant_id = CAST(${tenant.tenantId} AS uuid)
+          and (
+            ${includeTestRecords} = true
+            or coalesce(is_test_record, false) = false
+          )
           and priority in ('high', 'critical')
       `,
       prisma.$queryRaw<CountRow[]>`
         select count(*)::int as count
         from public.operation_cases
         where tenant_id = CAST(${tenant.tenantId} AS uuid)
+          and (
+            ${includeTestRecords} = true
+            or coalesce(is_test_record, false) = false
+          )
           and (
             nullif(trim(coalesce(evidence_summary, '')), '') is not null
             or nullif(trim(coalesce(evidence_state, '')), '') is not null
@@ -184,7 +213,10 @@ export async function GET(request: NextRequest) {
       {
         ok: true,
         fetchedAt: new Date().toISOString(),
-        tenant,
+                tenant,
+        testMode: {
+          includeTestRecords,
+        },
         metrics: {
           total: toNumber(totalRows[0]?.count),
           open: toNumber(openRows[0]?.count),
@@ -216,6 +248,9 @@ export async function GET(request: NextRequest) {
           crmInternalNote: row.crm_internal_note,
           crmReviewedAt: toIso(row.crm_reviewed_at),
           crmUpdatedAt: toIso(row.crm_updated_at),
+          isTestRecord: Boolean(row.is_test_record),
+          recordOrigin: row.record_origin || "live",
+          testLabel: row.test_label,
         })),
       },
       { status: 200 },
