@@ -77,52 +77,64 @@ export async function POST(request: NextRequest) {
       requestBody?.source === 'catalog_page_button' ||
       requestBody?.allowPanelTrigger === true;
 
-    let user = getUserFromRequest(request);
+    const requestUser = getUserFromRequest(request);
+
+    let user = requestUser;
     let panelFallbackAuthToken: any = null;
 
-    const isUsableToken = (token: any) => {
-      if (!token?.accessToken || token?.deleted === true) return false;
-
-      const expireTime = token?.expireDate
-        ? new Date(token.expireDate).getTime()
-        : null;
-
-      if (expireTime && Number.isFinite(expireTime)) {
-        return expireTime > Date.now() + 5 * 60 * 1000;
-      }
-
-      return true;
-    };
-
-    const sortNewestTokenFirst = (a: any, b: any) => {
-      const bTime = new Date(b?.updatedAt || b?.createdAt || b?.expireDate || 0).getTime();
-      const aTime = new Date(a?.updatedAt || a?.createdAt || a?.expireDate || 0).getTime();
-      return bTime - aTime;
-    };
-
-    if (!user && isPanelTrigger) {
+    if (isPanelTrigger) {
       const tokens = await AuthTokenManager.list();
 
       const activeTokens = tokens
-        .filter(isUsableToken)
-        .sort(sortNewestTokenFirst);
+        .filter((token: any) => {
+          return (
+            token?.deleted !== true &&
+            !!token?.accessToken &&
+            !!token?.merchantId
+          );
+        })
+        .sort((a: any, b: any) => {
+          const bTime = new Date(
+            b?.updatedAt || b?.createdAt || b?.expireDate || 0,
+          ).getTime();
+          const aTime = new Date(
+            a?.updatedAt || a?.createdAt || a?.expireDate || 0,
+          ).getTime();
+
+          return bTime - aTime;
+        });
 
       panelFallbackAuthToken =
         activeTokens.find(
-          (token) =>
+          (token: any) =>
             token.merchantId === 'cfd8adc2-53e5-48ff-843a-10edd8b971a6',
         ) ||
         activeTokens[0] ||
         null;
 
-      if (panelFallbackAuthToken) {
-        user = {
-          authorizedAppId:
-            panelFallbackAuthToken.authorizedAppId ||
-            panelFallbackAuthToken.id,
-          merchantId: panelFallbackAuthToken.merchantId,
-        } as ReturnType<typeof getUserFromRequest>;
+      if (!panelFallbackAuthToken) {
+        return NextResponse.json(
+          {
+            ok: false,
+            fetchedAt: new Date().toISOString(),
+            runId: null,
+            sourceName: IKAS_SOURCE_NAME,
+            queuedCount: 0,
+            queuedExternalProductIds: [],
+            error: 'IKAS_AUTH_TOKEN_NOT_FOUND',
+            message:
+              'Panel katalog sync için AuthToken bulunamadı. MIRELLE ikas uygulaması yeniden yetkilendirilmeli.',
+          },
+          { status: 401 },
+        );
       }
+
+      user = {
+        authorizedAppId:
+          panelFallbackAuthToken.authorizedAppId ||
+          panelFallbackAuthToken.id,
+        merchantId: panelFallbackAuthToken.merchantId,
+      } as ReturnType<typeof getUserFromRequest>;
     }
 
     if (!user) {
@@ -135,12 +147,14 @@ export async function POST(request: NextRequest) {
           queuedCount: 0,
           queuedExternalProductIds: [],
           error: 'Unauthorized',
+          message:
+            'Bu endpoint normal çağrıda JWT Authorization bekler. Panelden çağrı için catalog_page_button trigger bilgisi gelmeli.',
         },
         { status: 401 },
       );
     }
 
-    const authToken =
+    const authToken = panelFallbackAuthToken || await AuthTokenManager.get(user.authorizedAppId);
       panelFallbackAuthToken ||
       await AuthTokenManager.get(user.authorizedAppId);
 
