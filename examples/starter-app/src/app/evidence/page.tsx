@@ -111,6 +111,18 @@ function isArchivedEvidence(item: EvidenceMediaItem) {
   return isCaseLinked(item) && (item.caseStatus === 'resolved' || item.caseStatus === 'closed');
 }
 
+function isTestEvidenceItem(item: EvidenceMediaItem) {
+  const caseNo = String(item.caseNo || '').trim();
+  const caseTitle = String(item.caseTitle || '').toLocaleLowerCase('tr-TR');
+
+  return (
+    caseNo === 'OP-1777757090913' ||
+    caseTitle.includes('qa sipariş') ||
+    caseTitle.includes('qa siparis') ||
+    caseTitle.startsWith('qa ')
+  );
+}
+
 function mapCaseTypeLabel(type: string | null | undefined) {
   if (type === 'damaged_product') return 'Hasarlı Ürün';
   if (type === 'shipping_delivery') return 'Kargo / Teslimat';
@@ -308,7 +320,7 @@ export default function EvidencePage() {
 
   const items = data?.items || [];
   const localMetrics = useMemo(() => {
-    const realEvidence = items.filter(isCaseLinked).length;
+    const realEvidence = items.filter((item) => isCaseLinked(item) && !isTestEvidenceItem(item)).length;
     const previewable = items.filter(isPreviewableItem).length;
     const damagedProductImages = items.filter((item) => item.caseType === 'damaged_product' && isImageItem(item)).length;
     const unlinked = items.filter((item) => !isCaseLinked(item)).length;
@@ -319,8 +331,8 @@ export default function EvidencePage() {
     const needle = query.trim().toLowerCase();
     return items.filter((item) => {
       const matchesFilter =
-        activeFilter === 'evidence'
-          ? isCaseLinked(item)
+  activeFilter === 'evidence'
+    ? isCaseLinked(item) && !isTestEvidenceItem(item)
           : activeFilter === 'all'
             ? true
             : activeFilter === 'previewable'
