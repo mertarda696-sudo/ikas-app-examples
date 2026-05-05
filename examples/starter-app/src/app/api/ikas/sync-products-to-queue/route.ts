@@ -134,23 +134,6 @@ export async function POST(request: NextRequest) {
     const freshToken = await getFreshIkasAccessTokenForCatalogSync();
 
     const syncMerchantId = requestUser?.merchantId || MIRELLE_MERCHANT_ID;
-      panelFallbackAuthToken ||
-      await AuthTokenManager.get(user.authorizedAppId);
-
-    if (!authToken?.accessToken) {
-      return NextResponse.json(
-        {
-          ok: false,
-          fetchedAt: new Date().toISOString(),
-          runId: null,
-          sourceName: null,
-          queuedCount: 0,
-          queuedExternalProductIds: [],
-          error: 'Auth token not found',
-        },
-        { status: 404 },
-      );
-    }
 
     if (!config.graphApiUrl) {
       return NextResponse.json(
