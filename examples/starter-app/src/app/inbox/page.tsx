@@ -264,15 +264,18 @@ function isAfter(a: string | null | undefined, b: string | null | undefined) {
 
 function getResponseState(item: InboxListResponse['items'][number]) {
   const isOpen = String(item.status || '').toLowerCase() === 'open';
-  const customerAfterOperator = isAfter(item.lastCustomerMessageAt, item.lastOperatorMessageAt);
+  const latestAgentMessageAt = item.lastAgentMessageAt || item.lastOperatorMessageAt;
+  const customerAfterAgent = isAfter(item.lastCustomerMessageAt, latestAgentMessageAt);
   const customerAfterReview = isAfter(item.lastCustomerMessageAt, item.operatorReviewedAt);
-  const needsReply = isOpen && customerAfterOperator && customerAfterReview;
+  const needsReply = isOpen && customerAfterAgent && customerAfterReview;
   const reviewedAfterCustomer = Boolean(item.operatorReviewedAt) && !customerAfterReview;
+  const agentAnsweredAfterCustomer = Boolean(latestAgentMessageAt) && !customerAfterAgent;
 
   return {
     needsReply,
     reviewedAfterCustomer,
-    label: needsReply ? 'Yanıt bekliyor' : reviewedAfterCustomer ? 'İncelendi' : 'Cevaplandı',
+    agentAnsweredAfterCustomer,
+    label: needsReply ? 'Yanıt bekliyor' : reviewedAfterCustomer ? 'İncelendi' : agentAnsweredAfterCustomer ? 'AI/Operatör cevapladı' : 'Cevaplandı',
     tone: needsReply ? ('danger' as const) : reviewedAfterCustomer ? ('info' as const) : ('success' as const),
   };
 }
@@ -397,7 +400,7 @@ export default function InboxPage() {
           </div>
 
           <div style={{ border: '1px dashed #d1d5db', borderRadius: 16, background: '#ffffff', padding: 14, color: '#6b7280', maxWidth: 400, fontSize: 13, lineHeight: 1.6 }}>
-            “Yanıt Bekleyen Mesaj”, son müşteri mesajından sonra operatör manuel cevap vermediyse ve konuşma incelenmediyse artar. AI cevabı bu sayacı kapatmaz.
+            “Yanıt Bekleyen Mesaj”, son müşteri mesajından sonra AI veya operatör cevabı yoksa ve konuşma incelenmediyse artar. CRM riski varsa ayrıca uyarı olarak gösterilir.
           </div>
         </div>
 
