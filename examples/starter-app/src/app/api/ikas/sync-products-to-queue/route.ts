@@ -1,4 +1,6 @@
 import { getUserFromRequest } from '@/lib/auth-helpers';
+import { AuthTokenManager } from '@/models/auth-token/manager';
+import { onCheckToken } from '@/helpers/api-helpers';
 import { config } from '@/globals/config';
 import { prisma } from '@/lib/prisma';
 import { NextRequest, NextResponse } from 'next/server';
@@ -11,7 +13,6 @@ type SourceRow = {
 
 const IKAS_SOURCE_NAME = 'MIRELLE IKAS App Catalog';
 const PRODUCT_LIMIT = 50;
-const MIRELLE_MERCHANT_ID = 'cfd8adc2-53e5-48ff-843a-10edd8b971a6';
 
 function normalizeText(value: string | null | undefined) {
   return String(value || '')
@@ -68,11 +69,6 @@ function getVariantOptionValue(
   return match?.variantValueName ?? null;
 }
 
-async function getFreshIkasAccessTokenForCatalogSync() {
-  if (!config.oauth.clientId || !config.oauth.clientSecret) {
-    throw new Error('IKAS_CLIENT_CREDENTIALS_NOT_CONFIGURED');
-  }
-
   const response = await fetch('https://api.myikas.com/api/admin/oauth/token', {
     method: 'POST',
     headers: {
@@ -105,35 +101,72 @@ async function getFreshIkasAccessTokenForCatalogSync() {
 
 export async function POST(request: NextRequest) {
   try {
-    const requestBody = await request.json().catch(() => ({}));
+    const user = getUserFromRequest(request);
 
-    const isPanelTrigger =
-      request.headers.get('x-catalog-sync-source') === 'catalog_page_button' ||
-      requestBody?.source === 'catalog_page_button' ||
-      requestBody?.allowPanelTrigger === true;
+if (!user) {
+  return NextResponse.json(
+    {
+      ok: false,
+      fetchedAt: new Date().toISOString(),
+      runId: null,
+      sourceName: null,
+      queuedCount: 0,
+      queuedExternalProductIds: [],
+      error: 'Unauthorized',
+      message: 'Katalog sync için ikas iframe JWT gerekli.',
+    },
+    { status: 401 },
+  );
+}
 
-    const requestUser = getUserFromRequest(request);
+const authToken = await AuthTokenManager.get(user.authorizedAppId);
 
-    if (!requestUser && !isPanelTrigger) {
-      return NextResponse.json(
-        {
-          ok: false,
-          fetchedAt: new Date().toISOString(),
-          runId: null,
-          sourceName: null,
-          queuedCount: 0,
-          queuedExternalProductIds: [],
-          error: 'Unauthorized',
-          message:
-            'Bu endpoint normal çağrıda JWT Authorization bekler. Panelden çağrı için catalog_page_button trigger bilgisi gelmeli.',
-        },
-        { status: 401 },
-      );
-    }
+if (!authToken?.accessToken) {
+  return NextResponse.json(
+    {
+      ok: false,
+      fetchedAt: new Date().toISOString(),
+      runId: null,
+      sourceName: null,
+      queuedCount: 0,
+      queuedExternalProductIds: [],
+      error: 'Auth token not found',
+      message: 'MIRELLE ikas OAuth token kaydı bulunamadı.',
+    },
+    { status: 404 },
+  );
+}
 
-    const freshToken = await getFreshIkasAccessTokenForCatalogSync();
+const expireTime = new Date(authToken.expireDate).getTime();
+const tokenExpired = Number.isFinite(expireTime) && expireTime <= Date.now() + 60 * 1000;
 
-    const syncMerchantId = requestUser?.merchantId || MIRELLE_MERCHANT_ID;
+const refreshedTokenResult = await onCheckToken(authToken);
+
+const ikasAccessToken =
+  refreshedTokenResult.accessToken ||
+  (!tokenExpired ? authToken.accessToken : null);
+
+if (!ikasAccessToken) {
+  return NextResponse.json(
+    {
+      ok: false,
+      fetchedAt: new Date().toISOString(),
+      runId: null,
+      sourceName: null,
+      queuedCount: 0,
+      queuedExternalProductIds: [],
+      error: 'IKAS_TOKEN_REFRESH_FAILED',
+      message:
+        'ikas OAuth token süresi dolmuş ve refresh edilemedi. Uygulamanın OAuth bağlantısı yenilenmeli.',
+      tokenMerchantId: authToken.merchantId || null,
+      tokenAuthorizedAppId: authToken.authorizedAppId || null,
+      tokenExpireDate: authToken.expireDate || null,
+    },
+    { status: 401 },
+  );
+}
+
+const syncMerchantId = user.merchantId;
 
     if (!config.graphApiUrl) {
       return NextResponse.json(
@@ -226,7 +259,7 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: 'Bearer ' + freshToken.accessToken,
+        Authorization: 'Bearer ' + ikasAccessToken,
       },
       body: JSON.stringify({ query }),
       cache: 'no-store',
@@ -257,10 +290,10 @@ export async function POST(request: NextRequest) {
       message: isLoginRequired
         ? 'ikas access token geçersiz veya süresi dolmuş. MIRELLE uygulamasının ikas içinde yeniden yetkilendirilmesi gerekiyor.'
         : undefined,
-      tokenMerchantId: syncMerchantId,
-tokenAuthorizedAppId: requestUser?.authorizedAppId || null,
-tokenExpireDate: null,
-tokenMode: 'client_credentials',
+      tokenMerchantId: authToken.merchantId || syncMerchantId,
+tokenAuthorizedAppId: authToken.authorizedAppId || user.authorizedAppId,
+tokenExpireDate: authToken.expireDate || null,
+tokenMode: 'oauth_refresh',
       upstreamError,
     },
     { status: isLoginRequired ? 401 : upstreamResponse.ok ? 500 : upstreamResponse.status },
