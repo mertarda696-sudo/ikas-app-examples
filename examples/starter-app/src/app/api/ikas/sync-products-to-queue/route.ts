@@ -1,5 +1,4 @@
 import { getUserFromRequest } from '@/lib/auth-helpers';
-import { AuthTokenManager } from '@/models/auth-token/manager';
 import { config } from '@/globals/config';
 import { prisma } from '@/lib/prisma';
 import { NextRequest, NextResponse } from 'next/server';
@@ -12,6 +11,7 @@ type SourceRow = {
 
 const IKAS_SOURCE_NAME = 'MIRELLE IKAS App Catalog';
 const PRODUCT_LIMIT = 50;
+const MIRELLE_MERCHANT_ID = 'cfd8adc2-53e5-48ff-843a-10edd8b971a6';
 
 function normalizeText(value: string | null | undefined) {
   return String(value || '')
@@ -68,6 +68,41 @@ function getVariantOptionValue(
   return match?.variantValueName ?? null;
 }
 
+async function getFreshIkasAccessTokenForCatalogSync() {
+  if (!config.oauth.clientId || !config.oauth.clientSecret) {
+    throw new Error('IKAS_CLIENT_CREDENTIALS_NOT_CONFIGURED');
+  }
+
+  const response = await fetch('https://api.myikas.com/api/admin/oauth/token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: config.oauth.clientId,
+      client_secret: config.oauth.clientSecret,
+    }),
+    cache: 'no-store',
+  });
+
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok || !payload?.access_token) {
+    throw new Error(
+      payload?.error_description ||
+        payload?.error ||
+        `IKAS_CLIENT_CREDENTIALS_TOKEN_FAILED_HTTP_${response.status}`,
+    );
+  }
+
+  return {
+    accessToken: String(payload.access_token),
+    expiresIn: payload.expires_in ?? null,
+    tokenType: payload.token_type ?? 'Bearer',
+  };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const requestBody = await request.json().catch(() => ({}));
@@ -79,65 +114,7 @@ export async function POST(request: NextRequest) {
 
     const requestUser = getUserFromRequest(request);
 
-    let user = requestUser;
-    let panelFallbackAuthToken: any = null;
-
-    if (isPanelTrigger) {
-      const tokens = await AuthTokenManager.list();
-
-      const activeTokens = tokens
-        .filter((token: any) => {
-          return (
-            token?.deleted !== true &&
-            !!token?.accessToken &&
-            !!token?.merchantId
-          );
-        })
-        .sort((a: any, b: any) => {
-          const bTime = new Date(
-            b?.updatedAt || b?.createdAt || b?.expireDate || 0,
-          ).getTime();
-          const aTime = new Date(
-            a?.updatedAt || a?.createdAt || a?.expireDate || 0,
-          ).getTime();
-
-          return bTime - aTime;
-        });
-
-      panelFallbackAuthToken =
-        activeTokens.find(
-          (token: any) =>
-            token.merchantId === 'cfd8adc2-53e5-48ff-843a-10edd8b971a6',
-        ) ||
-        activeTokens[0] ||
-        null;
-
-      if (!panelFallbackAuthToken) {
-        return NextResponse.json(
-          {
-            ok: false,
-            fetchedAt: new Date().toISOString(),
-            runId: null,
-            sourceName: IKAS_SOURCE_NAME,
-            queuedCount: 0,
-            queuedExternalProductIds: [],
-            error: 'IKAS_AUTH_TOKEN_NOT_FOUND',
-            message:
-              'Panel katalog sync için AuthToken bulunamadı. MIRELLE ikas uygulaması yeniden yetkilendirilmeli.',
-          },
-          { status: 401 },
-        );
-      }
-
-      user = {
-        authorizedAppId:
-          panelFallbackAuthToken.authorizedAppId ||
-          panelFallbackAuthToken.id,
-        merchantId: panelFallbackAuthToken.merchantId,
-      } as ReturnType<typeof getUserFromRequest>;
-    }
-
-    if (!user) {
+    if (!requestUser && !isPanelTrigger) {
       return NextResponse.json(
         {
           ok: false,
@@ -154,7 +131,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const authToken = panelFallbackAuthToken || await AuthTokenManager.get(user.authorizedAppId);
+    const freshToken = await getFreshIkasAccessTokenForCatalogSync();
+
+    const syncMerchantId = requestUser?.merchantId || MIRELLE_MERCHANT_ID;
       panelFallbackAuthToken ||
       await AuthTokenManager.get(user.authorizedAppId);
 
@@ -264,7 +243,7 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: 'Bearer ' + authToken.accessToken,
+        Authorization: 'Bearer ' + freshToken.accessToken,
       },
       body: JSON.stringify({ query }),
       cache: 'no-store',
@@ -295,9 +274,10 @@ export async function POST(request: NextRequest) {
       message: isLoginRequired
         ? 'ikas access token geçersiz veya süresi dolmuş. MIRELLE uygulamasının ikas içinde yeniden yetkilendirilmesi gerekiyor.'
         : undefined,
-      tokenMerchantId: authToken?.merchantId || null,
-      tokenAuthorizedAppId: authToken?.authorizedAppId || null,
-      tokenExpireDate: authToken?.expireDate || null,
+      tokenMerchantId: syncMerchantId,
+tokenAuthorizedAppId: requestUser?.authorizedAppId || null,
+tokenExpireDate: null,
+tokenMode: 'client_credentials',
       upstreamError,
     },
     { status: isLoginRequired ? 401 : upstreamResponse.ok ? 500 : upstreamResponse.status },
@@ -396,7 +376,7 @@ return {
           attributes: {
   source_platform: 'ikas',
   sync_origin: 'ikas_app',
-  merchant_id: user.merchantId,
+  merchant_id: syncMerchantId,
   store_name: 'mirellestudio',
   source_category_name: firstCategoryName,
   source_brand_name: sourceBrandName,
@@ -469,7 +449,7 @@ return {
           jsonb_build_object(
             'trigger', 'ikas_app_queue_variant_pilot',
             'source_name', ${source.source_name},
-            'merchant_id', ${user.merchantId},
+            'merchant_id', ${syncMerchantId},
             'queued_count', ${payloadItems.length},
             'product_limit', ${PRODUCT_LIMIT}
           )
