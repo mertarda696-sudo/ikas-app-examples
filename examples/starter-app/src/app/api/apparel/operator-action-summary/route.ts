@@ -52,12 +52,15 @@ function needsOperatorReply(item: {
   status: string | null;
   lastCustomerMessageAt: string | null;
   lastOperatorMessageAt: string | null;
+  lastAgentMessageAt?: string | null;
   operatorReviewedAt: string | null;
 }) {
   const isOpen = String(item.status || "").toLowerCase() === "open";
-  const customerAfterOperator = isAfter(item.lastCustomerMessageAt, item.lastOperatorMessageAt);
+  const latestAgentMessageAt = item.lastAgentMessageAt || item.lastOperatorMessageAt;
+  const customerAfterAgent = isAfter(item.lastCustomerMessageAt, latestAgentMessageAt);
   const customerAfterReview = isAfter(item.lastCustomerMessageAt, item.operatorReviewedAt);
-  return isOpen && customerAfterOperator && customerAfterReview;
+
+  return isOpen && customerAfterAgent && customerAfterReview;
 }
 
 function mapCaseTypeLabel(type: string | null | undefined) {
