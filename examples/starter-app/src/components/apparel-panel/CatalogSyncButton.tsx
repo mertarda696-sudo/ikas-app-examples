@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { TokenHelpers } from '@/helpers/token-helpers';
 
 type SyncState = {
   status: 'idle' | 'loading' | 'success' | 'error';
@@ -21,51 +22,53 @@ export default function CatalogSyncButton() {
     });
 
     try {
-      const response = await fetch('/api/ikas/sync-products-to-queue', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'x-catalog-sync-source': 'catalog_page_button',
-  },
-  credentials: 'include',
-  body: JSON.stringify({
-    productLimit: 20,
-    source: 'catalog_page_button',
-    allowPanelTrigger: true,
-  }),
-});
+      const iframeToken = await TokenHelpers.getTokenForIframeApp();
 
-      const payload = await response.json().catch(() => null);
-
-      if (!response.ok) {
+      if (!iframeToken) {
         setState({
           status: 'error',
           message: 'Katalog sync başlatılamadı.',
-          detail:
-            payload?.error ||
-            payload?.message ||
-            `HTTP ${response.status}`,
+          detail: 'iFrame JWT token alınamadı.',
         });
         return;
       }
 
-      const queued =
-        payload?.queued_count ??
-        payload?.queuedCount ??
-        payload?.items_queued ??
-        payload?.itemsQueued ??
-        payload?.items_seen ??
-        payload?.itemsSeen ??
-        payload?.count ??
-        null;
+      const response = await fetch('/api/ikas/sync-products-to-queue', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          Authorization: 'JWT ' + iframeToken,
+        },
+      });
+
+      const rawText = await response.text();
+      let payload: any = {};
+
+      try {
+        payload = rawText ? JSON.parse(rawText) : {};
+      } catch {
+        payload = {
+          ok: false,
+          error: rawText || `HTTP ${response.status} ${response.statusText}`,
+        };
+      }
+
+      if (!response.ok || !payload?.ok) {
+        setState({
+          status: 'error',
+          message: 'Katalog sync başlatılamadı.',
+          detail:
+            payload?.message ||
+            payload?.error ||
+            `HTTP ${response.status} ${response.statusText}`,
+        });
+        return;
+      }
 
       setState({
         status: 'success',
         message: 'ikas katalog sync kuyruğu başlatıldı.',
-        detail:
-          queued !== null
-            ? `Kuyruğa alınan/güncellenen kayıt: ${queued}`
-            : 'Supabase raw queue kontrol edilebilir.',
+        detail: `Kuyruğa alınan/güncellenen kayıt: ${payload?.queuedCount ?? 0}`,
       });
     } catch (error) {
       setState({
