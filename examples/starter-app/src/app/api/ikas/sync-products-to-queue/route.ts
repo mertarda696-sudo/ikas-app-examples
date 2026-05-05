@@ -78,23 +78,41 @@ export async function POST(request: NextRequest) {
       requestBody?.allowPanelTrigger === true;
 
     let user = getUserFromRequest(request);
-    let panelFallbackAuthToken: Awaited<ReturnType<typeof AuthTokenManager.list>>[number] | null = null;
+    let panelFallbackAuthToken: any = null;
+
+    const isUsableToken = (token: any) => {
+      if (!token?.accessToken || token?.deleted === true) return false;
+
+      const expireTime = token?.expireDate
+        ? new Date(token.expireDate).getTime()
+        : null;
+
+      if (expireTime && Number.isFinite(expireTime)) {
+        return expireTime > Date.now() + 5 * 60 * 1000;
+      }
+
+      return true;
+    };
+
+    const sortNewestTokenFirst = (a: any, b: any) => {
+      const bTime = new Date(b?.updatedAt || b?.createdAt || b?.expireDate || 0).getTime();
+      const aTime = new Date(a?.updatedAt || a?.createdAt || a?.expireDate || 0).getTime();
+      return bTime - aTime;
+    };
 
     if (!user && isPanelTrigger) {
       const tokens = await AuthTokenManager.list();
 
+      const activeTokens = tokens
+        .filter(isUsableToken)
+        .sort(sortNewestTokenFirst);
+
       panelFallbackAuthToken =
-        tokens.find(
+        activeTokens.find(
           (token) =>
-            token.merchantId === 'cfd8adc2-53e5-48ff-843a-10edd8b971a6' &&
-            token.deleted !== true &&
-            !!token.accessToken,
+            token.merchantId === 'cfd8adc2-53e5-48ff-843a-10edd8b971a6',
         ) ||
-        tokens.find(
-          (token) =>
-            token.deleted !== true &&
-            !!token.accessToken,
-        ) ||
+        activeTokens[0] ||
         null;
 
       if (panelFallbackAuthToken) {
@@ -241,21 +259,36 @@ export async function POST(request: NextRequest) {
     const raw = await upstreamResponse.json();
 
     if (!upstreamResponse.ok || raw?.errors) {
-      return NextResponse.json(
-        {
-          ok: false,
-          fetchedAt: new Date().toISOString(),
-          runId: null,
-          sourceName: source.source_name,
-          queuedCount: 0,
-          queuedExternalProductIds: [],
-          error:
-            raw?.errors?.[0]?.message ||
-            'Graph API request failed with status ' + upstreamResponse.status,
-        },
-        { status: upstreamResponse.ok ? 500 : upstreamResponse.status },
-      );
-    }
+  const upstreamError =
+    raw?.errors?.[0]?.message ||
+    raw?.errors?.[0]?.extensions?.code ||
+    'Graph API request failed with status ' + upstreamResponse.status;
+
+  const isLoginRequired =
+    String(upstreamError).toUpperCase().includes('LOGIN_REQUIRED');
+
+  return NextResponse.json(
+    {
+      ok: false,
+      fetchedAt: new Date().toISOString(),
+      runId: null,
+      sourceName: source.source_name,
+      queuedCount: 0,
+      queuedExternalProductIds: [],
+      error: isLoginRequired
+        ? 'IKAS_LOGIN_REQUIRED_TOKEN_EXPIRED'
+        : upstreamError,
+      message: isLoginRequired
+        ? 'ikas access token geçersiz veya süresi dolmuş. MIRELLE uygulamasının ikas içinde yeniden yetkilendirilmesi gerekiyor.'
+        : undefined,
+      tokenMerchantId: authToken?.merchantId || null,
+      tokenAuthorizedAppId: authToken?.authorizedAppId || null,
+      tokenExpireDate: authToken?.expireDate || null,
+      upstreamError,
+    },
+    { status: isLoginRequired ? 401 : upstreamResponse.ok ? 500 : upstreamResponse.status },
+  );
+}
 
     const fetchedItems = Array.isArray(raw?.data?.listProduct?.data)
       ? raw.data.listProduct.data.slice(0, PRODUCT_LIMIT)
