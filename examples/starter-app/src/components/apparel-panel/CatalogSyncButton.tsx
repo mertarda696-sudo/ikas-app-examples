@@ -22,16 +22,18 @@ export default function CatalogSyncButton() {
 
     try {
       const response = await fetch('/api/ikas/sync-products-to-queue', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          productLimit: 20,
-          source: 'catalog_page_button',
-        }),
-      });
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'x-catalog-sync-source': 'catalog_page_button',
+  },
+  credentials: 'include',
+  body: JSON.stringify({
+    productLimit: 20,
+    source: 'catalog_page_button',
+    allowPanelTrigger: true,
+  }),
+});
 
       const payload = await response.json().catch(() => null);
 
