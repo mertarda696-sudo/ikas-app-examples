@@ -141,6 +141,7 @@ export type InboxConversationItem = {
   lastMessageAt: string | null;
   lastCustomerMessageAt: string | null;
   lastOperatorMessageAt: string | null;
+  lastAgentMessageAt: string | null;
   operatorReviewedAt: string | null;
   operatorReviewedBy: string | null;
   operatorReviewNote: string | null;
@@ -189,6 +190,7 @@ export type ConversationDetailItem = {
   lastMessageAt: string | null;
   lastCustomerMessageAt: string | null;
   lastOperatorMessageAt: string | null;
+  lastAgentMessageAt: string | null;
   operatorReviewedAt: string | null;
   operatorReviewedBy: string | null;
   operatorReviewNote: string | null;
