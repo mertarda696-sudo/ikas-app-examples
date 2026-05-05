@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/apparel-panel/AppShell';
 import { TokenHelpers } from '@/helpers/token-helpers';
+import CatalogSyncButton from '@/components/apparel-panel/CatalogSyncButton';
 import type {
   CatalogHealthResponse,
   ProductsListResponse,
@@ -637,6 +638,7 @@ export default function CatalogPage() {
             </section>
           </>
         )}
+        <CatalogSyncButton />
       </main>
     </AppShell>
   );
