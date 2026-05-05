@@ -104,13 +104,16 @@ function isAfter(a: string | null | undefined, b: string | null | undefined) {
 
 function getResponseState(conversation: ConversationDetailResponse['conversation']) {
   const isOpen = String(conversation?.status || '').toLowerCase() === 'open';
-  const customerAfterOperator = isAfter(conversation?.lastCustomerMessageAt, conversation?.lastOperatorMessageAt);
+  const latestAgentMessageAt = conversation?.lastAgentMessageAt || conversation?.lastOperatorMessageAt;
+  const customerAfterAgent = isAfter(conversation?.lastCustomerMessageAt, latestAgentMessageAt);
   const customerAfterReview = isAfter(conversation?.lastCustomerMessageAt, conversation?.operatorReviewedAt);
-  const needsReply = isOpen && customerAfterOperator && customerAfterReview;
+  const needsReply = isOpen && customerAfterAgent && customerAfterReview;
+  const agentAnsweredAfterCustomer = Boolean(latestAgentMessageAt) && !customerAfterAgent;
 
   return {
     needsReply,
-    label: needsReply ? 'Yanıt bekliyor' : conversation?.operatorReviewedAt ? 'İncelendi' : 'Cevaplandı',
+    agentAnsweredAfterCustomer,
+    label: needsReply ? 'Yanıt bekliyor' : conversation?.operatorReviewedAt ? 'İncelendi' : agentAnsweredAfterCustomer ? 'AI/Operatör cevapladı' : 'Cevaplandı',
     tone: needsReply ? ('danger' as const) : conversation?.operatorReviewedAt ? ('info' as const) : ('success' as const),
   };
 }
