@@ -69,36 +69,6 @@ function getVariantOptionValue(
   return match?.variantValueName ?? null;
 }
 
-  const response = await fetch('https://api.myikas.com/api/admin/oauth/token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      grant_type: 'client_credentials',
-      client_id: config.oauth.clientId,
-      client_secret: config.oauth.clientSecret,
-    }),
-    cache: 'no-store',
-  });
-
-  const payload = await response.json().catch(() => null);
-
-  if (!response.ok || !payload?.access_token) {
-    throw new Error(
-      payload?.error_description ||
-        payload?.error ||
-        `IKAS_CLIENT_CREDENTIALS_TOKEN_FAILED_HTTP_${response.status}`,
-    );
-  }
-
-  return {
-    accessToken: String(payload.access_token),
-    expiresIn: payload.expires_in ?? null,
-    tokenType: payload.token_type ?? 'Bearer',
-  };
-}
-
 export async function POST(request: NextRequest) {
   try {
     const user = getUserFromRequest(request);
