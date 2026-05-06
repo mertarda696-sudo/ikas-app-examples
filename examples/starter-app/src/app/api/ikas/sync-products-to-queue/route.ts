@@ -37,6 +37,16 @@ function slugify(value: string | null | undefined) {
     .replace(/^-+|-+$/g, '');
 }
 
+function normalizeSourceStatus(value: string | null | undefined) {
+  return normalizeText(value).toUpperCase();
+}
+
+function isPassiveSalesChannelStatus(value: string | null | undefined) {
+  return ['PASSIVE', 'INACTIVE', 'DISABLED', 'HIDDEN'].includes(
+    normalizeSourceStatus(value),
+  );
+}
+
 const APPAREL_COLOR_ALIASES: Array<[string, string]> = [
   ['siyah', 'siyah'],
   ['beyaz', 'beyaz'],
@@ -50,6 +60,7 @@ const APPAREL_COLOR_ALIASES: Array<[string, string]> = [
   ['gri', 'gri'],
   ['haki', 'haki'],
   ['kahve', 'kahve'],
+  ['kahverengi', 'kahverengi'],
   ['bordo', 'bordo'],
   ['krem', 'krem'],
 ];
@@ -266,6 +277,11 @@ export async function POST(request: NextRequest) {
             shortDescription
             description
             totalStock
+            deleted
+            salesChannels {
+              id
+              status
+            }
             brand {
               name
             }
@@ -362,6 +378,16 @@ export async function POST(request: NextRequest) {
         const sourceBrandName = item?.brand?.name ?? null;
         const totalStock =
           typeof item?.totalStock === 'number' ? item.totalStock : null;
+        const sourceSalesChannels = Array.isArray(item?.salesChannels)
+          ? item.salesChannels
+          : [];
+        const sourceSalesChannelStatuses = sourceSalesChannels
+          .map((channel: any) => channel?.status ?? null)
+          .filter(Boolean);
+        const sourceSalesChannelIsPassive = sourceSalesChannelStatuses.some(
+          (status: string) => isPassiveSalesChannelStatus(status),
+        );
+        const productIsActive = item?.deleted !== true && !sourceSalesChannelIsPassive;
 
         const variantsRaw = Array.isArray(item?.variants) ? item.variants : [];
 
@@ -400,8 +426,9 @@ export async function POST(request: NextRequest) {
               return sum + count;
             }, 0);
 
-            const stockStatus =
-              stockQty > 0
+            const stockStatus = !productIsActive
+              ? 'out_of_stock'
+              : stockQty > 0
                 ? 'in_stock'
                 : variant?.sellIfOutOfStock === true
                   ? 'preorder'
@@ -415,9 +442,9 @@ export async function POST(request: NextRequest) {
               color: colorValue,
               size: sizeValue,
               price: sellPrice,
-              stock_qty: stockQty,
+              stock_qty: productIsActive ? stockQty : 0,
               stock_status: stockStatus,
-              is_active: true,
+              is_active: productIsActive,
               sell_if_out_of_stock: variant?.sellIfOutOfStock ?? null,
               stock_preview: stocks.slice(0, 10).map((stock: any) => ({
                 stock_location_id: stock?.stockLocationId ?? null,
@@ -435,12 +462,16 @@ export async function POST(request: NextRequest) {
           category: normalizedCategory,
           currency: 'TRY',
           variants: normalizedVariants,
-          is_active: true,
+          is_active: productIsActive,
           attributes: {
             source_platform: 'ikas',
             sync_origin: 'ikas_app',
             merchant_id: syncMerchantId,
             store_name: 'mirellestudio',
+            source_deleted: item?.deleted === true,
+            source_sales_channels: sourceSalesChannels,
+            source_sales_channel_statuses: sourceSalesChannelStatuses,
+            source_sales_channel_is_passive: sourceSalesChannelIsPassive,
             source_category_name: firstCategoryName,
             source_brand_name: sourceBrandName,
             source_total_stock: totalStock,
@@ -453,8 +484,9 @@ export async function POST(request: NextRequest) {
           base_price: null,
           description: item?.description ?? null,
           subcategory: null,
-          stock_status:
-            totalStock == null
+          stock_status: !productIsActive
+            ? 'out_of_stock'
+            : totalStock == null
               ? 'unknown'
               : totalStock > 0
                 ? 'in_stock'
@@ -513,7 +545,7 @@ export async function POST(request: NextRequest) {
           ${payloadItems.length},
           0,
           0,
-          0,
+          ${payloadItems.filter((item) => item.is_active === false).length},
           0,
           'IKAS app queue write variant pilot',
           jsonb_build_object(
@@ -521,7 +553,8 @@ export async function POST(request: NextRequest) {
             'source_name', ${source.source_name},
             'merchant_id', ${syncMerchantId},
             'queued_count', ${payloadItems.length},
-            'product_limit', ${PRODUCT_LIMIT}
+            'product_limit', ${PRODUCT_LIMIT},
+            'passive_product_count', ${payloadItems.filter((item) => item.is_active === false).length}
           )
         )
         returning id
