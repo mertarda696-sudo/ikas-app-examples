@@ -150,70 +150,70 @@ export async function POST(request: NextRequest) {
   try {
     const user = getUserFromRequest(request);
 
-if (!user) {
-  return NextResponse.json(
-    {
-      ok: false,
-      fetchedAt: new Date().toISOString(),
-      runId: null,
-      sourceName: null,
-      queuedCount: 0,
-      queuedExternalProductIds: [],
-      error: 'Unauthorized',
-      message: 'Katalog sync için ikas iframe JWT gerekli.',
-    },
-    { status: 401 },
-  );
-}
+    if (!user) {
+      return NextResponse.json(
+        {
+          ok: false,
+          fetchedAt: new Date().toISOString(),
+          runId: null,
+          sourceName: null,
+          queuedCount: 0,
+          queuedExternalProductIds: [],
+          error: 'Unauthorized',
+          message: 'Katalog sync için ikas iframe JWT gerekli.',
+        },
+        { status: 401 },
+      );
+    }
 
-const authToken = await AuthTokenManager.get(user.authorizedAppId);
+    const authToken = await AuthTokenManager.get(user.authorizedAppId);
 
-if (!authToken?.accessToken) {
-  return NextResponse.json(
-    {
-      ok: false,
-      fetchedAt: new Date().toISOString(),
-      runId: null,
-      sourceName: null,
-      queuedCount: 0,
-      queuedExternalProductIds: [],
-      error: 'Auth token not found',
-      message: 'MIRELLE ikas OAuth token kaydı bulunamadı.',
-    },
-    { status: 404 },
-  );
-}
+    if (!authToken?.accessToken) {
+      return NextResponse.json(
+        {
+          ok: false,
+          fetchedAt: new Date().toISOString(),
+          runId: null,
+          sourceName: null,
+          queuedCount: 0,
+          queuedExternalProductIds: [],
+          error: 'Auth token not found',
+          message: 'MIRELLE ikas OAuth token kaydı bulunamadı.',
+        },
+        { status: 404 },
+      );
+    }
 
-const expireTime = new Date(authToken.expireDate).getTime();
-const tokenExpired = Number.isFinite(expireTime) && expireTime <= Date.now() + 60 * 1000;
+    const expireTime = new Date(authToken.expireDate).getTime();
+    const tokenExpired = Number.isFinite(expireTime) && expireTime <= Date.now() + 60 * 1000;
 
-const refreshedTokenResult = await onCheckToken(authToken);
+    const refreshedTokenResult = await onCheckToken(authToken);
 
-const ikasAccessToken =
-  refreshedTokenResult.accessToken ||
-  (!tokenExpired ? authToken.accessToken : null);
+    const ikasAccessToken =
+      refreshedTokenResult.accessToken ||
+      (!tokenExpired ? authToken.accessToken : null);
 
-if (!ikasAccessToken) {
-  return NextResponse.json(
-    {
-      ok: false,
-      fetchedAt: new Date().toISOString(),
-      runId: null,
-      sourceName: null,
-      queuedCount: 0,
-      queuedExternalProductIds: [],
-      error: 'IKAS_TOKEN_REFRESH_FAILED',
-      message:
-        'ikas OAuth token süresi dolmuş ve refresh edilemedi. Uygulamanın OAuth bağlantısı yenilenmeli.',
-      tokenMerchantId: authToken.merchantId || null,
-      tokenAuthorizedAppId: authToken.authorizedAppId || null,
-      tokenExpireDate: authToken.expireDate || null,
-    },
-    { status: 401 },
-  );
-}
+    if (!ikasAccessToken) {
+      return NextResponse.json(
+        {
+          ok: false,
+          fetchedAt: new Date().toISOString(),
+          runId: null,
+          sourceName: null,
+          queuedCount: 0,
+          queuedExternalProductIds: [],
+          error: 'IKAS_TOKEN_REFRESH_FAILED',
+          message:
+            'ikas OAuth token süresi dolmuş ve refresh edilemedi. Uygulamanın OAuth bağlantısı yenilenmeli.',
+          tokenMerchantId: authToken.merchantId || null,
+          tokenAuthorizedAppId: authToken.authorizedAppId || null,
+          tokenExpireDate: authToken.expireDate || null,
+        },
+        { status: 401 },
+      );
+    }
 
-const syncMerchantId = user.merchantId;
+    const syncMerchantId = user.merchantId;
 
     if (!config.graphApiUrl) {
       return NextResponse.json(
@@ -272,31 +272,31 @@ const syncMerchantId = user.merchantId;
             categories {
               name
             }
-           variants {
-  id
-  sku
-  sellIfOutOfStock
-  variantValues {
-    variantTypeName
-    variantValueName
-  }
-  prices {
-    buyPrice
-    discountPrice
-    sellPrice
-    priceListId
-    currency
-    currencyCode
-    currencySymbol
-  }
-  stocks {
-    id
-    productId
-    variantId
-    stockLocationId
-    stockCount
-  }
-}
+            variants {
+              id
+              sku
+              sellIfOutOfStock
+              variantValues {
+                variantTypeName
+                variantValueName
+              }
+              prices {
+                buyPrice
+                discountPrice
+                sellPrice
+                priceListId
+                currency
+                currencyCode
+                currencySymbol
+              }
+              stocks {
+                id
+                productId
+                variantId
+                stockLocationId
+                stockCount
+              }
+            }
           }
         }
       }
@@ -315,37 +315,37 @@ const syncMerchantId = user.merchantId;
     const raw = await upstreamResponse.json();
 
     if (!upstreamResponse.ok || raw?.errors) {
-  const upstreamError =
-    raw?.errors?.[0]?.message ||
-    raw?.errors?.[0]?.extensions?.code ||
-    'Graph API request failed with status ' + upstreamResponse.status;
+      const upstreamError =
+        raw?.errors?.[0]?.message ||
+        raw?.errors?.[0]?.extensions?.code ||
+        'Graph API request failed with status ' + upstreamResponse.status;
 
-  const isLoginRequired =
-    String(upstreamError).toUpperCase().includes('LOGIN_REQUIRED');
+      const isLoginRequired =
+        String(upstreamError).toUpperCase().includes('LOGIN_REQUIRED');
 
-  return NextResponse.json(
-    {
-      ok: false,
-      fetchedAt: new Date().toISOString(),
-      runId: null,
-      sourceName: source.source_name,
-      queuedCount: 0,
-      queuedExternalProductIds: [],
-      error: isLoginRequired
-        ? 'IKAS_LOGIN_REQUIRED_TOKEN_EXPIRED'
-        : upstreamError,
-      message: isLoginRequired
-        ? 'ikas access token geçersiz veya süresi dolmuş. MIRELLE uygulamasının ikas içinde yeniden yetkilendirilmesi gerekiyor.'
-        : undefined,
-      tokenMerchantId: authToken.merchantId || syncMerchantId,
-tokenAuthorizedAppId: authToken.authorizedAppId || user.authorizedAppId,
-tokenExpireDate: authToken.expireDate || null,
-tokenMode: 'oauth_refresh',
-      upstreamError,
-    },
-    { status: isLoginRequired ? 401 : upstreamResponse.ok ? 500 : upstreamResponse.status },
-  );
-}
+      return NextResponse.json(
+        {
+          ok: false,
+          fetchedAt: new Date().toISOString(),
+          runId: null,
+          sourceName: source.source_name,
+          queuedCount: 0,
+          queuedExternalProductIds: [],
+          error: isLoginRequired
+            ? 'IKAS_LOGIN_REQUIRED_TOKEN_EXPIRED'
+            : upstreamError,
+          message: isLoginRequired
+            ? 'ikas access token geçersiz veya süresi dolmuş. MIRELLE uygulamasının ikas içinde yeniden yetkilendirilmesi gerekiyor.'
+            : undefined,
+          tokenMerchantId: authToken.merchantId || syncMerchantId,
+          tokenAuthorizedAppId: authToken.authorizedAppId || user.authorizedAppId,
+          tokenExpireDate: authToken.expireDate || null,
+          tokenMode: 'oauth_refresh',
+          upstreamError,
+        },
+        { status: isLoginRequired ? 401 : upstreamResponse.ok ? 500 : upstreamResponse.status },
+      );
+    }
 
     const fetchedItems = Array.isArray(raw?.data?.listProduct?.data)
       ? raw.data.listProduct.data.slice(0, PRODUCT_LIMIT)
@@ -382,48 +382,48 @@ tokenMode: 'oauth_refresh',
                 .join(' / ') || null;
 
             const sizeValue = getVariantOptionValue(variantValues, ['beden', 'size']);
-const colorValue =
-  getVariantOptionValue(variantValues, ['renk', 'color']) ||
-  extractColorFromText(
-    item?.name,
-    optionSummary,
-    variant?.sku,
-  );
-const prices = Array.isArray(variant?.prices) ? variant.prices : [];
-const firstPrice = prices[0] || null;
-const sellPrice =
-  typeof firstPrice?.sellPrice === 'number' ? firstPrice.sellPrice : null;
+            const colorValue =
+              getVariantOptionValue(variantValues, ['renk', 'color']) ||
+              extractColorFromText(
+                item?.name,
+                optionSummary,
+                variant?.sku,
+              );
+            const prices = Array.isArray(variant?.prices) ? variant.prices : [];
+            const firstPrice = prices[0] || null;
+            const sellPrice =
+              typeof firstPrice?.sellPrice === 'number' ? firstPrice.sellPrice : null;
 
-const stocks = Array.isArray(variant?.stocks) ? variant.stocks : [];
-const stockQty = stocks.reduce((sum: number, stock: any) => {
-  const count = typeof stock?.stockCount === 'number' ? stock.stockCount : 0;
-  return sum + count;
-}, 0);
+            const stocks = Array.isArray(variant?.stocks) ? variant.stocks : [];
+            const stockQty = stocks.reduce((sum: number, stock: any) => {
+              const count = typeof stock?.stockCount === 'number' ? stock.stockCount : 0;
+              return sum + count;
+            }, 0);
 
-const stockStatus =
-  stockQty > 0
-    ? 'in_stock'
-    : variant?.sellIfOutOfStock === true
-      ? 'preorder'
-      : 'out_of_stock';
+            const stockStatus =
+              stockQty > 0
+                ? 'in_stock'
+                : variant?.sellIfOutOfStock === true
+                  ? 'preorder'
+                  : 'out_of_stock';
 
-return {
-  id: variant?.id ?? '',
-  external_product_id: item?.id ?? '',
-  sku: variant?.sku ?? null,
-  title: optionSummary,
-  color: colorValue,
-  size: sizeValue,
-  price: sellPrice,
-  stock_qty: stockQty,
-  stock_status: stockStatus,
-  is_active: true,
-  sell_if_out_of_stock: variant?.sellIfOutOfStock ?? null,
-  stock_preview: stocks.slice(0, 10).map((stock: any) => ({
-    stock_location_id: stock?.stockLocationId ?? null,
-    stock_count: typeof stock?.stockCount === 'number' ? stock.stockCount : null,
-  })),
-};
+            return {
+              id: variant?.id ?? '',
+              external_product_id: item?.id ?? '',
+              sku: variant?.sku ?? null,
+              title: optionSummary,
+              color: colorValue,
+              size: sizeValue,
+              price: sellPrice,
+              stock_qty: stockQty,
+              stock_status: stockStatus,
+              is_active: true,
+              sell_if_out_of_stock: variant?.sellIfOutOfStock ?? null,
+              stock_preview: stocks.slice(0, 10).map((stock: any) => ({
+                stock_location_id: stock?.stockLocationId ?? null,
+                stock_count: typeof stock?.stockCount === 'number' ? stock.stockCount : null,
+              })),
+            };
           })
           .filter((variant: { id: string }) => !!variant.id);
 
@@ -437,19 +437,19 @@ return {
           variants: normalizedVariants,
           is_active: true,
           attributes: {
-  source_platform: 'ikas',
-  sync_origin: 'ikas_app',
-  merchant_id: syncMerchantId,
-  store_name: 'mirellestudio',
-  source_category_name: firstCategoryName,
-  source_brand_name: sourceBrandName,
-  source_total_stock: totalStock,
-  source_short_description_present: !!item?.shortDescription,
-  source_description_present: !!item?.description,
-  source_variant_count: normalizedVariants.length,
-  source_variant_price_mode: 'sell_price_only',
-  source_variant_stock_mode: 'stocks_sum',          
-},
+            source_platform: 'ikas',
+            sync_origin: 'ikas_app',
+            merchant_id: syncMerchantId,
+            store_name: 'mirellestudio',
+            source_category_name: firstCategoryName,
+            source_brand_name: sourceBrandName,
+            source_total_stock: totalStock,
+            source_short_description_present: !!item?.shortDescription,
+            source_description_present: !!item?.description,
+            source_variant_count: normalizedVariants.length,
+            source_variant_price_mode: 'sell_price_only',
+            source_variant_stock_mode: 'stocks_sum',
+          },
           base_price: null,
           description: item?.description ?? null,
           subcategory: null,
@@ -468,29 +468,22 @@ return {
       .filter((item: { id: string }) => !!item.id);
 
     if (!payloadItems.length) {
-          const queuedExternalProductIds = payloadItems.map(
-      (item: { id: string }) => item.id,
-    );
-
-    const importTrigger = await triggerCatalogImportProcess({
-      runId: transactionResult.runId,
-      tenantId: source.tenant_id,
-      catalogSourceId: source.id,
-      sourceName: source.source_name,
-      queuedCount: payloadItems.length,
-      queuedExternalProductIds,
-    });
-
-    return NextResponse.json({
-      ok: true,
-      fetchedAt: new Date().toISOString(),
-      runId: transactionResult.runId,
-      sourceName: source.source_name,
-      queuedCount: payloadItems.length,
-      queuedExternalProductIds,
-      importTrigger,
-      error: undefined,
-    });
+      return NextResponse.json({
+        ok: true,
+        fetchedAt: new Date().toISOString(),
+        runId: null,
+        sourceName: source.source_name,
+        queuedCount: 0,
+        queuedExternalProductIds: [],
+        importTrigger: {
+          configured: Boolean(process.env.N8N_CATALOG_IMPORT_WEBHOOK_URL),
+          ok: false,
+          status: null,
+          response: null,
+          error: 'No products fetched, import trigger skipped',
+        } satisfies CatalogImportTriggerResult,
+        error: undefined,
+      });
     }
 
     const transactionResult = await prisma.$transaction(async (tx) => {
@@ -568,13 +561,27 @@ return {
       };
     });
 
+    const queuedExternalProductIds = payloadItems.map(
+      (item: { id: string }) => item.id,
+    );
+
+    const importTrigger = await triggerCatalogImportProcess({
+      runId: transactionResult.runId,
+      tenantId: source.tenant_id,
+      catalogSourceId: source.id,
+      sourceName: source.source_name,
+      queuedCount: payloadItems.length,
+      queuedExternalProductIds,
+    });
+
     return NextResponse.json({
       ok: true,
       fetchedAt: new Date().toISOString(),
       runId: transactionResult.runId,
       sourceName: source.source_name,
       queuedCount: payloadItems.length,
-      queuedExternalProductIds: payloadItems.map((item: { id: string }) => item.id),
+      queuedExternalProductIds,
+      importTrigger,
       error: undefined,
     });
   } catch (error) {
