@@ -19,7 +19,6 @@ type GraphQLField = {
 };
 
 const DEBUG_SECRET_FALLBACK = 'mirelle-debug-2026';
-const ORDER_KEYWORD_PATTERN = /(order|orders|sale|sales|checkout|cart|customer|fulfillment|shipping|payment|transaction|invoice|cargo|shipment|package|line|item)/i;
 
 function unwrapTypeName(type?: GraphQLTypeRef | null): string | null {
   let cursor = type;
@@ -53,21 +52,6 @@ function serializeFields(fields: GraphQLField[]) {
       rawType: serializeTypeRef(arg.type),
     })),
   }));
-}
-
-function pickOrderRelatedFields(fields: GraphQLField[]) {
-  return serializeFields(fields).filter((field) =>
-    ORDER_KEYWORD_PATTERN.test(field.name) ||
-    ORDER_KEYWORD_PATTERN.test(field.typeName || '') ||
-    field.args.some((arg) => ORDER_KEYWORD_PATTERN.test(arg.name) || ORDER_KEYWORD_PATTERN.test(arg.typeName || '')),
-  );
-}
-
-function pickOrderRelatedTypes(types: Array<{ name?: string | null; kind?: string | null }>) {
-  return types
-    .filter((type) => type.name && ORDER_KEYWORD_PATTERN.test(type.name))
-    .map((type) => ({ name: type.name, kind: type.kind }))
-    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
 }
 
 async function ikasGraphQL<T>(accessToken: string, query: string): Promise<T> {
@@ -125,13 +109,7 @@ export async function GET(request: NextRequest) {
     const accessToken = await getIkasAccessToken();
 
     const introspectionQuery = `
-      query IkasOrderFieldDiscovery {
-        schema: __schema {
-          types {
-            kind
-            name
-          }
-        }
+      query IkasOrderTypeDiscovery {
         queryType: __type(name: "Query") {
           fields {
             name
@@ -172,24 +150,164 @@ export async function GET(request: NextRequest) {
             }
           }
         }
+        orderPaginationResponse: __type(name: "OrderPaginationResponse") {
+          fields {
+            name
+            type {
+              kind
+              name
+              ofType {
+                kind
+                name
+                ofType {
+                  kind
+                  name
+                }
+              }
+            }
+          }
+        }
+        order: __type(name: "Order") {
+          fields {
+            name
+            type {
+              kind
+              name
+              ofType {
+                kind
+                name
+                ofType {
+                  kind
+                  name
+                }
+              }
+            }
+          }
+        }
+        orderCustomer: __type(name: "OrderCustomer") {
+          fields {
+            name
+            type {
+              kind
+              name
+              ofType {
+                kind
+                name
+                ofType {
+                  kind
+                  name
+                }
+              }
+            }
+          }
+        }
+        orderLineItem: __type(name: "OrderLineItem") {
+          fields {
+            name
+            type {
+              kind
+              name
+              ofType {
+                kind
+                name
+                ofType {
+                  kind
+                  name
+                }
+              }
+            }
+          }
+        }
+        orderPackage: __type(name: "OrderPackage") {
+          fields {
+            name
+            type {
+              kind
+              name
+              ofType {
+                kind
+                name
+                ofType {
+                  kind
+                  name
+                }
+              }
+            }
+          }
+        }
+        orderShippingLine: __type(name: "OrderShippingLine") {
+          fields {
+            name
+            type {
+              kind
+              name
+              ofType {
+                kind
+                name
+                ofType {
+                  kind
+                  name
+                }
+              }
+            }
+          }
+        }
+        orderPaymentMethod: __type(name: "OrderPaymentMethod") {
+          fields {
+            name
+            type {
+              kind
+              name
+              ofType {
+                kind
+                name
+                ofType {
+                  kind
+                  name
+                }
+              }
+            }
+          }
+        }
+        orderAddress: __type(name: "OrderAddress") {
+          fields {
+            name
+            type {
+              kind
+              name
+              ofType {
+                kind
+                name
+                ofType {
+                  kind
+                  name
+                }
+              }
+            }
+          }
+        }
       }
     `;
 
     const introspection = await ikasGraphQL<any>(accessToken, introspectionQuery);
 
     const queryFields: GraphQLField[] = introspection?.data?.queryType?.fields || [];
-    const schemaTypes: Array<{ name?: string | null; kind?: string | null }> =
-      introspection?.data?.schema?.types || [];
-
-    const orderRelatedQueryFields = pickOrderRelatedFields(queryFields);
-    const orderRelatedTypes = pickOrderRelatedTypes(schemaTypes);
+    const listOrderField = serializeFields(queryFields).find((field) => field.name === 'listOrder') || null;
 
     return NextResponse.json({
       ok: true,
-      queryFieldCount: queryFields.length,
-      orderRelatedQueryFields,
-      orderRelatedTypes,
-      hint: 'Next step: use orderRelatedQueryFields to choose the correct ikas order list query, then inspect that return type fields.',
+      listOrderField,
+      orderPaginationResponseFields: serializeFields(
+        introspection?.data?.orderPaginationResponse?.fields || [],
+      ),
+      orderFields: serializeFields(introspection?.data?.order?.fields || []),
+      orderCustomerFields: serializeFields(introspection?.data?.orderCustomer?.fields || []),
+      orderLineItemFields: serializeFields(introspection?.data?.orderLineItem?.fields || []),
+      orderPackageFields: serializeFields(introspection?.data?.orderPackage?.fields || []),
+      orderShippingLineFields: serializeFields(introspection?.data?.orderShippingLine?.fields || []),
+      orderPaymentMethodFields: serializeFields(introspection?.data?.orderPaymentMethod?.fields || []),
+      orderAddressFields: serializeFields(introspection?.data?.orderAddress?.fields || []),
+      hint: 'Next step: build a tiny listOrder sample query using only verified scalar and object fields.',
     });
   } catch (error) {
     return NextResponse.json(
