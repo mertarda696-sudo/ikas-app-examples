@@ -17,7 +17,7 @@ type GraphQLField = {
 const DEBUG_SECRET_FALLBACK = 'mirelle-debug-2026';
 const TARGET_PRODUCT_NAME = 'Test Ceket Kahverengi';
 const KEYWORD_PATTERN =
-  /(active|status|sales|channel|visible|visibility|publish|published|store|storefront|delete|deleted|enabled|available|availability)/i;
+  /(active|status|sales|channel|visible|visibility|publish|published|store|storefront|delete|deleted|enabled|available|availability|id|name)/i;
 
 function unwrapTypeName(type?: GraphQLTypeRef | null): string | null {
   let cursor = type;
@@ -39,14 +39,26 @@ function normalizeText(value: string | null | undefined) {
     .trim();
 }
 
+function isScalarLike(typeName: string | null) {
+  return ['String', 'Boolean', 'Int', 'Float', 'ID'].includes(typeName || '');
+}
+
+function serializeFields(fields: GraphQLField[]) {
+  return fields.map((field) => ({
+    name: field.name,
+    typeName: unwrapTypeName(field.type),
+    rawType: field.type,
+  }));
+}
+
 function pickCandidateFields(fields: GraphQLField[]) {
-  return fields
-    .map((field) => ({
-      name: field.name,
-      typeName: unwrapTypeName(field.type),
-      rawType: field.type,
-    }))
-    .filter((field) => KEYWORD_PATTERN.test(field.name));
+  return serializeFields(fields).filter((field) => KEYWORD_PATTERN.test(field.name));
+}
+
+function pickScalarFieldNames(fields: GraphQLField[]) {
+  return serializeFields(fields)
+    .filter((field) => isScalarLike(field.typeName))
+    .map((field) => field.name);
 }
 
 async function ikasGraphQL<T>(accessToken: string, query: string): Promise<T> {
@@ -139,6 +151,23 @@ export async function GET(request: NextRequest) {
             }
           }
         }
+        productSalesChannelType: __type(name: "ProductSalesChannel") {
+          fields {
+            name
+            type {
+              kind
+              name
+              ofType {
+                kind
+                name
+                ofType {
+                  kind
+                  name
+                }
+              }
+            }
+          }
+        }
       }
     `;
 
@@ -146,19 +175,29 @@ export async function GET(request: NextRequest) {
 
     const productFields: GraphQLField[] = introspection?.data?.productType?.fields || [];
     const variantFields: GraphQLField[] = introspection?.data?.productVariantType?.fields || [];
+    const productSalesChannelFields: GraphQLField[] =
+      introspection?.data?.productSalesChannelType?.fields || [];
 
     const productCandidateFields = pickCandidateFields(productFields);
     const variantCandidateFields = pickCandidateFields(variantFields);
+    const productSalesChannelCandidateFields = pickCandidateFields(productSalesChannelFields);
 
-    const safeProductSelections = productCandidateFields
-      .filter((field) => ['String', 'Boolean', 'Int', 'Float', 'ID'].includes(field.typeName || ''))
-      .map((field) => field.name)
+    const safeProductSelections = pickScalarFieldNames(productFields)
+      .filter((name) => KEYWORD_PATTERN.test(name))
       .join('\n');
 
-    const safeVariantSelections = variantCandidateFields
-      .filter((field) => ['String', 'Boolean', 'Int', 'Float', 'ID'].includes(field.typeName || ''))
-      .map((field) => field.name)
+    const safeVariantSelections = pickScalarFieldNames(variantFields)
+      .filter((name) => KEYWORD_PATTERN.test(name))
       .join('\n');
+
+    const salesChannelScalarFieldNames = pickScalarFieldNames(productSalesChannelFields);
+    const safeSalesChannelSelections = salesChannelScalarFieldNames.join('\n');
+
+    const salesChannelsBlock = safeSalesChannelSelections
+      ? `salesChannels {
+              ${safeSalesChannelSelections}
+            }`
+      : '';
 
     const productQuery = `
       query IkasProductVisibilityDebug {
@@ -168,6 +207,7 @@ export async function GET(request: NextRequest) {
             name
             totalStock
             ${safeProductSelections}
+            ${salesChannelsBlock}
             categories {
               name
             }
@@ -216,8 +256,12 @@ export async function GET(request: NextRequest) {
       debugTarget: TARGET_PRODUCT_NAME,
       productFieldCount: productFields.length,
       variantFieldCount: variantFields.length,
+      productSalesChannelFieldCount: productSalesChannelFields.length,
       productCandidateFields,
       variantCandidateFields,
+      productSalesChannelFields: serializeFields(productSalesChannelFields),
+      productSalesChannelCandidateFields,
+      salesChannelScalarFieldNames,
       productQueryError,
       productCount: allProducts.length,
       productNames: allProducts.map((product: any) => product?.name).filter(Boolean),
