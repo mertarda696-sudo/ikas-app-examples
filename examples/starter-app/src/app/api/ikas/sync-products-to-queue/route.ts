@@ -11,6 +11,14 @@ type SourceRow = {
   source_name: string;
 };
 
+type CatalogImportTriggerResult = {
+  configured: boolean;
+  ok: boolean;
+  status: number | null;
+  response: unknown;
+  error: string | null;
+};
+
 const IKAS_SOURCE_NAME = 'MIRELLE IKAS App Catalog';
 const PRODUCT_LIMIT = 50;
 
@@ -67,6 +75,75 @@ function getVariantOptionValue(
   );
 
   return match?.variantValueName ?? null;
+}
+
+async function triggerCatalogImportProcess(input: {
+  runId: string;
+  tenantId: string;
+  catalogSourceId: string;
+  sourceName: string;
+  queuedCount: number;
+  queuedExternalProductIds: string[];
+}): Promise<CatalogImportTriggerResult> {
+  const webhookUrl = process.env.N8N_CATALOG_IMPORT_WEBHOOK_URL;
+
+  if (!webhookUrl) {
+    return {
+      configured: false,
+      ok: false,
+      status: null,
+      response: null,
+      error: 'N8N_CATALOG_IMPORT_WEBHOOK_URL is not configured',
+    };
+  }
+
+  try {
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        source: 'vercel_sync_products_to_queue',
+        runId: input.runId,
+        tenantId: input.tenantId,
+        catalogSourceId: input.catalogSourceId,
+        sourceName: input.sourceName,
+        queuedCount: input.queuedCount,
+        queuedExternalProductIds: input.queuedExternalProductIds,
+        triggeredAt: new Date().toISOString(),
+      }),
+      cache: 'no-store',
+    });
+
+    const responseText = await response.text();
+
+    let responseBody: unknown = null;
+
+    try {
+      responseBody = responseText ? JSON.parse(responseText) : null;
+    } catch {
+      responseBody = responseText;
+    }
+
+    return {
+      configured: true,
+      ok: response.ok,
+      status: response.status,
+      response: responseBody,
+      error: response.ok
+        ? null
+        : 'Catalog import webhook returned HTTP ' + response.status,
+    };
+  } catch (error) {
+    return {
+      configured: true,
+      ok: false,
+      status: null,
+      response: null,
+      error: error instanceof Error ? error.message : 'Unknown import trigger error',
+    };
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -391,15 +468,29 @@ return {
       .filter((item: { id: string }) => !!item.id);
 
     if (!payloadItems.length) {
-      return NextResponse.json({
-        ok: true,
-        fetchedAt: new Date().toISOString(),
-        runId: null,
-        sourceName: source.source_name,
-        queuedCount: 0,
-        queuedExternalProductIds: [],
-        error: undefined,
-      });
+          const queuedExternalProductIds = payloadItems.map(
+      (item: { id: string }) => item.id,
+    );
+
+    const importTrigger = await triggerCatalogImportProcess({
+      runId: transactionResult.runId,
+      tenantId: source.tenant_id,
+      catalogSourceId: source.id,
+      sourceName: source.source_name,
+      queuedCount: payloadItems.length,
+      queuedExternalProductIds,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      fetchedAt: new Date().toISOString(),
+      runId: transactionResult.runId,
+      sourceName: source.source_name,
+      queuedCount: payloadItems.length,
+      queuedExternalProductIds,
+      importTrigger,
+      error: undefined,
+    });
     }
 
     const transactionResult = await prisma.$transaction(async (tx) => {
