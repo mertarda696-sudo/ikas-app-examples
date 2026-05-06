@@ -107,16 +107,39 @@ async function gql<T>(accessToken: string, query: string): Promise<T> {
   return body as T;
 }
 
-async function variantMap(tenantId: string, externalVariantId: string | null | undefined): Promise<VariantRow> {
-  if (!externalVariantId) return { product_id: null, variant_id: null };
-  const rows = await prisma.$queryRaw<VariantRow[]>`
-    select product_id, id as variant_id
-    from public.product_variants
-    where tenant_id = CAST(${tenantId} AS uuid)
-      and external_variant_id = ${externalVariantId}
-    limit 1
-  `;
-  return rows[0] || { product_id: null, variant_id: null };
+async function variantMap(
+  tenantId: string,
+  externalVariantId: string | null | undefined,
+  sku: string | null | undefined,
+): Promise<VariantRow> {
+  const cleanExternalVariantId = String(externalVariantId || '').trim();
+  const cleanSku = String(sku || '').trim();
+
+  if (cleanExternalVariantId) {
+    const rows = await prisma.$queryRaw<VariantRow[]>`
+      select product_id, id as variant_id
+      from public.product_variants
+      where tenant_id = CAST(${tenantId} AS uuid)
+        and external_variant_id = ${cleanExternalVariantId}
+      limit 1
+    `;
+
+    if (rows[0]) return rows[0];
+  }
+
+  if (cleanSku) {
+    const rowsBySku = await prisma.$queryRaw<VariantRow[]>`
+      select product_id, id as variant_id
+      from public.product_variants
+      where tenant_id = CAST(${tenantId} AS uuid)
+        and sku = ${cleanSku}
+      limit 1
+    `;
+
+    if (rowsBySku[0]) return rowsBySku[0];
+  }
+
+  return { product_id: null, variant_id: null };
 }
 
 export async function POST(request: NextRequest) {
@@ -204,7 +227,7 @@ export async function POST(request: NextRequest) {
       const items = Array.isArray(order?.orderLineItems) ? order.orderLineItems : [];
       for (const item of items) {
         const variant = item?.variant || null;
-        const map = await variantMap(tenant.tenantId, variant?.id || null);
+        const map = await variantMap(tenant.tenantId, variant?.id || null, variant?.sku || null);
         const sku = variant?.sku || null;
         const productName = variant?.name || 'Ürün';
         const quantity = n(item?.quantity, 1);
