@@ -11,6 +11,11 @@ type SourceRow = {
   source_name: string;
 };
 
+type PayloadItem = {
+  id: string;
+  is_active: boolean;
+};
+
 type CatalogImportTriggerResult = {
   configured: boolean;
   ok: boolean;
@@ -518,6 +523,10 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const passiveProductCount = payloadItems.filter(
+      (item: PayloadItem) => item.is_active === false,
+    ).length;
+
     const transactionResult = await prisma.$transaction(async (tx) => {
       const runRows = await tx.$queryRaw<{ id: string }[]>`
         insert into public.catalog_sync_runs (
@@ -545,7 +554,7 @@ export async function POST(request: NextRequest) {
           ${payloadItems.length},
           0,
           0,
-          ${payloadItems.filter((item) => item.is_active === false).length},
+          ${passiveProductCount},
           0,
           'IKAS app queue write variant pilot',
           jsonb_build_object(
@@ -554,7 +563,7 @@ export async function POST(request: NextRequest) {
             'merchant_id', ${syncMerchantId},
             'queued_count', ${payloadItems.length},
             'product_limit', ${PRODUCT_LIMIT},
-            'passive_product_count', ${payloadItems.filter((item) => item.is_active === false).length}
+            'passive_product_count', ${passiveProductCount}
           )
         )
         returning id
