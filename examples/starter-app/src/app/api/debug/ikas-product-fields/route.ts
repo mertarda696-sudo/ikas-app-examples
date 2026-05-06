@@ -39,8 +39,12 @@ function normalizeText(value: string | null | undefined) {
     .trim();
 }
 
-function isScalarLike(typeName: string | null) {
-  return ['String', 'Boolean', 'Int', 'Float', 'ID'].includes(typeName || '');
+function isSelectableLeaf(typeName: string | null) {
+  if (!typeName) return false;
+  return (
+    ['String', 'Boolean', 'Int', 'Float', 'ID'].includes(typeName) ||
+    typeName.endsWith('Enum')
+  );
 }
 
 function serializeFields(fields: GraphQLField[]) {
@@ -55,9 +59,9 @@ function pickCandidateFields(fields: GraphQLField[]) {
   return serializeFields(fields).filter((field) => KEYWORD_PATTERN.test(field.name));
 }
 
-function pickScalarFieldNames(fields: GraphQLField[]) {
+function pickSelectableFieldNames(fields: GraphQLField[]) {
   return serializeFields(fields)
-    .filter((field) => isScalarLike(field.typeName))
+    .filter((field) => isSelectableLeaf(field.typeName))
     .map((field) => field.name);
 }
 
@@ -182,16 +186,16 @@ export async function GET(request: NextRequest) {
     const variantCandidateFields = pickCandidateFields(variantFields);
     const productSalesChannelCandidateFields = pickCandidateFields(productSalesChannelFields);
 
-    const safeProductSelections = pickScalarFieldNames(productFields)
+    const safeProductSelections = pickSelectableFieldNames(productFields)
       .filter((name) => KEYWORD_PATTERN.test(name))
       .join('\n');
 
-    const safeVariantSelections = pickScalarFieldNames(variantFields)
+    const safeVariantSelections = pickSelectableFieldNames(variantFields)
       .filter((name) => KEYWORD_PATTERN.test(name))
       .join('\n');
 
-    const salesChannelScalarFieldNames = pickScalarFieldNames(productSalesChannelFields);
-    const safeSalesChannelSelections = salesChannelScalarFieldNames.join('\n');
+    const salesChannelSelectableFieldNames = pickSelectableFieldNames(productSalesChannelFields);
+    const safeSalesChannelSelections = salesChannelSelectableFieldNames.join('\n');
 
     const salesChannelsBlock = safeSalesChannelSelections
       ? `salesChannels {
@@ -261,7 +265,7 @@ export async function GET(request: NextRequest) {
       variantCandidateFields,
       productSalesChannelFields: serializeFields(productSalesChannelFields),
       productSalesChannelCandidateFields,
-      salesChannelScalarFieldNames,
+      salesChannelSelectableFieldNames,
       productQueryError,
       productCount: allProducts.length,
       productNames: allProducts.map((product: any) => product?.name).filter(Boolean),
