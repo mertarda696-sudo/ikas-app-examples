@@ -109,48 +109,8 @@ export async function GET(request: NextRequest) {
     const accessToken = await getIkasAccessToken();
 
     const introspectionQuery = `
-      query IkasOrderTypeDiscovery {
-        queryType: __type(name: "Query") {
-          fields {
-            name
-            args {
-              name
-              type {
-                kind
-                name
-                ofType {
-                  kind
-                  name
-                  ofType {
-                    kind
-                    name
-                    ofType {
-                      kind
-                      name
-                    }
-                  }
-                }
-              }
-            }
-            type {
-              kind
-              name
-              ofType {
-                kind
-                name
-                ofType {
-                  kind
-                  name
-                  ofType {
-                    kind
-                    name
-                  }
-                }
-              }
-            }
-          }
-        }
-        orderPaginationResponse: __type(name: "OrderPaginationResponse") {
+      query IkasOrderNestedFieldDiscovery {
+        orderLineVariant: __type(name: "OrderLineVariant") {
           fields {
             name
             type {
@@ -167,7 +127,7 @@ export async function GET(request: NextRequest) {
             }
           }
         }
-        order: __type(name: "Order") {
+        orderLineOption: __type(name: "OrderLineOption") {
           fields {
             name
             type {
@@ -184,7 +144,7 @@ export async function GET(request: NextRequest) {
             }
           }
         }
-        orderCustomer: __type(name: "OrderCustomer") {
+        orderLineOptionValue: __type(name: "OrderLineOptionValue") {
           fields {
             name
             type {
@@ -201,7 +161,7 @@ export async function GET(request: NextRequest) {
             }
           }
         }
-        orderLineItem: __type(name: "OrderLineItem") {
+        trackingInfo: __type(name: "TrackingInfo") {
           fields {
             name
             type {
@@ -218,58 +178,7 @@ export async function GET(request: NextRequest) {
             }
           }
         }
-        orderPackage: __type(name: "OrderPackage") {
-          fields {
-            name
-            type {
-              kind
-              name
-              ofType {
-                kind
-                name
-                ofType {
-                  kind
-                  name
-                }
-              }
-            }
-          }
-        }
-        orderShippingLine: __type(name: "OrderShippingLine") {
-          fields {
-            name
-            type {
-              kind
-              name
-              ofType {
-                kind
-                name
-                ofType {
-                  kind
-                  name
-                }
-              }
-            }
-          }
-        }
-        orderPaymentMethod: __type(name: "OrderPaymentMethod") {
-          fields {
-            name
-            type {
-              kind
-              name
-              ofType {
-                kind
-                name
-                ofType {
-                  kind
-                  name
-                }
-              }
-            }
-          }
-        }
-        orderAddress: __type(name: "OrderAddress") {
+        orderSalesChannel: __type(name: "OrderSalesChannel") {
           fields {
             name
             type {
@@ -291,23 +200,110 @@ export async function GET(request: NextRequest) {
 
     const introspection = await ikasGraphQL<any>(accessToken, introspectionQuery);
 
-    const queryFields: GraphQLField[] = introspection?.data?.queryType?.fields || [];
-    const listOrderField = serializeFields(queryFields).find((field) => field.name === 'listOrder') || null;
+    const sampleOrderQuery = `
+      query IkasOrderSample {
+        listOrder(pagination: { page: 1, limit: 3 }, sort: "orderedAt:desc") {
+          count
+          hasNext
+          page
+          limit
+          data {
+            id
+            orderNumber
+            status
+            orderPaymentStatus
+            orderPackageStatus
+            orderedAt
+            createdAt
+            updatedAt
+            cancelledAt
+            currencyCode
+            totalPrice
+            totalFinalPrice
+            itemCount
+            customerId
+            customer {
+              id
+              fullName
+              firstName
+              lastName
+              email
+              phone
+              isGuestCheckout
+            }
+            paymentMethods {
+              type
+              paymentGatewayName
+              paymentGatewayCode
+              price
+            }
+            shippingLines {
+              title
+              price
+              finalPrice
+              cargoCompanyId
+              paymentMethod
+            }
+            orderLineItems {
+              id
+              quantity
+              price
+              unitPrice
+              finalPrice
+              finalUnitPrice
+              discountPrice
+              currencyCode
+              status
+              sourceId
+              stockLocationId
+              variant {
+                id
+                name
+                sku
+              }
+              options {
+                name
+                values {
+                  name
+                }
+              }
+            }
+            orderPackages {
+              id
+              orderPackageNumber
+              orderPackageFulfillStatus
+              sourceId
+              trackingInfo {
+                trackingNumber
+                trackingLink
+                cargoCompany
+              }
+            }
+          }
+        }
+      }
+    `;
+
+    let sampleOrderResponse: unknown = null;
+    let sampleOrderError: string | null = null;
+
+    try {
+      sampleOrderResponse = await ikasGraphQL<any>(accessToken, sampleOrderQuery);
+    } catch (error) {
+      sampleOrderError = error instanceof Error ? error.message : 'Unknown sample order query error';
+    }
 
     return NextResponse.json({
       ok: true,
-      listOrderField,
-      orderPaginationResponseFields: serializeFields(
-        introspection?.data?.orderPaginationResponse?.fields || [],
-      ),
-      orderFields: serializeFields(introspection?.data?.order?.fields || []),
-      orderCustomerFields: serializeFields(introspection?.data?.orderCustomer?.fields || []),
-      orderLineItemFields: serializeFields(introspection?.data?.orderLineItem?.fields || []),
-      orderPackageFields: serializeFields(introspection?.data?.orderPackage?.fields || []),
-      orderShippingLineFields: serializeFields(introspection?.data?.orderShippingLine?.fields || []),
-      orderPaymentMethodFields: serializeFields(introspection?.data?.orderPaymentMethod?.fields || []),
-      orderAddressFields: serializeFields(introspection?.data?.orderAddress?.fields || []),
-      hint: 'Next step: build a tiny listOrder sample query using only verified scalar and object fields.',
+      orderLineVariantFields: serializeFields(introspection?.data?.orderLineVariant?.fields || []),
+      orderLineOptionFields: serializeFields(introspection?.data?.orderLineOption?.fields || []),
+      orderLineOptionValueFields: serializeFields(introspection?.data?.orderLineOptionValue?.fields || []),
+      trackingInfoFields: serializeFields(introspection?.data?.trackingInfo?.fields || []),
+      orderSalesChannelFields: serializeFields(introspection?.data?.orderSalesChannel?.fields || []),
+      sampleOrderError,
+      sampleOrderResponse,
+      generatedSampleOrderQuery: sampleOrderQuery,
+      hint: 'If sampleOrderError is not null, use nested fields above to remove invalid fields from sampleOrderQuery.',
     });
   } catch (error) {
     return NextResponse.json(
