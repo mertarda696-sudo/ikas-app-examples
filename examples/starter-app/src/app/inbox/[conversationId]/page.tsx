@@ -251,6 +251,39 @@ const [creatingCase, setCreatingCase] = useState(false);
     setMarkLastMessageAsEvidence(false);
   }, [operationCaseEvidenceOption?.summary]);
 
+  useEffect(() => {
+  const root = document.querySelector('[data-conversation-message-list="true"]');
+  if (!root) return;
+
+  const urlRe = /\bhttps?:\/\/[^\s<>"']+|\bwww\.[^\s<>"']+/i;
+
+  const bubbles = Array.from(
+    root.querySelectorAll<HTMLElement>('[data-conversation-message-bubble="true"]')
+  );
+
+  for (const bubble of bubbles) {
+    const msgType = String(bubble.dataset.messageType || '').toLowerCase();
+    const messageText = String(bubble.dataset.messageText || '');
+
+    if (msgType !== 'text') continue;
+    if (urlRe.test(messageText)) continue;
+
+    const descendants = Array.from(bubble.querySelectorAll<HTMLElement>('div, span, section, article'));
+
+    for (const node of descendants) {
+      const text = String(node.textContent || '');
+
+      const looksLikeFalseLinkCard =
+        text.includes('Link mesajı') &&
+        text.includes('Bu link konuşma akışına alındı');
+
+      if (looksLikeFalseLinkCard) {
+        node.remove();
+      }
+    }
+  }
+}, [conversation?.messages]);
+
   const handleReviewConversation = async () => {
     try {
       setActionError(null);
@@ -508,7 +541,10 @@ const [creatingCase, setCreatingCase] = useState(false);
 </div>
               </div>
 
-              <div style={{ padding: 18, background: '#f3f4f6', minHeight: 460, display: 'grid', gap: 12, alignContent: 'start' }}>
+              <div
+  data-conversation-message-list="true"
+  style={{ padding: 18, background: '#f3f4f6', minHeight: 460, display: 'grid', gap: 12, alignContent: 'start' }}
+>
   {conversation.messages.length === 0 ? (
     <div style={{ color: '#6b7280' }}>Bu konuşmada henüz mesaj görünmüyor.</div>
   ) : (
@@ -520,8 +556,11 @@ const [creatingCase, setCreatingCase] = useState(false);
       return (
         <div key={message.id} style={{ display: 'flex', justifyContent: incoming ? 'flex-start' : 'flex-end' }}>
           <div
-            style={{
-              maxWidth: '76%',
+  data-conversation-message-bubble="true"
+  data-message-type={String(message.msgType || '').toLowerCase()}
+  data-message-text={String(message.textBody || '')}
+  style={{
+    maxWidth: '76%',
               borderRadius: incoming ? '18px 18px 18px 6px' : '18px 18px 6px 18px',
               padding: 14,
               background: incoming ? '#ffffff' : '#dcf8c6',
