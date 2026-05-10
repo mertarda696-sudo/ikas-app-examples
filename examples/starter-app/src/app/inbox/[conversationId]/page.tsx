@@ -451,6 +451,9 @@ const [creatingCase, setCreatingCase] = useState(false);
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
             <div>
               <h1 style={{ fontSize: 30, fontWeight: 800, margin: '0 0 8px' }}>Konuşma Detayı</h1>
+              <div style={{ fontSize: 12, color: '#059669', fontWeight: 900, marginBottom: 8 }}>
+  Conversation Detail Build Check: 2026-05-10 / no-link-card
+</div>
               <p style={{ color: '#4b5563', margin: 0, lineHeight: 1.7 }}>
                 WhatsApp benzeri mesaj akışı, operatör önerisi ve manuel cevap alanı tek ekranda.
               </p>
