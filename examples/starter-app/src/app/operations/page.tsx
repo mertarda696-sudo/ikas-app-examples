@@ -999,6 +999,15 @@ export default function OperationsPage() {
             )}
           </td>
 
+          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6', minWidth: 210 }}>
+  <div style={{ display: 'grid', gap: 6 }}>
+    <Pill label={nextAction.label} tone={nextAction.tone} />
+    <div style={{ color: '#6b7280', fontSize: 12, lineHeight: 1.45 }}>
+      {nextAction.helper}
+    </div>
+  </div>
+</td>
+
           <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6', color: '#6b7280' }}>
             {formatDate(row.updatedAt || row.createdAt)}
           </td>
@@ -1020,7 +1029,7 @@ export default function OperationsPage() {
     })
   ) : (
     <tr>
-      <td colSpan={10} style={{ padding: 18, color: '#6b7280', lineHeight: 1.7 }}>
+      <td colSpan={11} style={{ padding: 18, color: '#6b7280', lineHeight: 1.7 }}>
         Seçili filtrelerde gösterilecek operasyon kaydı bulunmuyor. Filtreleri sıfırlayarak tüm vakaları tekrar görebilirsiniz.
       </td>
     </tr>
