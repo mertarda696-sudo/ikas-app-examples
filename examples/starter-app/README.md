@@ -210,3 +210,7 @@ MIT
 
 - ikas Admin GraphQL: `https://api.myikas.com/api/v2/admin/graphql`
 - File issues or questions in this repo.
+
+## Deployment notes
+
+- Redeploy trigger: restored stable main after failed human-takeover experiment.
