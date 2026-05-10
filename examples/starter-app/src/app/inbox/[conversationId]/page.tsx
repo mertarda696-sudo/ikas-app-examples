@@ -252,37 +252,62 @@ const [creatingCase, setCreatingCase] = useState(false);
   }, [operationCaseEvidenceOption?.summary]);
 
   useEffect(() => {
-  const root = document.querySelector('[data-conversation-message-list="true"]');
-  if (!root) return;
+  const removeFalseLinkCards = () => {
+    const nodes = Array.from(
+      document.querySelectorAll<HTMLElement>('div, section, article, aside')
+    );
 
-  const urlRe = /\bhttps?:\/\/[^\s<>"']+|\bwww\.[^\s<>"']+/i;
+    const falseLinkNodes = nodes
+      .filter((node) => {
+        const text = String(node.textContent || '').replace(/\s+/g, ' ').trim();
 
-  const bubbles = Array.from(
-    root.querySelectorAll<HTMLElement>('[data-conversation-message-bubble="true"]')
-  );
+        const isFalseLinkCard =
+          text.includes('Link mesajı') &&
+          text.includes('Bu link konuşma akışına alındı') &&
+          text.includes('Operatör bağlantıyı inceleyip manuel yanıt verebilir');
 
-  for (const bubble of bubbles) {
-    const msgType = String(bubble.dataset.messageType || '').toLowerCase();
-    const messageText = String(bubble.dataset.messageText || '');
+        if (!isFalseLinkCard) return false;
 
-    if (msgType !== 'text') continue;
-    if (urlRe.test(messageText)) continue;
+        const childHasSameText = Array.from(node.children).some((child) => {
+          const childText = String(child.textContent || '').replace(/\s+/g, ' ').trim();
 
-    const descendants = Array.from(bubble.querySelectorAll<HTMLElement>('div, span, section, article'));
+          return (
+            childText.includes('Link mesajı') &&
+            childText.includes('Bu link konuşma akışına alındı') &&
+            childText.includes('Operatör bağlantıyı inceleyip manuel yanıt verebilir')
+          );
+        });
 
-    for (const node of descendants) {
-      const text = String(node.textContent || '');
+        return !childHasSameText;
+      });
 
-      const looksLikeFalseLinkCard =
-        text.includes('Link mesajı') &&
-        text.includes('Bu link konuşma akışına alındı');
-
-      if (looksLikeFalseLinkCard) {
-        node.remove();
-      }
+    for (const node of falseLinkNodes) {
+      node.remove();
     }
-  }
-}, [conversation?.messages]);
+  };
+
+  removeFalseLinkCards();
+
+  const observer = new MutationObserver(() => {
+    removeFalseLinkCards();
+  });
+
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+  });
+
+  const interval = window.setInterval(removeFalseLinkCards, 300);
+  const timeout = window.setTimeout(() => {
+    window.clearInterval(interval);
+  }, 8000);
+
+  return () => {
+    observer.disconnect();
+    window.clearInterval(interval);
+    window.clearTimeout(timeout);
+  };
+}, [conversation?.id, conversation?.messages?.length]);
 
   const handleReviewConversation = async () => {
     try {
