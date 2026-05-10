@@ -251,64 +251,6 @@ const [creatingCase, setCreatingCase] = useState(false);
     setMarkLastMessageAsEvidence(false);
   }, [operationCaseEvidenceOption?.summary]);
 
-  useEffect(() => {
-  const removeFalseLinkCards = () => {
-    const nodes = Array.from(
-      document.querySelectorAll<HTMLElement>('div, section, article, aside')
-    );
-
-    const falseLinkNodes = nodes
-      .filter((node) => {
-        const text = String(node.textContent || '').replace(/\s+/g, ' ').trim();
-
-        const isFalseLinkCard =
-          text.includes('Link mesajı') &&
-          text.includes('Bu link konuşma akışına alındı') &&
-          text.includes('Operatör bağlantıyı inceleyip manuel yanıt verebilir');
-
-        if (!isFalseLinkCard) return false;
-
-        const childHasSameText = Array.from(node.children).some((child) => {
-          const childText = String(child.textContent || '').replace(/\s+/g, ' ').trim();
-
-          return (
-            childText.includes('Link mesajı') &&
-            childText.includes('Bu link konuşma akışına alındı') &&
-            childText.includes('Operatör bağlantıyı inceleyip manuel yanıt verebilir')
-          );
-        });
-
-        return !childHasSameText;
-      });
-
-    for (const node of falseLinkNodes) {
-      node.remove();
-    }
-  };
-
-  removeFalseLinkCards();
-
-  const observer = new MutationObserver(() => {
-    removeFalseLinkCards();
-  });
-
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true,
-  });
-
-  const interval = window.setInterval(removeFalseLinkCards, 300);
-  const timeout = window.setTimeout(() => {
-    window.clearInterval(interval);
-  }, 8000);
-
-  return () => {
-    observer.disconnect();
-    window.clearInterval(interval);
-    window.clearTimeout(timeout);
-  };
-}, [conversation?.id, conversation?.messages?.length]);
-
   const handleReviewConversation = async () => {
     try {
       setActionError(null);
