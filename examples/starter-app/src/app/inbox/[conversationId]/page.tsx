@@ -452,8 +452,18 @@ const [creatingCase, setCreatingCase] = useState(false);
   };
 
   return (
-    <AppShell>
-      <main style={{ maxWidth: 1220, margin: '0 auto', padding: 24, minHeight: '100vh' }}>
+  <AppShell>
+    <style>{`
+      [data-conversation-message-row="true"][data-message-type="text"] > :not([data-conversation-message-bubble="true"]) {
+        display: none !important;
+      }
+
+      [data-conversation-message-bubble="true"][data-message-type="text"] > :nth-child(n+4) {
+        display: none !important;
+      }
+    `}</style>
+
+    <main style={{ maxWidth: 1220, margin: '0 auto', padding: 24, minHeight: '100vh' }}>
         <div style={{ marginBottom: 18 }}>
           <Link href="/inbox" style={{ display: 'inline-block', textDecoration: 'none', borderRadius: 10, padding: '8px 12px', background: '#ffffff', color: '#111827', border: '1px solid #e5e7eb', fontWeight: 700, marginBottom: 14 }}>
             ← Mesajlara dön
@@ -521,11 +531,15 @@ const [creatingCase, setCreatingCase] = useState(false);
       const mediaMessage = isRealMediaMessage(message.msgType);
 
       return (
-        <div key={message.id} style={{ display: 'flex', justifyContent: incoming ? 'flex-start' : 'flex-end' }}>
+        <div
+  key={message.id}
+  data-conversation-message-row="true"
+  data-message-type={String(message.msgType || '').toLowerCase()}
+  style={{ display: 'flex', justifyContent: incoming ? 'flex-start' : 'flex-end' }}
+>
           <div
   data-conversation-message-bubble="true"
   data-message-type={String(message.msgType || '').toLowerCase()}
-  data-message-text={String(message.textBody || '')}
   style={{
     maxWidth: '76%',
               borderRadius: incoming ? '18px 18px 18px 6px' : '18px 18px 6px 18px',
