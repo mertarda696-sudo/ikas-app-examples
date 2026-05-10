@@ -43,6 +43,14 @@ type OperationEvidenceFilter =
   | 'rejected'
   | 'none';
 
+type QueuePreset =
+  | 'default'
+  | 'needs_action'
+  | 'evidence_received'
+  | 'waiting_customer'
+  | 'high_risk'
+  | 'stale_active';
+
 type OperationCaseItem = {
   id: string;
   caseNo: string | null;
@@ -295,6 +303,165 @@ function matchesEvidenceFilter(item: OperationCaseItem, filter: OperationEvidenc
   return evidenceState === filter;
 }
 
+function hoursSince(value: string | null | undefined) {
+  if (!value) return null;
+
+  const time = new Date(value).getTime();
+
+  if (!Number.isFinite(time)) return null;
+
+  return Math.max(0, (Date.now() - time) / (1000 * 60 * 60));
+}
+
+function isStaleActiveCase(item: OperationCaseItem) {
+  if (!isActiveCaseStatus(item.status)) return false;
+
+  const hours = hoursSince(item.updatedAt);
+
+  return hours != null && hours >= 24;
+}
+
+function isHighRiskCase(item: OperationCaseItem) {
+  return (
+    item.priority === 'critical' ||
+    item.priority === 'high' ||
+    item.riskLevel === 'critical' ||
+    item.riskLevel === 'high' ||
+    item.followupStatus === 'operator_action_required'
+  );
+}
+
+function getNextAction(item: OperationCaseItem): {
+  label: string;
+  helper: string;
+  tone: 'neutral' | 'success' | 'warning' | 'info' | 'danger';
+} {
+  const status = String(item.status || '').toLowerCase();
+  const evidenceState = String(item.evidenceState || '').toLowerCase();
+
+  if (status === 'resolved') {
+    return {
+      label: 'Çözüldü',
+      helper: 'Şu an aktif operatör aksiyonu gerekmiyor.',
+      tone: 'success',
+    };
+  }
+
+  if (status === 'closed') {
+    return {
+      label: 'Kapalı',
+      helper: 'Kayıt arşivlenmiş görünüyor.',
+      tone: 'neutral',
+    };
+  }
+
+  if (isHighRiskCase(item)) {
+    return {
+      label: 'Öncelikli incele',
+      helper: 'CRM riski, öncelik veya takip sinyali yüksek.',
+      tone: 'danger',
+    };
+  }
+
+  if (evidenceState === 'received') {
+    return {
+      label: 'Kanıtı incele',
+      helper: 'Müşteri medya/kanıt gönderdi, operatör kontrol etmeli.',
+      tone: 'warning',
+    };
+  }
+
+  if (evidenceState === 'verified') {
+    return {
+      label: 'Sonuçlandır',
+      helper: 'Kanıt doğrulanmış; vaka çözüm adımına hazır olabilir.',
+      tone: 'info',
+    };
+  }
+
+  if (evidenceState === 'requested' || evidenceState === 'missing' || evidenceState === 'rejected') {
+    return {
+      label: 'Müşteri bekleniyor',
+      helper: 'Ek kanıt veya müşteri dönüşü bekleniyor.',
+      tone: 'warning',
+    };
+  }
+
+  if (status === 'waiting_customer') {
+    return {
+      label: 'Müşteri bekleniyor',
+      helper: 'Operatör yeni dönüş gelene kadar izlemeli.',
+      tone: 'warning',
+    };
+  }
+
+  if (isStaleActiveCase(item)) {
+    return {
+      label: 'Geciken vaka',
+      helper: 'Aktif vaka uzun süredir güncellenmemiş.',
+      tone: 'danger',
+    };
+  }
+
+  if (status === 'in_progress') {
+    return {
+      label: 'İncelemeye devam',
+      helper: 'Operasyon ekibi kontrol sürecinde.',
+      tone: 'info',
+    };
+  }
+
+  if (item.caseType === 'shipping_delivery') {
+    return {
+      label: 'Kargo kontrolü yap',
+      helper: 'Kargo / teslimat bilgisi kontrol edilmeli.',
+      tone: 'info',
+    };
+  }
+
+  if (item.caseType === 'order_support') {
+    return {
+      label: 'Sipariş kontrolü yap',
+      helper: 'Sipariş durumu ve müşteri talebi kontrol edilmeli.',
+      tone: 'info',
+    };
+  }
+
+  return {
+    label: 'Operatör kontrolü',
+    helper: 'Vaka içeriği incelenmeli.',
+    tone: 'neutral',
+  };
+}
+
+function matchesQueuePreset(item: OperationCaseItem, preset: QueuePreset) {
+  const evidenceState = String(item.evidenceState || '').toLowerCase();
+
+  if (preset === 'default') return true;
+
+  if (preset === 'needs_action') {
+    return isActiveCaseStatus(item.status) && getNextAction(item).tone !== 'success';
+  }
+
+  if (preset === 'evidence_received') {
+    return evidenceState === 'received' || evidenceState === 'verified';
+  }
+
+  if (preset === 'waiting_customer') {
+    return item.status === 'waiting_customer' || evidenceState === 'requested' || evidenceState === 'missing' || evidenceState === 'rejected';
+  }
+
+  if (preset === 'high_risk') {
+    return isHighRiskCase(item);
+  }
+
+  if (preset === 'stale_active') {
+    return isStaleActiveCase(item);
+  }
+
+  return true;
+}
+
 function MetricCard({
   label,
   value,
@@ -325,6 +492,7 @@ export default function OperationsPage() {
   const [activeStatusFilter, setActiveStatusFilter] = useState<OperationStatusFilter>('active');
   const [activePriorityFilter, setActivePriorityFilter] = useState<OperationPriorityFilter>('all');
   const [activeEvidenceFilter, setActiveEvidenceFilter] = useState<OperationEvidenceFilter>('all');
+  const [activeQueuePreset, setActiveQueuePreset] = useState<QueuePreset>('default');
   const [query, setQuery] = useState('');
   const [includeTestRecords, setIncludeTestRecords] = useState(false);
   const [data, setData] = useState<OperationCasesResponse | null>(null);
@@ -365,6 +533,23 @@ export default function OperationsPage() {
     }, [includeTestRecords]);
 
   const items = data?.items || [];
+  const queueSummary = useMemo(() => {
+  const activeItems = items.filter((item) => isActiveCaseStatus(item.status));
+
+  return {
+    needsAction: activeItems.filter((item) => getNextAction(item).tone === 'danger' || getNextAction(item).tone === 'warning').length,
+    evidenceReceived: activeItems.filter((item) => {
+      const state = String(item.evidenceState || '').toLowerCase();
+      return state === 'received' || state === 'verified';
+    }).length,
+    waitingCustomer: activeItems.filter((item) => {
+      const state = String(item.evidenceState || '').toLowerCase();
+      return item.status === 'waiting_customer' || state === 'requested' || state === 'missing' || state === 'rejected';
+    }).length,
+    highRisk: activeItems.filter(isHighRiskCase).length,
+    staleActive: activeItems.filter(isStaleActiveCase).length,
+  };
+}, [items]);
 
   const rows = useMemo(() => {
   const needle = query.trim().toLowerCase();
@@ -386,6 +571,7 @@ export default function OperationsPage() {
       activePriorityFilter === 'all' || priority === activePriorityFilter;
 
     const evidenceMatches = matchesEvidenceFilter(item, activeEvidenceFilter);
+    const queuePresetMatches = matchesQueuePreset(item, activeQueuePreset);
 
         const haystack = [
       item.caseNo,
@@ -411,9 +597,9 @@ export default function OperationsPage() {
 
     const queryMatches = !needle || haystack.includes(needle);
 
-    return typeMatches && statusMatches && priorityMatches && evidenceMatches && queryMatches;
+    return typeMatches && statusMatches && priorityMatches && evidenceMatches && queuePresetMatches && queryMatches;
   });
-}, [activeType, activeStatusFilter, activePriorityFilter, activeEvidenceFilter, items, query]);
+}, [activeType, activeStatusFilter, activePriorityFilter, activeEvidenceFilter, activeQueuePreset, items, query]);
 
   const metrics = data?.metrics || { total: 0, open: 0, highPriority: 0, evidence: 0 };
   const crmAlertCount = items.filter((item) => item.crmProfileExists && (item.riskLevel === 'high' || item.riskLevel === 'critical' || item.followupStatus === 'operator_action_required')).length;
@@ -494,6 +680,57 @@ export default function OperationsPage() {
             </section>
 
             <section style={{ border: '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', padding: 18, marginBottom: 16 }}>
+  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 14 }}>
+    <div>
+      <div style={{ fontSize: 18, fontWeight: 900, color: '#111827' }}>Operatör Kuyruğu</div>
+      <div style={{ color: '#6b7280', fontSize: 13, marginTop: 4, lineHeight: 1.6 }}>
+        Günlük operasyonda önce bakılması gereken vakaları hızlı filtreleyin.
+      </div>
+    </div>
+
+    <Pill
+      label={activeQueuePreset === 'default' ? 'Standart görünüm' : 'Kuyruk filtresi aktif'}
+      tone={activeQueuePreset === 'default' ? 'neutral' : 'info'}
+    />
+  </div>
+
+  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+    {[
+      { key: 'needs_action' as QueuePreset, label: 'Aksiyon Gereken', value: queueSummary.needsAction, helper: 'Riskli, geciken veya kanıt bekleyen aktif vakalar.' },
+      { key: 'evidence_received' as QueuePreset, label: 'Kanıt Gelen', value: queueSummary.evidenceReceived, helper: 'Fotoğraf/dekont/medya gelen veya doğrulanan vakalar.' },
+      { key: 'waiting_customer' as QueuePreset, label: 'Müşteri Beklenen', value: queueSummary.waitingCustomer, helper: 'Ek bilgi veya kanıt beklenen vakalar.' },
+      { key: 'high_risk' as QueuePreset, label: 'Yüksek Risk', value: queueSummary.highRisk, helper: 'CRM riski veya önceliği yüksek vakalar.' },
+      { key: 'stale_active' as QueuePreset, label: 'Geciken Aktif', value: queueSummary.staleActive, helper: '24 saatten uzun süredir güncellenmeyen aktif vakalar.' },
+    ].map((preset) => {
+      const active = activeQueuePreset === preset.key;
+
+      return (
+        <button
+          key={preset.key}
+          type="button"
+          onClick={() => setActiveQueuePreset(active ? 'default' : preset.key)}
+          style={{
+            textAlign: 'left',
+            border: active ? '1px solid #111827' : '1px solid #e5e7eb',
+            background: active ? '#111827' : '#f9fafb',
+            color: active ? '#ffffff' : '#111827',
+            borderRadius: 16,
+            padding: 14,
+            cursor: 'pointer',
+          }}
+        >
+          <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 8 }}>{preset.label}</div>
+          <div style={{ fontSize: 28, fontWeight: 900 }}>{preset.value}</div>
+          <div style={{ fontSize: 12, lineHeight: 1.5, opacity: active ? 0.85 : 0.7, marginTop: 8 }}>
+            {preset.helper}
+          </div>
+        </button>
+      );
+    })}
+  </div>
+</section>
+
+            <section style={{ border: '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', padding: 18, marginBottom: 16 }}>
   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
     <div>
       <div style={{ fontSize: 18, fontWeight: 800, color: '#111827' }}>Operasyon Filtreleri</div>
@@ -505,13 +742,14 @@ export default function OperationsPage() {
     <button
       type="button"
       onClick={() => {
-        setActiveType('all');
-        setActiveStatusFilter('active');
-        setActivePriorityFilter('all');
-        setActiveEvidenceFilter('all');
-        setQuery('');
-        setIncludeTestRecords(false);
-      }}
+  setActiveType('all');
+  setActiveStatusFilter('active');
+  setActivePriorityFilter('all');
+  setActiveEvidenceFilter('all');
+  setActiveQueuePreset('default');
+  setQuery('');
+  setIncludeTestRecords(false);
+}}
       style={{
         border: '1px solid #d1d5db',
         background: '#ffffff',
@@ -639,7 +877,7 @@ export default function OperationsPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1180 }}>
                   <thead>
                     <tr style={{ background: '#f9fafb' }}>
-                      {['Vaka No', 'Tip', 'Başlık', 'Müşteri', 'Sipariş', 'Öncelik', 'Durum', 'Kanıt', 'Son Güncelleme', 'Konuşma'].map((header) => (
+                      {['Vaka No', 'Tip', 'Başlık', 'Müşteri', 'Sipariş', 'Öncelik', 'Durum', 'Kanıt', 'Sıradaki Aksiyon', 'Son Güncelleme', 'Konuşma'].map((header) => (
                         <th key={header} style={{ textAlign: 'left', padding: 14, fontSize: 13, color: '#6b7280', fontWeight: 800, borderBottom: '1px solid #e5e7eb' }}>{header}</th>
                       ))}
                     </tr>
@@ -648,7 +886,9 @@ export default function OperationsPage() {
                   <tbody>
   {rows.length > 0 ? (
     rows.map((row) => {
-      const hasCrmSignal = Boolean(
+  const nextAction = getNextAction(row);
+
+  const hasCrmSignal = Boolean(
         row.crmProfileExists &&
           (row.crmTag !== 'general' ||
             row.riskLevel !== 'normal' ||
