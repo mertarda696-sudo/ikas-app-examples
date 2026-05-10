@@ -46,6 +46,17 @@ function mapMsgTypeLabel(msgType: string | null | undefined) {
   return msgType;
 }
 
+function isRealMediaMessage(msgType: string | null | undefined) {
+  const normalized = String(msgType || '').toLowerCase();
+
+  return (
+    normalized === 'image' ||
+    normalized === 'video' ||
+    normalized === 'audio' ||
+    normalized === 'document'
+  );
+}
+
 function mapChannelLabel(channel: string | null | undefined) {
   const normalized = String(channel || '').toLowerCase();
   if (normalized === 'whatsapp') return 'WhatsApp';
@@ -498,27 +509,74 @@ const [creatingCase, setCreatingCase] = useState(false);
               </div>
 
               <div style={{ padding: 18, background: '#f3f4f6', minHeight: 460, display: 'grid', gap: 12, alignContent: 'start' }}>
-                {conversation.messages.length === 0 ? (
-                  <div style={{ color: '#6b7280' }}>Bu konuşmada henüz mesaj görünmüyor.</div>
-                ) : (
-                  conversation.messages.map((message) => {
-                    const incoming = message.senderType === 'customer' || message.direction === 'in';
-                    const senderLabel = mapSenderLabel(message.senderType, message.direction);
-                    return (
-                      <div key={message.id} style={{ display: 'flex', justifyContent: incoming ? 'flex-start' : 'flex-end' }}>
-                        <div style={{ maxWidth: '76%', borderRadius: incoming ? '18px 18px 18px 6px' : '18px 18px 6px 18px', padding: 14, background: incoming ? '#ffffff' : '#dcf8c6', color: '#111827', border: incoming ? '1px solid #e5e7eb' : '1px solid #bbf7d0', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
-                          <div style={{ fontSize: 12, fontWeight: 800, color: incoming ? '#6b7280' : '#166534', marginBottom: 6 }}>
-                            {senderLabel} · {mapMsgTypeLabel(message.msgType)}
-                          </div>
-                          <div style={{ fontSize: 14, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{message.textBody || 'Metin içeriği bulunmuyor.'}</div>
-                          <div style={{ marginTop: 8, fontSize: 11, color: '#6b7280', textAlign: 'right' }}>{formatDate(message.createdAt)}</div>
-                          {message.hasMediaLikePayload ? <div style={{ marginTop: 10, fontSize: 12, fontWeight: 800 }}>Medya / kanıt içeriği mevcut olabilir</div> : null}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
+  {conversation.messages.length === 0 ? (
+    <div style={{ color: '#6b7280' }}>Bu konuşmada henüz mesaj görünmüyor.</div>
+  ) : (
+    conversation.messages.map((message) => {
+      const incoming = message.senderType === 'customer' || message.direction === 'in';
+      const senderLabel = mapSenderLabel(message.senderType, message.direction);
+      const mediaMessage = isRealMediaMessage(message.msgType);
+
+      return (
+        <div key={message.id} style={{ display: 'flex', justifyContent: incoming ? 'flex-start' : 'flex-end' }}>
+          <div
+            style={{
+              maxWidth: '76%',
+              borderRadius: incoming ? '18px 18px 18px 6px' : '18px 18px 6px 18px',
+              padding: 14,
+              background: incoming ? '#ffffff' : '#dcf8c6',
+              color: '#111827',
+              border: incoming ? '1px solid #e5e7eb' : '1px solid #bbf7d0',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+            }}
+          >
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 800,
+                color: incoming ? '#6b7280' : '#166534',
+                marginBottom: 6,
+              }}
+            >
+              {senderLabel} · {mapMsgTypeLabel(message.msgType)}
+            </div>
+
+            <div style={{ fontSize: 14, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+              {message.textBody || 'Metin içeriği bulunmuyor.'}
+            </div>
+
+            <div style={{ marginTop: 8, fontSize: 11, color: '#6b7280', textAlign: 'right' }}>
+              {formatDate(message.createdAt)}
+            </div>
+
+            {mediaMessage ? (
+              <div
+                style={{
+                  marginTop: 10,
+                  border: '1px solid #fde68a',
+                  background: '#fffbeb',
+                  color: '#92400e',
+                  borderRadius: 12,
+                  padding: 10,
+                  fontSize: 12,
+                  fontWeight: 800,
+                  lineHeight: 1.55,
+                }}
+              >
+                <div style={{ fontWeight: 900, marginBottom: 4 }}>
+                  {mapMsgTypeLabel(message.msgType).charAt(0).toUpperCase() + mapMsgTypeLabel(message.msgType).slice(1)} mesaj
+                </div>
+                <div>
+                  Bu medya konuşma akışına alındı. Hasar, dekont veya iade kanıtı ise ilgili operasyon vakasına bağlanabilir.
+                </div>
               </div>
+            ) : null}
+          </div>
+        </div>
+      );
+    })
+  )}
+</div>
 
               <div style={{ borderTop: '1px solid #e5e7eb', padding: 18, background: '#ffffff' }}>
                 <div style={{ border: '1px solid #e5e7eb', background: '#f9fafb', borderRadius: 14, padding: 14, marginBottom: 14, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
