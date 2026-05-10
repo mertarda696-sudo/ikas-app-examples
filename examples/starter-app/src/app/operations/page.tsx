@@ -553,6 +553,8 @@ export default function OperationsPage() {
 
   const rows = useMemo(() => {
   const needle = query.trim().toLowerCase();
+  const normalizedNeedle = needle.replace(/\s+/g, '');
+  const isExactCaseNoSearch = /^op-\d+$/.test(normalizedNeedle);
 
   return items.filter((item) => {
     const typeMatches = activeType === 'all' || item.caseType === activeType;
@@ -572,6 +574,13 @@ export default function OperationsPage() {
 
     const evidenceMatches = matchesEvidenceFilter(item, activeEvidenceFilter);
     const queuePresetMatches = matchesQueuePreset(item, activeQueuePreset);
+
+        if (isExactCaseNoSearch) {
+      const caseNo = String(item.caseNo || '').trim().toLowerCase();
+      const caseNoMatches = caseNo === normalizedNeedle;
+
+      return typeMatches && statusMatches && priorityMatches && evidenceMatches && queuePresetMatches && caseNoMatches;
+    }
 
         const haystack = [
       item.caseNo,
