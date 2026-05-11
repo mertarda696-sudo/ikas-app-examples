@@ -1033,21 +1033,79 @@ const mediaMimeType = String(primaryMedia?.mimeType || '').toLowerCase();
                 </div>
 
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-                  {suggestions.map((suggestion) => (
-                    <button key={suggestion} onClick={() => setReplyText(suggestion)} disabled={!hasWhatsAppLine || sending} style={{ border: '1px solid #e5e7eb', borderRadius: 999, background: '#f9fafb', padding: '7px 10px', fontSize: 12, fontWeight: 700, cursor: hasWhatsAppLine && !sending ? 'pointer' : 'not-allowed', color: '#374151' }}>
-                      Hızlı cevap
-                    </button>
-                  ))}
-                </div>
+  {suggestions.map((suggestion) => (
+    <button
+      key={suggestion}
+      onClick={() => {
+        if (conversationClosed) return;
+        setReplyText(suggestion);
+      }}
+      disabled={conversationClosed || !hasWhatsAppLine || sending}
+      style={{
+        border: '1px solid #e5e7eb',
+        borderRadius: 999,
+        background: '#f9fafb',
+        padding: '7px 10px',
+        fontSize: 12,
+        fontWeight: 700,
+        cursor: !conversationClosed && hasWhatsAppLine && !sending ? 'pointer' : 'not-allowed',
+        color: '#374151',
+      }}
+    >
+      Hızlı cevap
+    </button>
+  ))}
+</div>
 
-                <textarea value={replyText} onChange={(event) => setReplyText(event.target.value)} placeholder={hasWhatsAppLine ? 'Müşteriye gönderilecek manuel mesajı yazın...' : 'WhatsApp hattı bağlanmadan manuel gönderim açılamaz.'} disabled={sending || !hasWhatsAppLine} style={{ width: '100%', minHeight: 110, borderRadius: 14, border: '1px solid #d1d5db', padding: 14, fontSize: 14, lineHeight: 1.6, resize: 'vertical', outline: 'none', background: hasWhatsAppLine ? '#ffffff' : '#f9fafb' }} />
+                <textarea
+  value={replyText}
+  onChange={(event) => setReplyText(event.target.value)}
+  placeholder={
+    conversationClosed
+      ? 'Kapalı konuşmada mesaj göndermek için önce konuşmayı tekrar açın.'
+      : hasWhatsAppLine
+        ? 'Müşteriye gönderilecek manuel mesajı yazın...'
+        : 'WhatsApp hattı bağlanmadan manuel gönderim açılamaz.'
+  }
+  disabled={conversationClosed || sending || !hasWhatsAppLine}
+  style={{
+    width: '100%',
+    minHeight: 110,
+    borderRadius: 14,
+    border: '1px solid #d1d5db',
+    padding: 14,
+    fontSize: 14,
+    lineHeight: 1.6,
+    resize: 'vertical',
+    outline: 'none',
+    background: conversationClosed || !hasWhatsAppLine ? '#f9fafb' : '#ffffff',
+  }}
+/>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginTop: 12 }}>
-                  <div style={{ fontSize: 12, color: '#6b7280' }}>{hasWhatsAppLine ? `${replyText.trim().length} karakter` : 'WhatsApp hattı bekleniyor'}</div>
-                  <button onClick={handleSendReply} disabled={sending || !hasWhatsAppLine} style={{ border: 'none', borderRadius: 12, padding: '10px 16px', background: sending || !hasWhatsAppLine ? '#9ca3af' : '#111827', color: '#ffffff', fontWeight: 700, cursor: sending || !hasWhatsAppLine ? 'not-allowed' : 'pointer' }}>
-                    {sending ? 'Gönderiliyor...' : 'Mesajı Gönder'}
-                  </button>
-                </div>
+  <div style={{ fontSize: 12, color: '#6b7280' }}>
+    {conversationClosed
+      ? 'Kapalı konuşma'
+      : hasWhatsAppLine
+        ? `${replyText.trim().length} karakter`
+        : 'WhatsApp hattı bekleniyor'}
+  </div>
+  <button
+    onClick={handleSendReply}
+    disabled={conversationClosed || sending || !hasWhatsAppLine}
+    style={{
+      border: 'none',
+      borderRadius: 12,
+      padding: '10px 16px',
+      background: conversationClosed || sending || !hasWhatsAppLine ? '#9ca3af' : '#111827',
+      color: '#ffffff',
+      fontWeight: 700,
+      cursor: conversationClosed || sending || !hasWhatsAppLine ? 'not-allowed' : 'pointer',
+    }}
+  >
+    {sending ? 'Gönderiliyor...' : 'Mesajı Gönder'}
+  </button>
+</div>
 
                 {actionError ? <div style={{ marginTop: 12, border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b', borderRadius: 12, padding: 12, fontSize: 14, fontWeight: 600 }}>{actionError}</div> : null}
                 {actionSuccess ? <div style={{ marginTop: 12, border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#166534', borderRadius: 12, padding: 12, fontSize: 14, fontWeight: 600 }}>{actionSuccess}</div> : null}
