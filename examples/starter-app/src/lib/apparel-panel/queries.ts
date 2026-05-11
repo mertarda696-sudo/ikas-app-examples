@@ -102,6 +102,14 @@ type InboxConversationRow = {
   operator_tag: string | null;
   operator_priority: string | null;
   operator_note_updated_at: Date | string | null;
+  ai_mode: string | null;
+  ai_paused_at: Date | string | null;
+  ai_paused_by: string | null;
+  ai_pause_reason: string | null;
+  ai_resume_reminder_at: Date | string | null;
+  ai_resumed_at: Date | string | null;
+  ai_resumed_by: string | null;
+  ai_mode_updated_at: Date | string | null;
 };
 
 type ConversationHeaderRow = {
@@ -122,6 +130,14 @@ type ConversationHeaderRow = {
   operator_tag: string | null;
   operator_priority: string | null;
   operator_note_updated_at: Date | string | null;
+  ai_mode: string | null;
+  ai_paused_at: Date | string | null;
+  ai_paused_by: string | null;
+  ai_pause_reason: string | null;
+  ai_resume_reminder_at: Date | string | null;
+  ai_resumed_at: Date | string | null;
+  ai_resumed_by: string | null;
+  ai_mode_updated_at: Date | string | null;
 };
 
 type ConversationMessageRow = {
@@ -354,7 +370,15 @@ export async function getInboxListByMerchantId(merchantId: string): Promise<Inbo
         c.operator_note,
         c.operator_tag,
         c.operator_priority,
-        c.operator_note_updated_at
+        c.operator_note_updated_at,
+        c.ai_mode,
+        c.ai_paused_at,
+        c.ai_paused_by,
+        c.ai_pause_reason,
+        c.ai_resume_reminder_at,
+        c.ai_resumed_at,
+        c.ai_resumed_by,
+        c.ai_mode_updated_at
       from public.conversations c
       left join public.tenant_members tm on tm.id = c.member_id
       left join latest_messages lm on lm.conversation_id = c.id
@@ -373,7 +397,38 @@ export async function getInboxListByMerchantId(merchantId: string): Promise<Inbo
       limit 100
     `;
 
-    const items: InboxConversationItem[] = rows.map((row) => ({ id: row.conversation_id, memberId: row.member_id, customerId: row.customer_id, customerDisplay: row.customer_id || "Bilinmeyen müşteri", channel: row.channel, status: row.status, isOpen: row.status === "open", lastMessageText: row.last_message_text, lastMessageDirection: row.last_message_direction, lastMessageSenderType: row.last_message_sender_type, lastMessageAt: toIso(row.last_message_at), lastCustomerMessageAt: toIso(row.last_customer_message_at), lastOperatorMessageAt: toIso(row.last_operator_message_at), lastAgentMessageAt: toIso(row.last_agent_message_at), operatorReviewedAt: toIso(row.operator_reviewed_at), operatorReviewedBy: row.operator_reviewed_by, operatorReviewNote: row.operator_review_note, operatorNote: row.operator_note, operatorTag: row.operator_tag, operatorPriority: row.operator_priority, operatorNoteUpdatedAt: toIso(row.operator_note_updated_at), contextProductName: row.context_product_name }));
+       const items: InboxConversationItem[] = rows.map((row) => ({
+      id: row.conversation_id,
+      memberId: row.member_id,
+      customerId: row.customer_id,
+      customerDisplay: row.customer_id || "Bilinmeyen müşteri",
+      channel: row.channel,
+      status: row.status,
+      isOpen: row.status === "open",
+      lastMessageText: row.last_message_text,
+      lastMessageDirection: row.last_message_direction,
+      lastMessageSenderType: row.last_message_sender_type,
+      lastMessageAt: toIso(row.last_message_at),
+      lastCustomerMessageAt: toIso(row.last_customer_message_at),
+      lastOperatorMessageAt: toIso(row.last_operator_message_at),
+      lastAgentMessageAt: toIso(row.last_agent_message_at),
+      operatorReviewedAt: toIso(row.operator_reviewed_at),
+      operatorReviewedBy: row.operator_reviewed_by,
+      operatorReviewNote: row.operator_review_note,
+      operatorNote: row.operator_note,
+      operatorTag: row.operator_tag,
+      operatorPriority: row.operator_priority,
+      operatorNoteUpdatedAt: toIso(row.operator_note_updated_at),
+      aiMode: row.ai_mode,
+      aiPausedAt: toIso(row.ai_paused_at),
+      aiPausedBy: row.ai_paused_by,
+      aiPauseReason: row.ai_pause_reason,
+      aiResumeReminderAt: toIso(row.ai_resume_reminder_at),
+      aiResumedAt: toIso(row.ai_resumed_at),
+      aiResumedBy: row.ai_resumed_by,
+      aiModeUpdatedAt: toIso(row.ai_mode_updated_at),
+      contextProductName: row.context_product_name,
+    }));
     return { ok: true, fetchedAt: new Date().toISOString(), tenant, items };
   } catch (error) {
     return { ok: false, fetchedAt: new Date().toISOString(), tenant: null, items: [], error: error instanceof Error ? error.message : "Unknown error" };
@@ -412,7 +467,15 @@ export async function getConversationDetailByMerchantId(merchantId: string, conv
         c.operator_note,
         c.operator_tag,
         c.operator_priority,
-        c.operator_note_updated_at
+        c.operator_note_updated_at,
+        c.ai_mode,
+        c.ai_paused_at,
+        c.ai_paused_by,
+        c.ai_pause_reason,
+        c.ai_resume_reminder_at,
+        c.ai_resumed_at,
+        c.ai_resumed_by,
+        c.ai_mode_updated_at
       from public.conversations c
       left join public.tenant_members tm on tm.id = c.member_id
       left join conversation_sender_marks csm on csm.conversation_id = c.id
@@ -438,7 +501,36 @@ export async function getConversationDetailByMerchantId(merchantId: string, conv
       return { id: row.id, direction: row.direction, senderType: row.sender_type, msgType, textBody: row.text_body, createdAt: toIso(row.created_at), hasMediaLikePayload: msgType != null && msgType !== "text" && msgType !== "interactive" && rawString.length > 2 };
     });
 
-    const conversation: ConversationDetailItem = { id: header.conversation_id, memberId: header.member_id, customerId: header.customer_id, customerDisplay: header.customer_id || "Bilinmeyen müşteri", channel: header.channel, status: header.status, isOpen: header.status === "open", lastMessageAt: toIso(header.last_message_at), lastCustomerMessageAt: toIso(header.last_customer_message_at), lastOperatorMessageAt: toIso(header.last_operator_message_at), lastAgentMessageAt: toIso(header.last_agent_message_at), operatorReviewedAt: toIso(header.operator_reviewed_at), operatorReviewedBy: header.operator_reviewed_by, operatorReviewNote: header.operator_review_note, operatorNote: header.operator_note, operatorTag: header.operator_tag, operatorPriority: header.operator_priority, operatorNoteUpdatedAt: toIso(header.operator_note_updated_at), contextProductName: header.context_product_name, messages };
+    const conversation: ConversationDetailItem = {
+      id: header.conversation_id,
+      memberId: header.member_id,
+      customerId: header.customer_id,
+      customerDisplay: header.customer_id || "Bilinmeyen müşteri",
+      channel: header.channel,
+      status: header.status,
+      isOpen: header.status === "open",
+      lastMessageAt: toIso(header.last_message_at),
+      lastCustomerMessageAt: toIso(header.last_customer_message_at),
+      lastOperatorMessageAt: toIso(header.last_operator_message_at),
+      lastAgentMessageAt: toIso(header.last_agent_message_at),
+      operatorReviewedAt: toIso(header.operator_reviewed_at),
+      operatorReviewedBy: header.operator_reviewed_by,
+      operatorReviewNote: header.operator_review_note,
+      operatorNote: header.operator_note,
+      operatorTag: header.operator_tag,
+      operatorPriority: header.operator_priority,
+      operatorNoteUpdatedAt: toIso(header.operator_note_updated_at),
+      aiMode: header.ai_mode,
+      aiPausedAt: toIso(header.ai_paused_at),
+      aiPausedBy: header.ai_paused_by,
+      aiPauseReason: header.ai_pause_reason,
+      aiResumeReminderAt: toIso(header.ai_resume_reminder_at),
+      aiResumedAt: toIso(header.ai_resumed_at),
+      aiResumedBy: header.ai_resumed_by,
+      aiModeUpdatedAt: toIso(header.ai_mode_updated_at),
+      contextProductName: header.context_product_name,
+      messages,
+    };
     return { ok: true, fetchedAt: new Date().toISOString(), tenant, conversation };
   } catch (error) {
     return { ok: false, fetchedAt: new Date().toISOString(), tenant: null, conversation: null, error: error instanceof Error ? error.message : "Unknown error" };
