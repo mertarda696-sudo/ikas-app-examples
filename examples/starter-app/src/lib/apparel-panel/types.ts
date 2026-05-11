@@ -177,6 +177,21 @@ export type InboxListResponse = {
   error?: string;
 };
 
+export type ConversationMessageMediaItem = {
+  id: string;
+  messageId: string | null;
+  kind: string | null;
+  mimeType: string | null;
+  fileName: string | null;
+  storagePath: string | null;
+  storageBucket: string | null;
+  sizeBytes: number | null;
+  captureStatus: string | null;
+  signedUrl: string | null;
+  signedUrlError: string | null;
+  createdAt: string | null;
+};
+
 export type ConversationMessageItem = {
   id: string;
   direction: 'in' | 'out' | null;
@@ -185,6 +200,7 @@ export type ConversationMessageItem = {
   textBody: string | null;
   createdAt: string | null;
   hasMediaLikePayload: boolean;
+  media: ConversationMessageMediaItem[];
 };
 
 export type ConversationDetailItem = {
