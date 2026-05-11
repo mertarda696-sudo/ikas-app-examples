@@ -57,6 +57,12 @@ function isRealMediaMessage(msgType: string | null | undefined) {
   );
 }
 
+const URL_RE = /\bhttps?:\/\/[^\s<>"']+|\bwww\.[^\s<>"']+/i;
+
+function isLinkTextMessage(text: string | null | undefined) {
+  return URL_RE.test(String(text || ''));
+}
+
 function mapChannelLabel(channel: string | null | undefined) {
   const normalized = String(channel || '').toLowerCase();
   if (normalized === 'whatsapp') return 'WhatsApp';
@@ -259,6 +265,18 @@ export default function ConversationDetailPage() {
     () => getLatestEvidenceOption(conversation?.messages),
     [conversation?.messages],
   );
+
+    const latestCustomerMessage = useMemo(
+    () =>
+      [...(conversation?.messages || [])]
+        .reverse()
+        .find((message) => message.senderType === 'customer' || message.direction === 'in') || null,
+    [conversation?.messages],
+  );
+
+  const latestCustomerMessageIsLink =
+    String(latestCustomerMessage?.msgType || '').toLowerCase() === 'text' &&
+    isLinkTextMessage(latestCustomerMessage?.textBody);
 
   useEffect(() => {
     setMarkLastMessageAsEvidence(false);
@@ -777,8 +795,16 @@ export default function ConversationDetailPage() {
                 {responseState.needsReply ? (
                   <div style={{ border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8', borderRadius: 14, padding: 14, marginBottom: 14, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                     <div>
-                      <div style={{ fontWeight: 900, marginBottom: 4 }}>AI cevabı yeterliyse müşteriye tekrar mesaj göndermeden kuyruğu temizleyebilirsiniz.</div>
-                      <div style={{ fontSize: 13, lineHeight: 1.6 }}>Bu işlem WhatsApp mesajı göndermez; yalnızca konuşmayı operatör tarafından incelendi olarak işaretler.</div>
+                            <div style={{ fontWeight: 900, marginBottom: 4 }}>
+        {latestCustomerMessageIsLink
+          ? 'Son müşteri mesajı link içeriyor. Link incelendiyse müşteriye mesaj göndermeden kuyruğu temizleyebilirsiniz.'
+          : 'Konuşma incelendiyse müşteriye mesaj göndermeden kuyruğu temizleyebilirsiniz.'}
+      </div>
+      <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+        {latestCustomerMessageIsLink
+          ? 'Bu işlem WhatsApp mesajı göndermez; yalnızca link içeren son müşteri mesajının operatör tarafından incelendiğini işaretler.'
+          : 'Bu işlem WhatsApp mesajı göndermez; yalnızca konuşmanın operatör tarafından incelendiğini işaretler.'}
+      </div>
                     </div>
                     <button onClick={handleReviewConversation} disabled={reviewing} style={{ border: 'none', borderRadius: 12, padding: '10px 14px', background: reviewing ? '#9ca3af' : '#1d4ed8', color: '#ffffff', fontWeight: 800, cursor: reviewing ? 'not-allowed' : 'pointer' }}>
                       {reviewing ? 'İşaretleniyor...' : 'İncelendi olarak işaretle'}
