@@ -611,11 +611,18 @@ export default function ConversationDetailPage() {
   return (
   <AppShell>
     <style>{`
-      [data-conversation-message-row="true"][data-message-type="text"] > :not([data-conversation-message-bubble="true"]) {
+      [data-conversation-message-row="true"] > :not([data-conversation-message-bubble="true"]) {
         display: none !important;
       }
 
       [data-conversation-message-bubble="true"][data-message-type="text"] > :nth-child(n+4) {
+        display: none !important;
+      }
+
+      [data-conversation-message-bubble="true"][data-message-type="image"] > :nth-child(n+5),
+      [data-conversation-message-bubble="true"][data-message-type="video"] > :nth-child(n+5),
+      [data-conversation-message-bubble="true"][data-message-type="audio"] > :nth-child(n+5),
+      [data-conversation-message-bubble="true"][data-message-type="document"] > :nth-child(n+5) {
         display: none !important;
       }
     `}</style>
@@ -755,35 +762,55 @@ const mediaMimeType = String(primaryMedia?.mimeType || '').toLowerCase();
     </div>
 
     {mediaSignedUrl && (mediaKind === 'image' || mediaMimeType.startsWith('image/')) ? (
-      <a href={mediaSignedUrl} target="_blank" rel="noreferrer" style={{ display: 'block', textDecoration: 'none' }}>
-        <img
-          src={mediaSignedUrl}
-          alt={message.textBody || primaryMedia?.fileName || 'Görsel mesaj'}
-          style={{
-            width: '100%',
-            maxHeight: 320,
-            objectFit: 'contain',
-            borderRadius: 12,
-            border: '1px solid #e5e7eb',
-            background: '#ffffff',
-          }}
-        />
-      </a>
-    ) : null}
-
-    {mediaSignedUrl && (mediaKind === 'video' || mediaMimeType.startsWith('video/')) ? (
-      <video
-        controls
+  <div style={{ display: 'grid', gap: 8 }}>
+    <a href={mediaSignedUrl} target="_blank" rel="noreferrer" style={{ display: 'block', textDecoration: 'none' }}>
+      <img
         src={mediaSignedUrl}
+        alt={message.textBody || primaryMedia?.fileName || 'Görsel mesaj'}
         style={{
           width: '100%',
-          maxHeight: 360,
+          maxHeight: 320,
+          objectFit: 'contain',
           borderRadius: 12,
           border: '1px solid #e5e7eb',
-          background: '#000000',
+          background: '#ffffff',
         }}
       />
-    ) : null}
+    </a>
+    <a
+      href={mediaSignedUrl}
+      target="_blank"
+      rel="noreferrer"
+      style={{ color: '#1d4ed8', fontWeight: 900, textDecoration: 'none' }}
+    >
+      Görseli yeni sekmede aç →
+    </a>
+  </div>
+) : null}
+
+    {mediaSignedUrl && (mediaKind === 'video' || mediaMimeType.startsWith('video/')) ? (
+  <div style={{ display: 'grid', gap: 8 }}>
+    <video
+      controls
+      src={mediaSignedUrl}
+      style={{
+        width: '100%',
+        maxHeight: 360,
+        borderRadius: 12,
+        border: '1px solid #e5e7eb',
+        background: '#000000',
+      }}
+    />
+    <a
+      href={mediaSignedUrl}
+      target="_blank"
+      rel="noreferrer"
+      style={{ color: '#1d4ed8', fontWeight: 900, textDecoration: 'none' }}
+    >
+      Videoyu yeni sekmede aç →
+    </a>
+  </div>
+) : null}
 
     {mediaSignedUrl && (mediaKind === 'audio' || mediaMimeType.startsWith('audio/')) ? (
       <audio controls src={mediaSignedUrl} style={{ width: '100%' }} />
