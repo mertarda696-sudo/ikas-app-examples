@@ -63,6 +63,78 @@ function isLinkTextMessage(text: string | null | undefined) {
   return URL_RE.test(String(text || ''));
 }
 
+function normalizeExternalUrl(url: string) {
+  const trimmed = String(url || '').trim();
+  if (!trimmed) return '#';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (/^www\./i.test(trimmed)) return `https://${trimmed}`;
+  return trimmed;
+}
+
+function renderTextWithClickableLinks(text: string | null | undefined) {
+  const source = String(text || 'Metin içeriği bulunmuyor.');
+  const regex = /\bhttps?:\/\/[^\s<>"']+|\bwww\.[^\s<>"']+/gi;
+  const parts: Array<{ type: 'text' | 'link'; value: string }> = [];
+  let lastIndex = 0;
+
+  for (const match of source.matchAll(regex)) {
+    const value = match[0];
+    const index = match.index ?? 0;
+
+    if (index > lastIndex) {
+      parts.push({ type: 'text', value: source.slice(lastIndex, index) });
+    }
+
+    parts.push({ type: 'link', value });
+    lastIndex = index + value.length;
+  }
+
+  if (lastIndex < source.length) {
+    parts.push({ type: 'text', value: source.slice(lastIndex) });
+  }
+
+  return parts.map((part, index) => {
+    if (part.type === 'link') {
+      return (
+        <a
+          key={`${part.value}-${index}`}
+          href={normalizeExternalUrl(part.value)}
+          target="_blank"
+          rel="noreferrer"
+          style={{ color: '#2563eb', fontWeight: 800, textDecoration: 'underline', overflowWrap: 'anywhere' }}
+        >
+          {part.value}
+        </a>
+      );
+    }
+
+    return <span key={`${part.value}-${index}`}>{part.value}</span>;
+  });
+}
+
+function getPrimaryMessageMedia(message: ConversationDetailResponse['conversation']['messages'][number]) {
+  return Array.isArray(message.media) && message.media.length > 0 ? message.media[0] : null;
+}
+
+function mapMediaCaptureStatusLabel(status: string | null | undefined) {
+  if (status === 'stored') return 'Dosya kaydedildi';
+  if (status === 'metadata_only') return 'Storage bekliyor';
+  if (status === 'downloaded') return 'Dosya indirildi';
+  if (status === 'failed') return 'İşleme hatası';
+  return status || 'Durum bilinmiyor';
+}
+
+function formatFileSize(value: number | null | undefined) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '-';
+  if (value === 0) return '0 B';
+
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
+  const size = value / Math.pow(1024, index);
+
+  return `${size.toFixed(size >= 10 || index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
 function mapChannelLabel(channel: string | null | undefined) {
   const normalized = String(channel || '').toLowerCase();
   if (normalized === 'whatsapp') return 'WhatsApp';
@@ -616,8 +688,12 @@ export default function ConversationDetailPage() {
   ) : (
     conversation.messages.map((message) => {
       const incoming = message.senderType === 'customer' || message.direction === 'in';
-      const senderLabel = mapSenderLabel(message.senderType, message.direction);
-      const mediaMessage = isRealMediaMessage(message.msgType);
+const senderLabel = mapSenderLabel(message.senderType, message.direction);
+const mediaMessage = isRealMediaMessage(message.msgType);
+const primaryMedia = getPrimaryMessageMedia(message);
+const mediaSignedUrl = primaryMedia?.signedUrl || null;
+const mediaKind = String(primaryMedia?.kind || message.msgType || '').toLowerCase();
+const mediaMimeType = String(primaryMedia?.mimeType || '').toLowerCase();
 
       return (
         <div
@@ -650,36 +726,120 @@ export default function ConversationDetailPage() {
               {senderLabel} · {mapMsgTypeLabel(message.msgType)}
             </div>
 
-            <div style={{ fontSize: 14, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
-              {message.textBody || 'Metin içeriği bulunmuyor.'}
-            </div>
+            <div style={{ fontSize: 14, lineHeight: 1.7, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+  {renderTextWithClickableLinks(message.textBody)}
+</div>
 
             <div style={{ marginTop: 8, fontSize: 11, color: '#6b7280', textAlign: 'right' }}>
               {formatDate(message.createdAt)}
             </div>
 
             {mediaMessage ? (
-              <div
-                style={{
-                  marginTop: 10,
-                  border: '1px solid #fde68a',
-                  background: '#fffbeb',
-                  color: '#92400e',
-                  borderRadius: 12,
-                  padding: 10,
-                  fontSize: 12,
-                  fontWeight: 800,
-                  lineHeight: 1.55,
-                }}
-              >
-                <div style={{ fontWeight: 900, marginBottom: 4 }}>
-                  {mapMsgTypeLabel(message.msgType).charAt(0).toUpperCase() + mapMsgTypeLabel(message.msgType).slice(1)} mesaj
-                </div>
-                <div>
-                  Bu medya konuşma akışına alındı. Hasar, dekont veya iade kanıtı ise ilgili operasyon vakasına bağlanabilir.
-                </div>
-              </div>
-            ) : null}
+  <div
+    style={{
+      marginTop: 10,
+      border: '1px solid #fde68a',
+      background: '#fffbeb',
+      color: '#92400e',
+      borderRadius: 12,
+      padding: 10,
+      fontSize: 12,
+      fontWeight: 800,
+      lineHeight: 1.55,
+      display: 'grid',
+      gap: 8,
+    }}
+  >
+    <div style={{ fontWeight: 900 }}>
+      {mapMsgTypeLabel(message.msgType).charAt(0).toUpperCase() + mapMsgTypeLabel(message.msgType).slice(1)} mesaj
+    </div>
+
+    {mediaSignedUrl && (mediaKind === 'image' || mediaMimeType.startsWith('image/')) ? (
+      <a href={mediaSignedUrl} target="_blank" rel="noreferrer" style={{ display: 'block', textDecoration: 'none' }}>
+        <img
+          src={mediaSignedUrl}
+          alt={message.textBody || primaryMedia?.fileName || 'Görsel mesaj'}
+          style={{
+            width: '100%',
+            maxHeight: 320,
+            objectFit: 'contain',
+            borderRadius: 12,
+            border: '1px solid #e5e7eb',
+            background: '#ffffff',
+          }}
+        />
+      </a>
+    ) : null}
+
+    {mediaSignedUrl && (mediaKind === 'video' || mediaMimeType.startsWith('video/')) ? (
+      <video
+        controls
+        src={mediaSignedUrl}
+        style={{
+          width: '100%',
+          maxHeight: 360,
+          borderRadius: 12,
+          border: '1px solid #e5e7eb',
+          background: '#000000',
+        }}
+      />
+    ) : null}
+
+    {mediaSignedUrl && (mediaKind === 'audio' || mediaMimeType.startsWith('audio/')) ? (
+      <audio controls src={mediaSignedUrl} style={{ width: '100%' }} />
+    ) : null}
+
+    {mediaSignedUrl && (mediaKind === 'document' || mediaMimeType === 'application/pdf') ? (
+      <a
+        href={mediaSignedUrl}
+        target="_blank"
+        rel="noreferrer"
+        style={{
+          color: '#1d4ed8',
+          fontWeight: 900,
+          textDecoration: 'none',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+        }}
+      >
+        Dokümanı aç →
+      </a>
+    ) : null}
+
+    {!mediaSignedUrl ? (
+      <div
+        style={{
+          border: '1px dashed #d1d5db',
+          background: '#ffffff',
+          color: '#6b7280',
+          borderRadius: 10,
+          padding: 10,
+          fontWeight: 800,
+        }}
+      >
+        {primaryMedia?.signedUrlError
+          ? `Önizleme bağlantısı üretilemedi: ${primaryMedia.signedUrlError}`
+          : primaryMedia?.storagePath
+            ? 'Dosya Storage’da görünüyor ancak geçici önizleme bağlantısı üretilemedi.'
+            : 'Dosya henüz Storage’a alınmadı. Medya Merkezi üzerinden yeniden indirme gerekebilir.'}
+      </div>
+    ) : null}
+
+    <div style={{ color: '#92400e', fontSize: 12, fontWeight: 800 }}>
+      {primaryMedia ? (
+        <>
+          <div>Durum: {mapMediaCaptureStatusLabel(primaryMedia.captureStatus)}</div>
+          <div>MIME: {primaryMedia.mimeType || '-'}</div>
+          <div>Boyut: {formatFileSize(primaryMedia.sizeBytes)}</div>
+          {primaryMedia.fileName ? <div>Dosya: {primaryMedia.fileName}</div> : null}
+        </>
+      ) : (
+        <div>Bu medya konuşma akışına alındı. Hasar, dekont veya iade kanıtı ise ilgili operasyon vakasına bağlanabilir.</div>
+      )}
+    </div>
+  </div>
+) : null}
           </div>
         </div>
       );
