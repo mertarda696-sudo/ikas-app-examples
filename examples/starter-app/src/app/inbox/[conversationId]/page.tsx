@@ -340,6 +340,7 @@ export default function ConversationDetailPage() {
   const responseState = getResponseState(conversation);
   const automationStatus = getAutomationStatus(conversation);
   const aiPaused = String(conversation?.aiMode || 'ai').toLowerCase() === 'manual';
+  const conversationClosed = String(conversation?.status || '').toLowerCase() === 'closed';
   const suggestions = quickReplySuggestions(conversation?.contextProductName);
   const hasWhatsAppLine = Boolean(data?.tenant?.waPhoneNumberId);
   const operationCaseEvidenceOption = useMemo(
@@ -435,6 +436,10 @@ export default function ConversationDetailPage() {
       setActionSuccess(null);
 
       if (!conversationId) return setActionError('conversationId bulunamadı.');
+
+      if (conversationClosed) {
+  return setActionError('Bu konuşma kapalı. AI kontrolünü değiştirmek için önce konuşmayı tekrar açın.');
+}
 
       setAutomationChanging(true);
       const iframeToken = await TokenHelpers.getTokenForIframeApp();
@@ -949,13 +954,17 @@ const mediaMimeType = String(primaryMedia?.mimeType || '').toLowerCase();
                         color: aiPaused ? '#991b1b' : '#166534',
                       }}
                     >
-                      {aiPaused
-                        ? 'AI bu konuşmada kapalı görünüyor. Müşteri yazarsa otomatik yanıt yerine operatör takibi gerekir.'
-                        : 'AI bu konuşmada aktif görünüyor. Müşteri mesajlarına otomasyon cevap verebilir.'}
+                      {conversationClosed
+  ? 'Bu konuşma kapalı. AI otomasyon kontrolü arşiv kaydında pasiftir.'
+  : aiPaused
+    ? 'AI bu konuşmada kapalı görünüyor. Müşteri yazarsa otomatik yanıt yerine operatör takibi gerekir.'
+    : 'AI bu konuşmada aktif görünüyor. Müşteri mesajlarına otomasyon cevap verebilir.'}
                     </div>
 
                     <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6, lineHeight: 1.6 }}>
-                      AI kapalıyken müşteri mesajlarına otomatik cevap verilmemeli; operatör manuel yanıt vermeli. AI tekrar açıldığında otomasyon normal akışa döner.
+                      {conversationClosed
+  ? 'Konuşmayı tekrar açarsanız AI otomasyon kontrolünü ve manuel yanıt akışını yönetebilirsiniz.'
+  : 'AI kapalıyken müşteri mesajlarına otomatik cevap verilmemeli; operatör manuel yanıt vermeli. AI tekrar açıldığında otomasyon normal akışa döner.'}
                     </div>
 
                     {conversation.aiModeUpdatedAt ? (
@@ -967,8 +976,11 @@ const mediaMimeType = String(primaryMedia?.mimeType || '').toLowerCase();
 
                                     <button
                     type="button"
-                    onClick={() => handleAutomationModeChange(aiPaused ? 'resume_ai' : 'pause_ai')}
-                    disabled={automationChanging}
+                    onClick={() => {
+  if (conversationClosed) return;
+  handleAutomationModeChange(aiPaused ? 'resume_ai' : 'pause_ai');
+}}
+                    disabled={automationChanging || conversationClosed}
                     style={{
                       border: 'none',
                       borderRadius: 12,
@@ -981,11 +993,13 @@ const mediaMimeType = String(primaryMedia?.mimeType || '').toLowerCase();
                     }}
                   >
                     {automationChanging
-                      ? 'Güncelleniyor...'
-                      : aiPaused
-                        ? 'AI’ı devreye al'
-                        : 'AI’ı durdur / Manuel devral'}
-                  </button>
+  ? 'Güncelleniyor...'
+  : conversationClosed
+    ? 'Kapalı konuşma'
+    : aiPaused
+      ? 'AI’ı devreye al'
+      : 'AI’ı durdur / Manuel devral'}
+</button>
                 </div>
 
                 {responseState.needsReply ? (
