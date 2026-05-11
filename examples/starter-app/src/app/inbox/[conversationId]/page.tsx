@@ -129,6 +129,16 @@ function getResponseState(conversation: ConversationDetailResponse['conversation
   };
 }
 
+function getAutomationStatus(conversation: ConversationDetailResponse['conversation']) {
+  const normalized = String(conversation?.aiMode || 'ai').toLowerCase();
+  const isManual = normalized === 'manual';
+
+  return {
+    label: isManual ? 'AI Kapalı' : 'AI Aktif',
+    tone: isManual ? ('danger' as const) : ('success' as const),
+  };
+}
+
 function quickReplySuggestions(contextProductName?: string | null) {
   const productPart = contextProductName ? `${contextProductName} için ` : '';
   return [
@@ -240,6 +250,7 @@ const [creatingCase, setCreatingCase] = useState(false);
   const operatorDeskState = useMemo(() => getConversationDeskState(conversation, flowContext), [conversation, flowContext]);
   const operatorTone = toneStyles(operatorDeskState.tone);
   const responseState = getResponseState(conversation);
+  const automationStatus = getAutomationStatus(conversation);
   const suggestions = quickReplySuggestions(conversation?.contextProductName);
   const hasWhatsAppLine = Boolean(data?.tenant?.waPhoneNumberId);
   const operationCaseEvidenceOption = useMemo(
@@ -478,7 +489,12 @@ const [creatingCase, setCreatingCase] = useState(false);
                 WhatsApp benzeri mesaj akışı, operatör önerisi ve manuel cevap alanı tek ekranda.
               </p>
             </div>
-            {conversation ? <Badge label={responseState.label} tone={responseState.tone} /> : null}
+                        {conversation ? (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <Badge label={responseState.label} tone={responseState.tone} />
+                <Badge label={automationStatus.label} tone={automationStatus.tone} />
+              </div>
+            ) : null}
           </div>
         </div>
 
