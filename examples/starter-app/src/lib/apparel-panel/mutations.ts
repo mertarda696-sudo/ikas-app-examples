@@ -6,6 +6,7 @@ type ConversationSendContextRow = {
   tenant_id: string;
   customer_id: string | null;
   phone_number_id: string | null;
+  status: string | null;
 };
 
 type OperatorReplyWebhookInput = {
@@ -73,12 +74,13 @@ export async function getConversationSendContextByMerchantId(
     throw new Error("Tenant not found for merchant");
   }
 
-  const rows = await prisma.$queryRaw<ConversationSendContextRow[]>`
+    const rows = await prisma.$queryRaw<ConversationSendContextRow[]>`
     select
       c.id as conversation_id,
       c.tenant_id as tenant_id,
       tm.wa_user_id as customer_id,
-      t.wa_phone_number_id as phone_number_id
+      t.wa_phone_number_id as phone_number_id,
+      c.status as status
     from public.conversations c
     inner join public.tenants t
       on t.id = c.tenant_id
@@ -91,7 +93,12 @@ export async function getConversationSendContextByMerchantId(
 
   const row = rows[0];
 
-  if (!row) throw new Error("Conversation not found for merchant");
+    if (!row) throw new Error("Conversation not found for merchant");
+
+  if (String(row.status || "").toLowerCase() !== "open") {
+    throw new Error("closed_conversation_reply_not_allowed");
+  }
+
   if (!row.customer_id) throw new Error("Conversation customer wa_user_id not found");
   if (!row.phone_number_id) throw new Error("Tenant wa_phone_number_id not found");
 
