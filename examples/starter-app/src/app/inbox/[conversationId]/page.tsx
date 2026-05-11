@@ -11,7 +11,7 @@ import {
   getLatestEvidenceOption,
 } from './OperationCaseEvidenceOption';
 import { TokenHelpers } from '@/helpers/token-helpers';
-import type { ConversationDetailResponse } from '@/lib/apparel-panel/types';
+import type { ConversationDetailResponse, ConversationMessageItem } from '@/lib/apparel-panel/types';
 import {
   getConversationDeskState,
   getConversationFlowContext,
@@ -112,7 +112,7 @@ function renderTextWithClickableLinks(text: string | null | undefined) {
   });
 }
 
-function getPrimaryMessageMedia(message: ConversationDetailResponse['conversation']['messages'][number]) {
+function getPrimaryMessageMedia(message: ConversationMessageItem) {
   return Array.isArray(message.media) && message.media.length > 0 ? message.media[0] : null;
 }
 
