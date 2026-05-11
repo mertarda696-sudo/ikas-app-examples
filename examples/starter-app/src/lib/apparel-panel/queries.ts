@@ -5,6 +5,7 @@ import type {
   ConversationDetailItem,
   ConversationDetailResponse,
   ConversationMessageItem,
+  ConversationMessageMediaItem,
   DashboardSummaryResponse,
   InboxConversationItem,
   InboxListResponse,
@@ -150,6 +151,18 @@ type ConversationMessageRow = {
   raw: Record<string, unknown> | null;
 };
 
+type ConversationMessageAttachmentRow = {
+  id: string;
+  message_id: string | null;
+  kind: string | null;
+  mime_type: string | null;
+  file_name: string | null;
+  storage_path: string | null;
+  size_bytes: number | bigint | string | null;
+  meta: unknown;
+  created_at: Date | string | null;
+};
+
 function toNumber(value: number | string | null | undefined): number {
   if (value == null) return 0;
   const num = Number(value);
@@ -166,6 +179,137 @@ function toIso(value: Date | string | null | undefined): string | null {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+const SUPABASE_URL = (
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  process.env.SUPABASE_URL ||
+  "https://wnougygablrqpfgoqzsm.supabase.co"
+).replace(/\/$/, "");
+
+const SUPABASE_SERVICE_ROLE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_SERVICE_ROLE ||
+  process.env.SUPABASE_SERVICE_KEY ||
+  "";
+
+const DEFAULT_EVIDENCE_BUCKET = "case-evidence";
+
+function toBigNumber(value: number | bigint | string | null | undefined): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function toMetaObject(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
+function getMetaString(meta: Record<string, unknown>, key: string): string | null {
+  const value = meta[key];
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  return text || null;
+}
+
+function encodeStoragePath(path: string) {
+  return path
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
+function normalizeSignedUrl(raw: string | null) {
+  if (!raw) return null;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.startsWith("/storage/v1")) return `${SUPABASE_URL}${raw}`;
+  if (raw.startsWith("/")) return `${SUPABASE_URL}/storage/v1${raw}`;
+  return `${SUPABASE_URL}/storage/v1/${raw}`;
+}
+
+async function createStorageSignedUrl(bucket: string, storagePath: string | null) {
+  const safeBucket = String(bucket || DEFAULT_EVIDENCE_BUCKET).trim();
+  const safePath = String(storagePath || "").trim();
+
+  if (!safePath) {
+    return { signedUrl: null as string | null, signedUrlError: null as string | null };
+  }
+
+  if (!SUPABASE_SERVICE_ROLE_KEY) {
+    return {
+      signedUrl: null as string | null,
+      signedUrlError: "missing_supabase_service_role_key",
+    };
+  }
+
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL}/storage/v1/object/sign/${encodeURIComponent(safeBucket)}/${encodeStoragePath(safePath)}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          apikey: SUPABASE_SERVICE_ROLE_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ expiresIn: 60 * 30 }),
+        cache: "no-store",
+      },
+    );
+
+    const payload = (await response.json().catch(() => null)) as {
+      signedURL?: string;
+      signedUrl?: string;
+      url?: string;
+      message?: string;
+      error?: string;
+    } | null;
+
+    if (!response.ok) {
+      return {
+        signedUrl: null as string | null,
+        signedUrlError:
+          payload?.message || payload?.error || `storage_sign_failed_${response.status}`,
+      };
+    }
+
+    const rawSignedUrl = payload?.signedURL || payload?.signedUrl || payload?.url || null;
+
+    return {
+      signedUrl: normalizeSignedUrl(rawSignedUrl),
+      signedUrlError: null as string | null,
+    };
+  } catch (error) {
+    return {
+      signedUrl: null as string | null,
+      signedUrlError: error instanceof Error ? error.message : "storage_sign_unknown_error",
+    };
+  }
+}
+
+async function mapConversationAttachmentRow(
+  row: ConversationMessageAttachmentRow,
+): Promise<ConversationMessageMediaItem> {
+  const meta = toMetaObject(row.meta);
+  const storageBucket = getMetaString(meta, "storage_bucket") || DEFAULT_EVIDENCE_BUCKET;
+  const storagePath = row.storage_path || getMetaString(meta, "storage_path");
+  const signed = await createStorageSignedUrl(storageBucket, storagePath);
+
+  return {
+    id: row.id,
+    messageId: row.message_id,
+    kind: row.kind,
+    mimeType: row.mime_type,
+    fileName: row.file_name,
+    storagePath,
+    storageBucket,
+    sizeBytes: toBigNumber(row.size_bytes),
+    captureStatus: getMetaString(meta, "capture_status"),
+    signedUrl: signed.signedUrl,
+    signedUrlError: signed.signedUrlError,
+    createdAt: toIso(row.created_at),
+  };
 }
 
 export async function getTenantPanelContextByMerchantId(merchantId: string): Promise<TenantPanelContext | null> {
@@ -495,10 +639,61 @@ export async function getConversationDetailByMerchantId(merchantId: string, conv
       limit 300
     `;
 
-    const messages: ConversationMessageItem[] = messageRows.map((row) => {
+        const attachmentRows = await prisma.$queryRaw<ConversationMessageAttachmentRow[]>`
+      select
+        a.id,
+        a.message_id,
+        a.kind,
+        a.mime_type,
+        a.file_name,
+        a.storage_path,
+        a.size_bytes,
+        a.meta,
+        a.created_at
+      from public.attachments a
+      where a.tenant_id = CAST(${tenant.tenantId} AS uuid)
+        and a.message_id in (
+          select m.id
+          from public.messages m
+          where m.conversation_id = CAST(${conversationId} AS uuid)
+        )
+      order by a.created_at asc nulls last, a.id asc
+    `;
+
+    const mappedAttachments = await Promise.all(
+      attachmentRows.map(mapConversationAttachmentRow),
+    );
+
+    const attachmentsByMessageId = new Map<string, ConversationMessageMediaItem[]>();
+
+    for (const attachment of mappedAttachments) {
+      if (!attachment.messageId) continue;
+
+      const current = attachmentsByMessageId.get(attachment.messageId) || [];
+      current.push(attachment);
+      attachmentsByMessageId.set(attachment.messageId, current);
+    }
+
+        const messages: ConversationMessageItem[] = messageRows.map((row) => {
       const rawString = JSON.stringify(row.raw || {});
       const msgType = row.msg_type || null;
-      return { id: row.id, direction: row.direction, senderType: row.sender_type, msgType, textBody: row.text_body, createdAt: toIso(row.created_at), hasMediaLikePayload: msgType != null && msgType !== "text" && msgType !== "interactive" && rawString.length > 2 };
+      const media = attachmentsByMessageId.get(row.id) || [];
+
+      return {
+        id: row.id,
+        direction: row.direction,
+        senderType: row.sender_type,
+        msgType,
+        textBody: row.text_body,
+        createdAt: toIso(row.created_at),
+        hasMediaLikePayload:
+          media.length > 0 ||
+          (msgType != null &&
+            msgType !== "text" &&
+            msgType !== "interactive" &&
+            rawString.length > 2),
+        media,
+      };
     });
 
     const conversation: ConversationDetailItem = {
