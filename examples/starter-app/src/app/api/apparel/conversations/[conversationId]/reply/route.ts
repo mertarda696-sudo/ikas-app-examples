@@ -63,13 +63,18 @@ export async function POST(
       },
       { status: 200 },
     );
-  } catch (error) {
+    } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const isClosedConversation = errorMessage === "closed_conversation_reply_not_allowed";
+
     return NextResponse.json(
       {
         ok: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: isClosedConversation
+          ? "Bu konuşma kapalı. Mesaj göndermek için önce konuşmayı tekrar açın."
+          : errorMessage,
       },
-      { status: 500 },
+      { status: isClosedConversation ? 409 : 500 },
     );
   }
 }
