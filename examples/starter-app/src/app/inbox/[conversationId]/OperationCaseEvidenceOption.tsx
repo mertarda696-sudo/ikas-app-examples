@@ -94,7 +94,9 @@ export function OperationCaseEvidenceOption({
 
         <span style={{ display: 'grid', gap: 4 }}>
           <span style={{ fontSize: 13, fontWeight: 900, color: '#92400e' }}>
-            Son {evidenceOption.label} mesajını bu operasyon için kanıt olarak işaretle
+            {evidenceOption.kind === 'audio'
+  ? 'Son sesli mesajı bu operasyon için kanıt olarak işaretle'
+  : `Son ${evidenceOption.label} mesajını bu operasyon için kanıt olarak işaretle`}
           </span>
           <span style={{ fontSize: 12, lineHeight: 1.55, color: '#92400e' }}>
             Bu içerik otomatik kanıt sayılmaz. Yalnızca bu kutu işaretlenirse oluşturulan operasyon kaydı kanıt durumuyla açılır.
