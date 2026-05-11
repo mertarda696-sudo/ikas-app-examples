@@ -34,6 +34,20 @@ type OperatorReviewRow = {
 
 type ConversationStatusAction = "close" | "reopen";
 
+type ConversationAutomationAction = "pause_ai" | "resume_ai";
+
+type ConversationAutomationRow = {
+  conversation_id: string;
+  ai_mode: string | null;
+  ai_paused_at: Date | string | null;
+  ai_paused_by: string | null;
+  ai_pause_reason: string | null;
+  ai_resume_reminder_at: Date | string | null;
+  ai_resumed_at: Date | string | null;
+  ai_resumed_by: string | null;
+  ai_mode_updated_at: Date | string | null;
+};
+
 type ConversationStatusRow = {
   conversation_id: string;
   status: string | null;
@@ -202,6 +216,90 @@ export async function updateConversationStatusByMerchantId(
     reopenedFromStatus: row.reopened_from_status,
   };
 }
+
+export async function updateConversationAutomationByMerchantId(
+  merchantId: string,
+  conversationId: string,
+  action: ConversationAutomationAction,
+  reason?: string,
+) {
+  const tenant = await getTenantPanelContextByMerchantId(merchantId);
+
+  if (!tenant) {
+    throw new Error("Tenant not found for merchant");
+  }
+
+  const normalizedReason = String(reason || "").trim() || null;
+  let rows: ConversationAutomationRow[] = [];
+
+  if (action === "pause_ai") {
+    rows = await prisma.$queryRaw<ConversationAutomationRow[]>`
+      update public.conversations
+      set
+        ai_mode = 'manual',
+        ai_paused_at = now(),
+        ai_paused_by = ${merchantId},
+        ai_pause_reason = ${normalizedReason},
+        ai_resume_reminder_at = now() + interval '1 hour',
+        ai_mode_updated_at = now()
+      where id = CAST(${conversationId} AS uuid)
+        and tenant_id = CAST(${tenant.tenantId} AS uuid)
+      returning
+        id as conversation_id,
+        ai_mode,
+        ai_paused_at,
+        ai_paused_by,
+        ai_pause_reason,
+        ai_resume_reminder_at,
+        ai_resumed_at,
+        ai_resumed_by,
+        ai_mode_updated_at
+    `;
+  }
+
+  if (action === "resume_ai") {
+    rows = await prisma.$queryRaw<ConversationAutomationRow[]>`
+      update public.conversations
+      set
+        ai_mode = 'ai',
+        ai_resumed_at = now(),
+        ai_resumed_by = ${merchantId},
+        ai_resume_reminder_at = null,
+        ai_mode_updated_at = now()
+      where id = CAST(${conversationId} AS uuid)
+        and tenant_id = CAST(${tenant.tenantId} AS uuid)
+      returning
+        id as conversation_id,
+        ai_mode,
+        ai_paused_at,
+        ai_paused_by,
+        ai_pause_reason,
+        ai_resume_reminder_at,
+        ai_resumed_at,
+        ai_resumed_by,
+        ai_mode_updated_at
+    `;
+  }
+
+  const row = rows[0];
+
+  if (!row) {
+    throw new Error("Conversation not found for merchant");
+  }
+
+  return {
+    conversationId: row.conversation_id,
+    aiMode: row.ai_mode,
+    aiPausedAt: toIso(row.ai_paused_at),
+    aiPausedBy: row.ai_paused_by,
+    aiPauseReason: row.ai_pause_reason,
+    aiResumeReminderAt: toIso(row.ai_resume_reminder_at),
+    aiResumedAt: toIso(row.ai_resumed_at),
+    aiResumedBy: row.ai_resumed_by,
+    aiModeUpdatedAt: toIso(row.ai_mode_updated_at),
+  };
+}
+
 export async function sendOperatorReplyViaN8n(
   input: OperatorReplyWebhookInput,
 ): Promise<OperatorReplyWebhookResult> {
