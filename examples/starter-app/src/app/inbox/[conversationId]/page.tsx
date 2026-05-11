@@ -251,6 +251,7 @@ const [creatingCase, setCreatingCase] = useState(false);
   const operatorTone = toneStyles(operatorDeskState.tone);
   const responseState = getResponseState(conversation);
   const automationStatus = getAutomationStatus(conversation);
+  const aiPaused = String(conversation?.aiMode || 'ai').toLowerCase() === 'manual';
   const suggestions = quickReplySuggestions(conversation?.contextProductName);
   const hasWhatsAppLine = Boolean(data?.tenant?.waPhoneNumberId);
   const operationCaseEvidenceOption = useMemo(
@@ -650,6 +651,66 @@ const [creatingCase, setCreatingCase] = useState(false);
                       : String(conversation.status || '').toLowerCase() === 'open'
                         ? 'Konuşmayı kapat'
                         : 'Konuşmayı tekrar aç'}
+                  </button>
+                                </div>
+
+                <div
+                  style={{
+                    border: aiPaused ? '1px solid #fecaca' : '1px solid #bbf7d0',
+                    background: aiPaused ? '#fef2f2' : '#f0fdf4',
+                    borderRadius: 14,
+                    padding: 14,
+                    marginBottom: 14,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 900, marginBottom: 4 }}>
+                      AI Otomasyon Kontrolü
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize: 13,
+                        lineHeight: 1.6,
+                        color: aiPaused ? '#991b1b' : '#166534',
+                      }}
+                    >
+                      {aiPaused
+                        ? 'AI bu konuşmada kapalı görünüyor. Müşteri yazarsa otomatik yanıt yerine operatör takibi gerekir.'
+                        : 'AI bu konuşmada aktif görünüyor. Müşteri mesajlarına otomasyon cevap verebilir.'}
+                    </div>
+
+                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6, lineHeight: 1.6 }}>
+                      Bu kart şu an yalnızca durum gösterimi içindir. AI durdur/devreye al işlemi bir sonraki blokta aktifleşecek.
+                    </div>
+
+                    {conversation.aiModeUpdatedAt ? (
+                      <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>
+                        Son AI durum güncellemesi: {formatDate(conversation.aiModeUpdatedAt)}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled
+                    style={{
+                      border: 'none',
+                      borderRadius: 12,
+                      padding: '10px 14px',
+                      background: '#9ca3af',
+                      color: '#ffffff',
+                      fontWeight: 800,
+                      cursor: 'not-allowed',
+                      opacity: 0.9,
+                    }}
+                  >
+                    {aiPaused ? 'AI’ı devreye al' : 'AI’ı durdur / Manuel devral'}
                   </button>
                 </div>
 
