@@ -73,7 +73,7 @@ const FILTERS: Array<{ key: EvidenceFilter; label: string }> = [
   { key: 'image', label: 'Tüm Fotoğraflar' },
   { key: 'damaged_product', label: 'Hasarlı Ürün Vakaları' },
   { key: 'payment_proof', label: 'Ödeme / Dekont' },
-  { key: 'unlinked', label: 'Vakasız / Ürün Sorusu' },
+  { key: 'unlinked', label: 'Vakasız Medya' },
   { key: 'all', label: 'Tüm Medya Kayıtları' },
 ];
 
@@ -229,7 +229,7 @@ function EvidenceMediaCard({ item, onBackfill, backfillState }: { item: Evidence
           <div style={{ color: '#6b7280', fontSize: 12, marginTop: 3 }}>{item.mimeType || 'MIME yok'} · {formatDate(item.createdAt)}</div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <Pill label={caseLinked ? 'Kanıt medyası' : 'Ürün sorusu / vaka dışı'} tone={caseLinked ? 'warning' : 'neutral'} />
+          <Pill label={caseLinked ? 'Kanıt medyası' : 'Vakasız medya'} tone={caseLinked ? 'warning' : 'neutral'} />
 {archivedEvidence ? <Pill label="Arşiv kanıtı" tone="success" /> : null}
 <Pill label={mapCaptureStatusLabel(item.captureStatus)} tone={toneForStatus(item.captureStatus)} />
           {hasPreview ? <Pill label="Önizleme var" tone="success" /> : null}
@@ -238,7 +238,7 @@ function EvidenceMediaCard({ item, onBackfill, backfillState }: { item: Evidence
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 8, border: '1px solid #f3f4f6', background: '#f9fafb', borderRadius: 14, padding: 10 }}>
-        <Field label="Vaka türü" value={caseLinked ? mapCaseTypeLabel(item.caseType) : 'Ürün sorusu / vaka dışı'} />
+        <Field label="Vaka türü" value={caseLinked ? mapCaseTypeLabel(item.caseType) : 'Vakasız medya'} />
         <Field label="Sipariş" value={item.linkedOrderId || '-'} />
         <Field label="Müşteri" value={item.customerWaId || '-'} />
       </div>
@@ -401,7 +401,7 @@ export default function EvidencePage() {
               <MetricCard label="Hasarlı Ürün Fotoğrafı" value={localMetrics.damagedProductImages} helper="Öncelikli operasyon kanıtları" tone={localMetrics.damagedProductImages > 0 ? 'warning' : 'neutral'} onClick={() => setActiveFilter('damaged_product_images')} />
               <MetricCard label="Önizlemeli Görsel" value={localMetrics.previewable} helper="Panelde doğrudan görülebilen dosyalar" tone={localMetrics.previewable > 0 ? 'success' : 'neutral'} onClick={() => setActiveFilter('previewable')} />
               <MetricCard label="Storage Bekleyen" value={data?.metrics.metadataOnly || 0} helper={(data?.metrics.metadataOnly || 0) > 0 ? 'Yeniden indir aksiyonu adayları' : 'Temiz: Storage bekleyen kayıt yok'} tone={(data?.metrics.metadataOnly || 0) > 0 ? 'warning' : 'success'} onClick={() => setActiveFilter('metadata_only')} />
-              <MetricCard label="Vakasız / Ürün Sorusu" value={localMetrics.unlinked} helper="Vaka dışı ürün sorusu veya genel görseller" tone={localMetrics.unlinked > 0 ? 'info' : 'neutral'} onClick={() => setActiveFilter('unlinked')} />
+              <MetricCard label="Vakasız Medya" value={localMetrics.unlinked} helper="Henüz operasyona bağlanmamış medya kayıtları" tone={localMetrics.unlinked > 0 ? 'info' : 'neutral'} onClick={() => setActiveFilter('unlinked')} />
               <MetricCard label="Toplam Medya" value={data?.metrics.total || 0} helper="Tüm attachment kayıtları" tone="info" onClick={() => setActiveFilter('all')} />
             </section>
 
@@ -415,7 +415,7 @@ export default function EvidencePage() {
               <div>
                 <div style={{ color: '#9a3412', fontSize: 17, fontWeight: 900 }}>Varsayılan ekran: vaka bağlı kanıtlar</div>
                 <div style={{ color: '#7c2d12', fontSize: 13, marginTop: 4, lineHeight: 1.6 }}>
-                  Bu ekran operasyon vakasına bağlı fotoğraf, dekont, iade veya hasarlı ürün medyalarını gösterir. Vakasız ürün görselleri ayrı filtrede durur.
+                  Bu ekran operasyon vakasına bağlı fotoğraf, dekont, iade veya hasarlı ürün medyalarını gösterir. Henüz vakaya bağlanmamış medya kayıtları ayrı Vakasız Medya filtresinde durur.
                 </div>
               </div>
               <button onClick={() => setActiveFilter('damaged_product_images')} style={{ border: '1px solid #ea580c', background: activeFilter === 'damaged_product_images' ? '#ea580c' : '#ffffff', color: activeFilter === 'damaged_product_images' ? '#ffffff' : '#9a3412', borderRadius: 999, padding: '11px 16px', fontSize: 13, fontWeight: 900, cursor: 'pointer' }}>Hasarlı Ürün Fotoğraflarını Göster →</button>
