@@ -1023,14 +1023,21 @@ const mediaMimeType = String(primaryMedia?.mimeType || '').toLowerCase();
                 ) : null}
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-                  <div>
-                    <div style={{ fontSize: 18, fontWeight: 800 }}>Operatör Mesajı</div>
-                    <div style={{ color: '#6b7280', fontSize: 13, lineHeight: 1.6 }}>
-                      {hasWhatsAppLine ? 'Müşteriye manuel WhatsApp mesajı gönder.' : 'WhatsApp hattı bağlı değil, gönderim kapalı.'}
-                    </div>
-                  </div>
-                  <Badge label={hasWhatsAppLine ? 'Gönderim aktif' : 'Gönderim kapalı'} tone={hasWhatsAppLine ? 'success' : 'warning'} />
-                </div>
+  <div>
+    <div style={{ fontSize: 18, fontWeight: 800 }}>Operatör Mesajı</div>
+    <div style={{ color: '#6b7280', fontSize: 13, lineHeight: 1.6 }}>
+      {conversationClosed
+        ? 'Bu konuşma kapalı. Müşteriye mesaj göndermek için önce konuşmayı tekrar açın.'
+        : hasWhatsAppLine
+          ? 'Müşteriye manuel WhatsApp mesajı gönder.'
+          : 'WhatsApp hattı bağlı değil, gönderim kapalı.'}
+    </div>
+  </div>
+  <Badge
+    label={conversationClosed ? 'Kapalı konuşma' : hasWhatsAppLine ? 'Gönderim aktif' : 'Gönderim kapalı'}
+    tone={conversationClosed ? 'neutral' : hasWhatsAppLine ? 'success' : 'warning'}
+  />
+</div>
 
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
   {suggestions.map((suggestion) => (
