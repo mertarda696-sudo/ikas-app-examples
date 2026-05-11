@@ -208,6 +208,15 @@ function getResponseState(conversation: ConversationDetailResponse['conversation
 }
 
 function getAutomationStatus(conversation: ConversationDetailResponse['conversation']) {
+  const conversationStatus = String(conversation?.status || '').toLowerCase();
+
+  if (conversationStatus === 'closed') {
+    return {
+      label: 'Kapalı konuşma',
+      tone: 'neutral' as const,
+    };
+  }
+
   const normalized = String(conversation?.aiMode || 'ai').toLowerCase();
   const isManual = normalized === 'manual';
 
