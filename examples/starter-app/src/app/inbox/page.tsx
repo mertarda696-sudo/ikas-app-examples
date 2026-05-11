@@ -254,6 +254,16 @@ function getStatusTone(status: string | null | undefined): 'neutral' | 'success'
   return 'info';
 }
 
+function getAutomationStatus(item: InboxListResponse['items'][number]) {
+  const normalized = String(item.aiMode || 'ai').toLowerCase();
+  const isManual = normalized === 'manual';
+
+  return {
+    label: isManual ? 'AI Kapalı' : 'AI Aktif',
+    tone: isManual ? ('danger' as const) : ('success' as const),
+  };
+}
+
 function isAfter(a: string | null | undefined, b: string | null | undefined) {
   if (!a) return false;
   if (!b) return true;
@@ -436,6 +446,7 @@ export default function InboxPage() {
                   const priorityLabel = inferPriorityLabel(item.lastMessageText);
                   const recommendation = getConversationQueueHint(item);
                   const responseState = getResponseState(item);
+                  const automationStatus = getAutomationStatus(item);
                   const hasOperatorNote = Boolean(String(item.operatorNote || '').trim());
                   const hasOperatorTag = Boolean(String(item.operatorTag || '').trim());
                   const operatorPriority = String(item.operatorPriority || 'normal').toLowerCase();
@@ -473,6 +484,7 @@ export default function InboxPage() {
                             <SmallBadge label={mapChannelLabel(item.channel)} tone="info" />
                             <SmallBadge label={mapStatusLabel(item.status)} tone={getStatusTone(item.status)} />
                             <SmallBadge label={responseState.label} tone={responseState.tone} />
+                            <SmallBadge label={automationStatus.label} tone={automationStatus.tone} />
                             {hasOperatorTag ? <SmallBadge label={mapOperatorTagLabel(item.operatorTag)} tone="warning" /> : null}
                             {item.operatorPriority ? <SmallBadge label={mapOperatorPriorityLabel(item.operatorPriority)} tone={getOperatorPriorityTone(item.operatorPriority)} /> : null}
                             {hasOperatorNote ? <SmallBadge label="Not var" tone="neutral" /> : null}
