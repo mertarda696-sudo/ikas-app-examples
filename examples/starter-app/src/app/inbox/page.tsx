@@ -255,6 +255,15 @@ function getStatusTone(status: string | null | undefined): 'neutral' | 'success'
 }
 
 function getAutomationStatus(item: InboxListResponse['items'][number]) {
+  const conversationStatus = String(item.status || '').toLowerCase();
+
+  if (conversationStatus === 'closed') {
+    return {
+      label: 'Kapalı konuşma',
+      tone: 'neutral' as const,
+    };
+  }
+
   const normalized = String(item.aiMode || 'ai').toLowerCase();
   const isManual = normalized === 'manual';
 
