@@ -192,14 +192,15 @@ export default function ConversationDetailPage() {
   const [operatorTag, setOperatorTag] = useState('');
   const [operatorPriority, setOperatorPriority] = useState('normal');
   const [caseType, setCaseType] = useState('general');
-const [caseTitle, setCaseTitle] = useState('');
-const [caseDescription, setCaseDescription] = useState('');
-const [casePriority, setCasePriority] = useState('normal');
-const [markLastMessageAsEvidence, setMarkLastMessageAsEvidence] = useState(false);
-const [creatingCase, setCreatingCase] = useState(false);
+  const [caseTitle, setCaseTitle] = useState('');
+  const [caseDescription, setCaseDescription] = useState('');
+  const [casePriority, setCasePriority] = useState('normal');
+  const [markLastMessageAsEvidence, setMarkLastMessageAsEvidence] = useState(false);
+  const [creatingCase, setCreatingCase] = useState(false);
   const [sending, setSending] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [statusChanging, setStatusChanging] = useState(false);
+  const [automationChanging, setAutomationChanging] = useState(false);
   const [savingOperatorNote, setSavingOperatorNote] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
@@ -326,6 +327,60 @@ const [creatingCase, setCreatingCase] = useState(false);
       setActionError(error instanceof Error ? error.message : 'Konuşma durumu güncellenirken hata oluştu.');
     } finally {
       setStatusChanging(false);
+    }
+    };
+
+  const handleAutomationModeChange = async (action: 'pause_ai' | 'resume_ai') => {
+    try {
+      setActionError(null);
+      setActionSuccess(null);
+
+      if (!conversationId) return setActionError('conversationId bulunamadı.');
+
+      setAutomationChanging(true);
+      const iframeToken = await TokenHelpers.getTokenForIframeApp();
+
+      if (!iframeToken) {
+        return setActionError('iFrame JWT token alınamadı.');
+      }
+
+      const response = await fetch(`/api/apparel/conversations/${conversationId}/automation`, {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          Authorization: 'JWT ' + iframeToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action,
+          reason:
+            action === 'pause_ai'
+              ? 'Operatör konuşmayı manuel devraldı.'
+              : 'Operatör AI otomasyonu tekrar devreye aldı.',
+        }),
+      });
+
+      const raw = await response.json();
+
+      if (!response.ok || !raw?.ok) {
+        throw new Error(raw?.error || 'AI kontrol durumu güncellenemedi.');
+      }
+
+      setActionSuccess(
+        action === 'pause_ai'
+          ? 'AI otomasyonu durduruldu. Bu konuşmada müşteri mesajlarına otomatik cevap verilmemeli.'
+          : 'AI otomasyonu tekrar devreye alındı.',
+      );
+
+      await loadConversation({ silent: true });
+    } catch (error) {
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : 'AI kontrol durumu güncellenirken hata oluştu.',
+      );
+    } finally {
+      setAutomationChanging(false);
     }
   };
 
@@ -686,7 +741,7 @@ const [creatingCase, setCreatingCase] = useState(false);
                     </div>
 
                     <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6, lineHeight: 1.6 }}>
-                      Bu kart şu an yalnızca durum gösterimi içindir. AI durdur/devreye al işlemi bir sonraki blokta aktifleşecek.
+                      AI kapalıyken müşteri mesajlarına otomatik cevap verilmemeli; operatör manuel yanıt vermeli. AI tekrar açıldığında otomasyon normal akışa döner.
                     </div>
 
                     {conversation.aiModeUpdatedAt ? (
@@ -696,21 +751,26 @@ const [creatingCase, setCreatingCase] = useState(false);
                     ) : null}
                   </div>
 
-                  <button
+                                    <button
                     type="button"
-                    disabled
+                    onClick={() => handleAutomationModeChange(aiPaused ? 'resume_ai' : 'pause_ai')}
+                    disabled={automationChanging}
                     style={{
                       border: 'none',
                       borderRadius: 12,
                       padding: '10px 14px',
-                      background: '#9ca3af',
+                      background: automationChanging ? '#9ca3af' : aiPaused ? '#065f46' : '#991b1b',
                       color: '#ffffff',
                       fontWeight: 800,
-                      cursor: 'not-allowed',
-                      opacity: 0.9,
+                      cursor: automationChanging ? 'not-allowed' : 'pointer',
+                      opacity: automationChanging ? 0.9 : 1,
                     }}
                   >
-                    {aiPaused ? 'AI’ı devreye al' : 'AI’ı durdur / Manuel devral'}
+                    {automationChanging
+                      ? 'Güncelleniyor...'
+                      : aiPaused
+                        ? 'AI’ı devreye al'
+                        : 'AI’ı durdur / Manuel devral'}
                   </button>
                 </div>
 
