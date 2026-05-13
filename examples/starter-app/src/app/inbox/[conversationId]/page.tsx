@@ -135,142 +135,6 @@ function formatFileSize(value: number | null | undefined) {
   return `${size.toFixed(size >= 10 || index === 0 ? 0 : 1)} ${units[index]}`;
 }
 
-function formatConfidencePercent(value: number | null | undefined) {
-  if (value === null || value === undefined || !Number.isFinite(Number(value))) return '-';
-  return `%${Math.round(Number(value) * 100)}`;
-}
-
-function mapMediaIntentLabel(value: string | null | undefined) {
-  if (value === 'product_question_media') return 'Ürün görseliyle ürün sorusu';
-  if (value === 'damaged_product_evidence') return 'Hasarlı ürün kanıtı';
-  if (value === 'payment_proof') return 'Ödeme / dekont';
-  if (value === 'return_evidence') return 'İade kanıtı';
-  if (value === 'shipping_label') return 'Kargo etiketi';
-  if (value === 'invoice') return 'Fatura';
-  return value || 'Medya analizi';
-}
-
-function MediaAnalysisVisibilityCard({
-  media,
-}: {
-  media: ConversationMessageItem['media'][number];
-}) {
-  const analysis = media.analysis;
-  const productMatch = analysis?.mediaProductMatch;
-
-  if (!analysis && !productMatch) return null;
-
-  return (
-    <div
-      style={{
-        border: '1px solid #bfdbfe',
-        background: '#eff6ff',
-        borderRadius: 16,
-        padding: 14,
-        display: 'grid',
-        gap: 10,
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-        <div>
-          <div style={{ fontWeight: 900, color: '#1e3a8a' }}>AI Medya Analizi</div>
-          <div style={{ marginTop: 3, fontSize: 12, color: '#1d4ed8', fontWeight: 700 }}>
-            {media.fileName || mapMsgTypeLabel(media.kind || media.mimeType || 'medya')}
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <Badge
-            label={mapMediaIntentLabel(analysis?.detectedIntent)}
-            tone="info"
-          />
-          <Badge
-            label={`Güven: ${formatConfidencePercent(productMatch?.matchConfidence ?? analysis?.confidence)}`}
-            tone={productMatch?.hasProductMatch ? 'success' : 'warning'}
-          />
-        </div>
-      </div>
-
-      <div style={{ color: '#1f2937', fontSize: 13, lineHeight: 1.6, display: 'grid', gap: 5 }}>
-        <div>
-          <strong>Özet:</strong>{' '}
-          {analysis?.summaryText || productMatch?.imageSummary || '-'}
-        </div>
-
-        {productMatch ? (
-          <>
-            <div>
-              <strong>Eşleşen ürün:</strong>{' '}
-              {productMatch.matchedProductName || 'Güvenli eşleşme yok'}
-            </div>
-
-            <div>
-              <strong>Otomatik cevap:</strong>{' '}
-              {productMatch.shouldAutoReply ? 'Açık' : 'Kapalı'}
-            </div>
-
-            <div>
-              <strong>Operatör aksiyonu:</strong>{' '}
-              {productMatch.needsOperatorReview ? 'İncele / manuel yanıtla' : 'Ek aksiyon gerekmiyor'}
-            </div>
-
-            {productMatch.suggestedReply ? (
-              <div
-                style={{
-                  marginTop: 6,
-                  background: '#ffffff',
-                  border: '1px solid #dbeafe',
-                  borderRadius: 12,
-                  padding: 10,
-                  color: '#1f2937',
-                }}
-              >
-                <strong>Cevap önerisi:</strong>
-                <div style={{ marginTop: 4 }}>{productMatch.suggestedReply}</div>
-              </div>
-            ) : null}
-
-            {Array.isArray(productMatch.candidates) && productMatch.candidates.length > 0 ? (
-              <div
-                style={{
-                  marginTop: 6,
-                  background: '#ffffff',
-                  border: '1px solid #dbeafe',
-                  borderRadius: 12,
-                  padding: 10,
-                }}
-              >
-                <strong>Aday ürünler:</strong>
-                <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
-                  {productMatch.candidates.slice(0, 3).map((candidate, index) => (
-                    <div key={`${candidate.productId || candidate.productName || index}`} style={{ color: '#374151' }}>
-                      {index + 1}. {candidate.productName || 'Ürün'} — {formatConfidencePercent(candidate.matchConfidence)}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-          </>
-        ) : analysis?.operatorNoteSuggestion ? (
-          <div
-            style={{
-              marginTop: 6,
-              background: '#ffffff',
-              border: '1px solid #dbeafe',
-              borderRadius: 12,
-              padding: 10,
-              color: '#1f2937',
-            }}
-          >
-            <strong>Operatör notu:</strong>
-            <div style={{ marginTop: 4 }}>{analysis.operatorNoteSuggestion}</div>
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
 function mapChannelLabel(channel: string | null | undefined) {
   const normalized = String(channel || '').toLowerCase();
   if (normalized === 'whatsapp') return 'WhatsApp';
@@ -483,14 +347,7 @@ export default function ConversationDetailPage() {
     () => getLatestEvidenceOption(conversation?.messages),
     [conversation?.messages],
   );
-  const mediaAnalysisItems = useMemo(
-  () =>
-    (conversation?.messages || [])
-      .flatMap((message) => message.media || [])
-      .filter((media) => Boolean(media.analysis)),
-  [conversation?.messages],
-);
-
+  
     const latestCustomerMessage = useMemo(
     () =>
       [...(conversation?.messages || [])]
@@ -816,38 +673,6 @@ export default function ConversationDetailPage() {
           <div style={{ border: '1px dashed #d1d5db', borderRadius: 16, padding: 20, background: '#ffffff', color: '#6b7280' }}>Konuşma bulunamadı.</div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.55fr) minmax(320px, 0.85fr)', gap: 16, alignItems: 'start' }}>
-            {mediaAnalysisItems.length > 0 ? (
-  <section
-    style={{
-      gridColumn: '1 / -1',
-      border: '1px solid #bfdbfe',
-      borderRadius: 18,
-      background: '#f8fbff',
-      padding: 18,
-      display: 'grid',
-      gap: 12,
-    }}
-  >
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-      <div>
-        <h2 style={{ fontSize: 18, fontWeight: 900, margin: '0 0 6px', color: '#111827' }}>
-          AI Medya Analizi
-        </h2>
-        <p style={{ margin: 0, color: '#4b5563', lineHeight: 1.6 }}>
-          Bu konuşmadaki analiz edilmiş medya kayıtları ve ürün eşleşme önerileri.
-        </p>
-      </div>
-
-      <Badge label={`${mediaAnalysisItems.length} analiz`} tone="info" />
-    </div>
-
-    <div style={{ display: 'grid', gap: 12 }}>
-      {mediaAnalysisItems.map((media) => (
-        <MediaAnalysisVisibilityCard key={media.id} media={media} />
-      ))}
-    </div>
-  </section>
-) : null}
             <section style={{ border: '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', overflow: 'hidden' }}>
               <div style={{ borderBottom: '1px solid #e5e7eb', padding: 18, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
                 <div>
