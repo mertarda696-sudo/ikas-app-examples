@@ -177,6 +177,50 @@ export type InboxListResponse = {
   error?: string;
 };
 
+export type MediaProductMatchCandidate = {
+  productId: string | null;
+  productName: string | null;
+  category: string | null;
+  stockStatus: string | null;
+  semanticScore: number | null;
+  stockScore: number | null;
+  matchConfidence: number | null;
+  reasons: string[];
+};
+
+export type MediaProductMatch = {
+  phase: string | null;
+  imageSummary: string | null;
+  detectedColors: string[];
+  detectedProductTypes: string[];
+  productsSeenCount: number | null;
+  candidatesCount: number | null;
+  hasProductMatch: boolean;
+  matchedProductId: string | null;
+  matchedProductName: string | null;
+  matchConfidence: number | null;
+  shouldAutoReply: boolean;
+  needsOperatorReview: boolean;
+  suggestedReply: string | null;
+  candidates: MediaProductMatchCandidate[];
+};
+
+export type ConversationMessageMediaAnalysisItem = {
+  id: string;
+  analysisStatus: string | null;
+  analysisType: string | null;
+  mediaType: string | null;
+  detectedIntent: string | null;
+  detectedCaseType: string | null;
+  detectedCustomerIntent: string | null;
+  summaryText: string | null;
+  operatorNoteSuggestion: string | null;
+  confidence: number | null;
+  needsOperatorReview: boolean | null;
+  mediaProductMatch: MediaProductMatch | null;
+  updatedAt: string | null;
+};
+
 export type ConversationMessageMediaItem = {
   id: string;
   messageId: string | null;
@@ -190,6 +234,7 @@ export type ConversationMessageMediaItem = {
   signedUrl: string | null;
   signedUrlError: string | null;
   createdAt: string | null;
+  analysis: ConversationMessageMediaAnalysisItem | null;
 };
 
 export type ConversationMessageItem = {
