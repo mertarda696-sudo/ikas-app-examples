@@ -5,11 +5,14 @@ import type {
   ConversationDetailItem,
   ConversationDetailResponse,
   ConversationMessageItem,
+  ConversationMessageMediaAnalysisItem,
   ConversationMessageMediaItem,
   DashboardSummaryResponse,
   InboxConversationItem,
   InboxListResponse,
   LatestSyncSummary,
+  MediaProductMatch,
+  MediaProductMatchCandidate,
   PoliciesContactResponse,
   PolicyMap,
   ProductListItem,
@@ -163,6 +166,23 @@ type ConversationMessageAttachmentRow = {
   created_at: Date | string | null;
 };
 
+type ConversationMessageAttachmentAnalysisRow = {
+  id: string;
+  attachment_id: string;
+  analysis_status: string | null;
+  analysis_type: string | null;
+  media_type: string | null;
+  detected_intent: string | null;
+  detected_case_type: string | null;
+  detected_customer_intent: string | null;
+  summary_text: string | null;
+  operator_note_suggestion: string | null;
+  confidence: number | string | null;
+  needs_operator_review: boolean | null;
+  structured_json: unknown;
+  updated_at: Date | string | null;
+};
+
 function toNumber(value: number | string | null | undefined): number {
   if (value == null) return 0;
   const num = Number(value);
@@ -211,6 +231,108 @@ function getMetaString(meta: Record<string, unknown>, key: string): string | nul
   if (value === null || value === undefined) return null;
   const text = String(value).trim();
   return text || null;
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
+function getStringValue(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  return text || null;
+}
+
+function getBooleanValue(value: unknown, fallback = false): boolean {
+  if (typeof value === "boolean") return value;
+
+  if (typeof value === "string") {
+    const normalized = value.toLowerCase();
+
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+
+  return fallback;
+}
+
+function getNumberValue(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function mapStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+}
+
+function mapMediaProductMatchCandidate(value: unknown): MediaProductMatchCandidate {
+  const row = toRecord(value);
+
+  return {
+    productId: getStringValue(row.product_id) || getStringValue(row.productId),
+    productName: getStringValue(row.product_name) || getStringValue(row.productName),
+    category: getStringValue(row.category),
+    stockStatus: getStringValue(row.stock_status) || getStringValue(row.stockStatus),
+    semanticScore: getNumberValue(row.semantic_score) ?? getNumberValue(row.semanticScore),
+    stockScore: getNumberValue(row.stock_score) ?? getNumberValue(row.stockScore),
+    matchConfidence: getNumberValue(row.match_confidence) ?? getNumberValue(row.matchConfidence),
+    reasons: mapStringArray(row.reasons),
+  };
+}
+
+function mapMediaProductMatch(value: unknown): MediaProductMatch | null {
+  const row = toRecord(value);
+
+  if (Object.keys(row).length === 0) return null;
+
+  const candidatesRaw = Array.isArray(row.candidates) ? row.candidates : [];
+
+  return {
+    phase: getStringValue(row.phase),
+    imageSummary: getStringValue(row.image_summary) || getStringValue(row.imageSummary),
+    detectedColors: mapStringArray(row.detected_colors || row.detectedColors),
+    detectedProductTypes: mapStringArray(row.detected_product_types || row.detectedProductTypes),
+    productsSeenCount: getNumberValue(row.products_seen_count) ?? getNumberValue(row.productsSeenCount),
+    candidatesCount: getNumberValue(row.candidates_count) ?? getNumberValue(row.candidatesCount),
+    hasProductMatch: getBooleanValue(row.has_product_match ?? row.hasProductMatch, false),
+    matchedProductId: getStringValue(row.matched_product_id) || getStringValue(row.matchedProductId),
+    matchedProductName: getStringValue(row.matched_product_name) || getStringValue(row.matchedProductName),
+    matchConfidence: getNumberValue(row.match_confidence) ?? getNumberValue(row.matchConfidence),
+    shouldAutoReply: getBooleanValue(row.should_auto_reply ?? row.shouldAutoReply, false),
+    needsOperatorReview: getBooleanValue(row.needs_operator_review ?? row.needsOperatorReview, true),
+    suggestedReply: getStringValue(row.suggested_reply) || getStringValue(row.suggestedReply),
+    candidates: candidatesRaw.map(mapMediaProductMatchCandidate),
+  };
+}
+
+function mapConversationAttachmentAnalysisRow(
+  row: ConversationMessageAttachmentAnalysisRow,
+): ConversationMessageMediaAnalysisItem {
+  const structuredJson = toRecord(row.structured_json);
+  const mediaProductMatch = mapMediaProductMatch(structuredJson.media_product_match);
+
+  return {
+    id: row.id,
+    analysisStatus: row.analysis_status,
+    analysisType: row.analysis_type,
+    mediaType: row.media_type,
+    detectedIntent: row.detected_intent,
+    detectedCaseType: row.detected_case_type,
+    detectedCustomerIntent: row.detected_customer_intent,
+    summaryText: row.summary_text,
+    operatorNoteSuggestion: row.operator_note_suggestion,
+    confidence: getNumberValue(row.confidence),
+    needsOperatorReview: row.needs_operator_review,
+    mediaProductMatch,
+    updatedAt: toIso(row.updated_at),
+  };
 }
 
 function encodeStoragePath(path: string) {
@@ -288,6 +410,34 @@ async function createStorageSignedUrl(bucket: string, storagePath: string | null
   }
 }
 
+async function getLatestAttachmentAnalysisByAttachmentId(
+  attachmentId: string,
+): Promise<ConversationMessageAttachmentAnalysisRow | null> {
+  const rows = await prisma.$queryRaw<ConversationMessageAttachmentAnalysisRow[]>`
+    select
+      aa.id,
+      aa.attachment_id,
+      aa.analysis_status,
+      aa.analysis_type,
+      aa.media_type,
+      aa.detected_intent,
+      aa.detected_case_type,
+      aa.detected_customer_intent,
+      aa.summary_text,
+      aa.operator_note_suggestion,
+      aa.confidence,
+      aa.needs_operator_review,
+      aa.structured_json,
+      aa.updated_at
+    from public.attachment_analysis aa
+    where aa.attachment_id = CAST(${attachmentId} AS uuid)
+    order by aa.updated_at desc nulls last, aa.created_at desc nulls last
+    limit 1
+  `;
+
+  return rows[0] || null;
+}
+
 async function mapConversationAttachmentRow(
   row: ConversationMessageAttachmentRow,
 ): Promise<ConversationMessageMediaItem> {
@@ -295,6 +445,7 @@ async function mapConversationAttachmentRow(
   const storageBucket = getMetaString(meta, "storage_bucket") || DEFAULT_EVIDENCE_BUCKET;
   const storagePath = row.storage_path || getMetaString(meta, "storage_path");
   const signed = await createStorageSignedUrl(storageBucket, storagePath);
+  const analysisRow = await getLatestAttachmentAnalysisByAttachmentId(row.id);
 
   return {
     id: row.id,
@@ -309,6 +460,7 @@ async function mapConversationAttachmentRow(
     signedUrl: signed.signedUrl,
     signedUrlError: signed.signedUrlError,
     createdAt: toIso(row.created_at),
+    analysis: analysisRow ? mapConversationAttachmentAnalysisRow(analysisRow) : null,
   };
 }
 
