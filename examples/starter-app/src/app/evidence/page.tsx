@@ -237,7 +237,7 @@ const needsDownloadLater = item.captureStatus === 'metadata_only' && !item.stora
           <Pill label={caseLinked ? 'Kanıt medyası' : 'Vakasız medya'} tone={caseLinked ? 'warning' : 'neutral'} />
 {archivedEvidence ? <Pill label="Arşiv kanıtı" tone="success" /> : null}
 <Pill label={mapCaptureStatusLabel(item.captureStatus)} tone={toneForStatus(item.captureStatus)} />
-          {hasPreview ? <Pill label="Önizleme var" tone="success" /> : null}
+          {hasImagePreview || hasVideoPreview ? <Pill label="Önizleme var" tone="success" /> : null}
           {item.caseType ? <Pill label={mapCaseTypeLabel(item.caseType)} tone={item.caseType === 'damaged_product' ? 'warning' : 'info'} /> : null}
         </div>
       </div>
