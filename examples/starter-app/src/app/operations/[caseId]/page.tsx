@@ -366,16 +366,10 @@ const hasVideoPreview = Boolean(isVideo && attachment.signedUrl);
     </a>
   </div>
 ) : attachment.storagePath && attachment.signedUrlError ? (
-        <div style={{ marginBottom: 12 }}>
-          <a href={attachment.signedUrl} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: '#111827', fontWeight: 900 }}>
-            Dosyayı aç →
-          </a>
-        </div>
-      ) : attachment.storagePath && attachment.signedUrlError ? (
-        <div style={{ border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b', borderRadius: 12, padding: 10, fontSize: 13, fontWeight: 800, lineHeight: 1.55, marginBottom: 12 }}>
-          Önizleme bağlantısı üretilemedi: {attachment.signedUrlError}
-        </div>
-      ) : null}
+  <div style={{ border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b', borderRadius: 12, padding: 10, fontSize: 13, fontWeight: 800, lineHeight: 1.55, marginBottom: 12 }}>
+    Önizleme bağlantısı üretilemedi: {attachment.signedUrlError}
+  </div>
+) : null}
 
       {attachment.caption ? (
         <div style={{ border: '1px solid #dbeafe', background: '#eff6ff', color: '#1e3a8a', borderRadius: 12, padding: 10, fontSize: 13, fontWeight: 800, lineHeight: 1.55, marginBottom: 12 }}>
