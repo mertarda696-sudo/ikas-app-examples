@@ -67,7 +67,7 @@ type EvidenceMediaResponse = {
 const FILTERS: Array<{ key: EvidenceFilter; label: string }> = [
   { key: 'evidence', label: 'Vaka Bağlı Kanıtlar' },
   { key: 'damaged_product_images', label: 'Hasarlı Ürün Fotoğrafları' },
-  { key: 'previewable', label: 'Önizlemeli Görseller' },
+  { key: 'previewable', label: 'Önizlemeli Medya' },
   { key: 'stored', label: 'Storage’a Alınanlar' },
   { key: 'metadata_only', label: 'Storage Bekleyenler' },
   { key: 'image', label: 'Tüm Fotoğraflar' },
@@ -99,8 +99,12 @@ function isImageItem(item: EvidenceMediaItem) {
   return String(item.kind || '').toLowerCase() === 'image' || String(item.mimeType || '').toLowerCase().startsWith('image/');
 }
 
+function isVideoItem(item: EvidenceMediaItem) {
+  return String(item.kind || '').toLowerCase() === 'video' || String(item.mimeType || '').toLowerCase().startsWith('video/');
+}
+
 function isPreviewableItem(item: EvidenceMediaItem) {
-  return Boolean(isImageItem(item) && item.signedUrl);
+  return Boolean((isImageItem(item) || isVideoItem(item)) && item.signedUrl);
 }
 
 function isCaseLinked(item: EvidenceMediaItem) {
@@ -215,11 +219,12 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 function EvidenceMediaCard({ item, onBackfill, backfillState }: { item: EvidenceMediaItem; onBackfill: (item: EvidenceMediaItem) => void; backfillState?: { loading?: boolean; error?: string | null; success?: string | null } }) {
-  const hasPreview = isPreviewableItem(item);
-  const caseLinked = isCaseLinked(item);
-  const archivedEvidence = isArchivedEvidence(item);
-  const caseHref = item.caseNo || item.operationCaseId ? `/operations/${item.caseNo || item.operationCaseId}` : null;
-  const needsDownloadLater = item.captureStatus === 'metadata_only' && !item.storagePath;
+const hasImagePreview = Boolean(isImageItem(item) && item.signedUrl);
+const hasVideoPreview = Boolean(isVideoItem(item) && item.signedUrl);
+const caseLinked = isCaseLinked(item);
+const archivedEvidence = isArchivedEvidence(item);
+const caseHref = item.caseNo || item.operationCaseId ? `/operations/${item.caseNo || item.operationCaseId}` : null;
+const needsDownloadLater = item.captureStatus === 'metadata_only' && !item.storagePath;
 
   return (
     <article style={{ border: caseLinked ? '1px solid #fed7aa' : '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', padding: 14, display: 'grid', gap: 12 }}>
@@ -243,13 +248,31 @@ function EvidenceMediaCard({ item, onBackfill, backfillState }: { item: Evidence
         <Field label="Müşteri" value={item.customerWaId || '-'} />
       </div>
 
-      {hasPreview ? (
-        <a href={item.signedUrl || '#'} target="_blank" rel="noreferrer" style={{ display: 'block', textDecoration: 'none' }}>
-          <img src={item.signedUrl || ''} alt={item.caption || item.id} style={{ width: '100%', height: 260, objectFit: 'contain', borderRadius: 14, border: '1px solid #e5e7eb', background: '#f9fafb' }} />
-        </a>
-      ) : item.storagePath && item.signedUrl ? (
-        <a href={item.signedUrl} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: '#111827', fontWeight: 900 }}>Dosyayı aç →</a>
-      ) : item.storagePath && item.signedUrlError ? (
+      {hasImagePreview ? (
+  <a href={item.signedUrl || '#'} target="_blank" rel="noreferrer" style={{ display: 'block', textDecoration: 'none' }}>
+    <img
+      src={item.signedUrl || ''}
+      alt={item.caption || item.id}
+      style={{ width: '100%', height: 260, objectFit: 'contain', borderRadius: 14, border: '1px solid #e5e7eb', background: '#f9fafb' }}
+    />
+  </a>
+) : hasVideoPreview ? (
+  <div style={{ display: 'grid', gap: 8 }}>
+    <video
+      src={item.signedUrl || ''}
+      controls
+      preload="metadata"
+      style={{ width: '100%', maxHeight: 320, borderRadius: 14, border: '1px solid #e5e7eb', background: '#111827' }}
+    >
+      Tarayıcınız video oynatmayı desteklemiyor.
+    </video>
+    <a href={item.signedUrl || '#'} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: '#2563eb', fontWeight: 900 }}>
+      Videoyu yeni sekmede aç →
+    </a>
+  </div>
+) : item.storagePath && item.signedUrl ? (
+  <a href={item.signedUrl} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: '#111827', fontWeight: 900 }}>Dosyayı aç →</a>
+) : item.storagePath && item.signedUrlError ? (
         <div style={{ border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b', borderRadius: 12, padding: 10, fontSize: 13, fontWeight: 800 }}>Önizleme bağlantısı üretilemedi: {item.signedUrlError}</div>
       ) : (
         <div style={{ border: '1px dashed #d1d5db', background: '#f9fafb', color: '#6b7280', borderRadius: 12, padding: 12, fontSize: 13, fontWeight: 800 }}>Dosya henüz Storage’a alınmadı; metadata kaydı mevcut.</div>
@@ -399,7 +422,7 @@ export default function EvidencePage() {
             <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
               <MetricCard label="Vaka Bağlı Kanıt" value={localMetrics.realEvidence} helper="Operasyon vakasına bağlanmış medya" tone="success" onClick={() => setActiveFilter('evidence')} />
               <MetricCard label="Hasarlı Ürün Fotoğrafı" value={localMetrics.damagedProductImages} helper="Öncelikli operasyon kanıtları" tone={localMetrics.damagedProductImages > 0 ? 'warning' : 'neutral'} onClick={() => setActiveFilter('damaged_product_images')} />
-              <MetricCard label="Önizlemeli Görsel" value={localMetrics.previewable} helper="Panelde doğrudan görülebilen dosyalar" tone={localMetrics.previewable > 0 ? 'success' : 'neutral'} onClick={() => setActiveFilter('previewable')} />
+              <MetricCard label="Önizlemeli Medya" value={localMetrics.previewable} helper="Panelde doğrudan görülebilen görsel ve videolar" tone={localMetrics.previewable > 0 ? 'success' : 'neutral'} onClick={() => setActiveFilter('previewable')} />
               <MetricCard label="Storage Bekleyen" value={data?.metrics.metadataOnly || 0} helper={(data?.metrics.metadataOnly || 0) > 0 ? 'Yeniden indir aksiyonu adayları' : 'Temiz: Storage bekleyen kayıt yok'} tone={(data?.metrics.metadataOnly || 0) > 0 ? 'warning' : 'success'} onClick={() => setActiveFilter('metadata_only')} />
               <MetricCard label="Vakasız Medya" value={localMetrics.unlinked} helper="Henüz operasyona bağlanmamış medya kayıtları" tone={localMetrics.unlinked > 0 ? 'info' : 'neutral'} onClick={() => setActiveFilter('unlinked')} />
               <MetricCard label="Toplam Medya" value={data?.metrics.total || 0} helper="Tüm attachment kayıtları" tone="info" onClick={() => setActiveFilter('all')} />
