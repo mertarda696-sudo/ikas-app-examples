@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import type {
   CatalogHealthResponse,
   ContactChannelItem,
@@ -410,11 +411,25 @@ async function createStorageSignedUrl(bucket: string, storagePath: string | null
   }
 }
 
-async function getLatestAttachmentAnalysisByAttachmentId(
-  attachmentId: string,
-): Promise<ConversationMessageAttachmentAnalysisRow | null> {
+async function getLatestAttachmentAnalysisByAttachmentIds(
+  attachmentIds: string[],
+): Promise<Map<string, ConversationMessageAttachmentAnalysisRow>> {
+  const uniqueAttachmentIds = Array.from(
+    new Set(
+      attachmentIds
+        .map((id) => String(id || "").trim())
+        .filter(Boolean),
+    ),
+  );
+
+  const analysisByAttachmentId = new Map<string, ConversationMessageAttachmentAnalysisRow>();
+
+  if (uniqueAttachmentIds.length === 0) {
+    return analysisByAttachmentId;
+  }
+
   const rows = await prisma.$queryRaw<ConversationMessageAttachmentAnalysisRow[]>`
-    select
+    select distinct on (aa.attachment_id)
       aa.id,
       aa.attachment_id,
       aa.analysis_status,
@@ -430,22 +445,25 @@ async function getLatestAttachmentAnalysisByAttachmentId(
       aa.structured_json,
       aa.updated_at
     from public.attachment_analysis aa
-    where aa.attachment_id = CAST(${attachmentId} AS uuid)
-    order by aa.updated_at desc nulls last, aa.created_at desc nulls last
-    limit 1
+    where aa.attachment_id::text in (${Prisma.join(uniqueAttachmentIds)})
+    order by aa.attachment_id, aa.updated_at desc nulls last, aa.created_at desc nulls last
   `;
 
-  return rows[0] || null;
+  for (const row of rows) {
+    analysisByAttachmentId.set(row.attachment_id, row);
+  }
+
+  return analysisByAttachmentId;
 }
 
 async function mapConversationAttachmentRow(
   row: ConversationMessageAttachmentRow,
+  analysisRow: ConversationMessageAttachmentAnalysisRow | null,
 ): Promise<ConversationMessageMediaItem> {
   const meta = toMetaObject(row.meta);
   const storageBucket = getMetaString(meta, "storage_bucket") || DEFAULT_EVIDENCE_BUCKET;
   const storagePath = row.storage_path || getMetaString(meta, "storage_path");
   const signed = await createStorageSignedUrl(storageBucket, storagePath);
-  const analysisRow = await getLatestAttachmentAnalysisByAttachmentId(row.id);
 
   return {
     id: row.id,
@@ -812,9 +830,18 @@ export async function getConversationDetailByMerchantId(merchantId: string, conv
       order by a.created_at asc nulls last, a.id asc
     `;
 
-    const mappedAttachments = await Promise.all(
-      attachmentRows.map(mapConversationAttachmentRow),
-    );
+    const analysisByAttachmentId = await getLatestAttachmentAnalysisByAttachmentIds(
+  attachmentRows.map((row) => row.id),
+);
+
+const mappedAttachments = await Promise.all(
+  attachmentRows.map((row) =>
+    mapConversationAttachmentRow(
+      row,
+      analysisByAttachmentId.get(row.id) || null,
+    ),
+  ),
+);
 
     const attachmentsByMessageId = new Map<string, ConversationMessageMediaItem[]>();
 
