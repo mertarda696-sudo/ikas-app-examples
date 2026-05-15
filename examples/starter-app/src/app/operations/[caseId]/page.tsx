@@ -306,9 +306,11 @@ function ActionButton({ label, tone, disabled, onClick }: { label: string; tone:
 }
 
 function AttachmentCard({ attachment, index }: { attachment: OperationCaseAttachment; index: number }) {
-  const storageValue = attachment.storagePath || 'metadata_only / dosya henüz indirilmedi';
-  const isImage = String(attachment.kind || '').toLowerCase() === 'image' || String(attachment.mimeType || '').toLowerCase().startsWith('image/');
-  const hasPreview = Boolean(isImage && attachment.signedUrl);
+const storageValue = attachment.storagePath || 'metadata_only / dosya henüz indirilmedi';
+const isImage = String(attachment.kind || '').toLowerCase() === 'image' || String(attachment.mimeType || '').toLowerCase().startsWith('image/');
+const isVideo = String(attachment.kind || '').toLowerCase() === 'video' || String(attachment.mimeType || '').toLowerCase().startsWith('video/');
+const hasImagePreview = Boolean(isImage && attachment.signedUrl);
+const hasVideoPreview = Boolean(isVideo && attachment.signedUrl);
 
   return (
     <article style={{ border: '1px solid #e5e7eb', borderRadius: 16, background: '#f9fafb', padding: 14 }}>
@@ -327,20 +329,43 @@ function AttachmentCard({ attachment, index }: { attachment: OperationCaseAttach
         </div>
       </div>
 
-      {hasPreview ? (
-        <div style={{ marginBottom: 12 }}>
-          <a href={attachment.signedUrl || '#'} target="_blank" rel="noreferrer" style={{ display: 'block', textDecoration: 'none' }}>
-            <img
-              src={attachment.signedUrl || ''}
-              alt={attachment.caption || `Medya kaydı ${index + 1}`}
-              style={{ width: '100%', maxHeight: 360, objectFit: 'contain', borderRadius: 14, border: '1px solid #e5e7eb', background: '#ffffff' }}
-            />
-          </a>
-          <div style={{ marginTop: 8, color: '#6b7280', fontSize: 12, fontWeight: 800 }}>
-            Görsel özel Storage bucket’tan geçici imzalı bağlantıyla gösteriliyor.
-          </div>
-        </div>
-      ) : attachment.storagePath && attachment.signedUrl ? (
+      {hasImagePreview ? (
+  <div style={{ marginBottom: 12 }}>
+    <a href={attachment.signedUrl || '#'} target="_blank" rel="noreferrer" style={{ display: 'block', textDecoration: 'none' }}>
+      <img
+        src={attachment.signedUrl || ''}
+        alt={attachment.caption || `Medya kaydı ${index + 1}`}
+        style={{ width: '100%', maxHeight: 360, objectFit: 'contain', borderRadius: 14, border: '1px solid #e5e7eb', background: '#ffffff' }}
+      />
+    </a>
+    <div style={{ marginTop: 8, color: '#6b7280', fontSize: 12, fontWeight: 800 }}>
+      Görsel özel Storage bucket’tan geçici imzalı bağlantıyla gösteriliyor.
+    </div>
+  </div>
+) : hasVideoPreview ? (
+  <div style={{ marginBottom: 12, display: 'grid', gap: 8 }}>
+    <video
+      src={attachment.signedUrl || ''}
+      controls
+      preload="metadata"
+      style={{ width: '100%', maxHeight: 360, borderRadius: 14, border: '1px solid #e5e7eb', background: '#111827' }}
+    >
+      Tarayıcınız video oynatmayı desteklemiyor.
+    </video>
+    <a href={attachment.signedUrl || '#'} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: '#2563eb', fontWeight: 900 }}>
+      Videoyu yeni sekmede aç →
+    </a>
+    <div style={{ color: '#6b7280', fontSize: 12, fontWeight: 800 }}>
+      Video özel Storage bucket’tan geçici imzalı bağlantıyla gösteriliyor.
+    </div>
+  </div>
+) : attachment.storagePath && attachment.signedUrl ? (
+  <div style={{ marginBottom: 12 }}>
+    <a href={attachment.signedUrl} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: '#111827', fontWeight: 900 }}>
+      Dosyayı aç →
+    </a>
+  </div>
+) : attachment.storagePath && attachment.signedUrlError ? (
         <div style={{ marginBottom: 12 }}>
           <a href={attachment.signedUrl} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: '#111827', fontWeight: 900 }}>
             Dosyayı aç →
