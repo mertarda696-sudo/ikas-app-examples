@@ -802,33 +802,60 @@ export async function getConversationDetailByMerchantId(merchantId: string, conv
     if (!header) return { ok: false, fetchedAt: new Date().toISOString(), tenant, conversation: null, error: "Conversation not found" };
 
     const messageRows = await prisma.$queryRaw<ConversationMessageRow[]>`
-      select m.id, m.direction, coalesce(m.sender_type, case when m.direction = 'in' then 'customer' else 'ai' end) as sender_type, m.msg_type, m.text_body, m.created_at, m.raw
-      from public.messages m
-      where m.conversation_id = CAST(${conversationId} AS uuid)
-      order by m.created_at asc nulls last, m.id asc
-      limit 300
-    `;
+  with latest_messages as (
+    select
+      m.id,
+      m.direction,
+      coalesce(
+        m.sender_type,
+        case when m.direction = 'in' then 'customer' else 'ai' end
+      ) as sender_type,
+      m.msg_type,
+      m.text_body,
+      m.created_at,
+      m.raw
+    from public.messages m
+    where m.conversation_id = CAST(${conversationId} AS uuid)
+    order by m.created_at desc nulls last, m.id desc
+    limit 300
+  )
+  select
+    id,
+    direction,
+    sender_type,
+    msg_type,
+    text_body,
+    created_at,
+    raw
+  from latest_messages
+  order by created_at asc nulls last, id asc
+`;
 
         const attachmentRows = await prisma.$queryRaw<ConversationMessageAttachmentRow[]>`
-      select
-        a.id,
-        a.message_id,
-        a.kind,
-        a.mime_type,
-        a.file_name,
-        a.storage_path,
-        a.size_bytes,
-        a.meta,
-        a.created_at
-      from public.attachments a
-      where a.tenant_id = CAST(${tenant.tenantId} AS uuid)
-        and a.message_id in (
-          select m.id
-          from public.messages m
-          where m.conversation_id = CAST(${conversationId} AS uuid)
-        )
-      order by a.created_at asc nulls last, a.id asc
-    `;
+  with latest_message_ids as (
+    select m.id
+    from public.messages m
+    where m.conversation_id = CAST(${conversationId} AS uuid)
+    order by m.created_at desc nulls last, m.id desc
+    limit 300
+  )
+  select
+    a.id,
+    a.message_id,
+    a.kind,
+    a.mime_type,
+    a.file_name,
+    a.storage_path,
+    a.size_bytes,
+    a.meta,
+    a.created_at
+  from public.attachments a
+  where a.tenant_id = CAST(${tenant.tenantId} AS uuid)
+    and a.message_id in (
+      select id from latest_message_ids
+    )
+  order by a.created_at asc nulls last, a.id asc
+`;
 
     const analysisByAttachmentId = await getLatestAttachmentAnalysisByAttachmentIds(
   attachmentRows.map((row) => row.id),
