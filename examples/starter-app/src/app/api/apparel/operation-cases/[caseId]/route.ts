@@ -106,6 +106,40 @@ function getMetaString(meta: Record<string, unknown>, key: string): string | nul
   return text || null;
 }
 
+function getEvidenceLinkSourceLabel(source: string | null) {
+  if (source === "ai_media_understanding") return "AI ile OP’ye bağlandı";
+  if (source === "manual_backfill_after_ai_evidence_error") return "Manuel backfill ile düzeltildi";
+  if (source === "force_evidence_case") return "Caption/kanıt sinyaliyle OP’ye bağlandı";
+  if (source === "saas_process_media_capture") return "İlk medya yakalama";
+  return null;
+}
+
+function buildAttachmentDisplayTitle(params: {
+  kind: string | null;
+  caption: string | null;
+  caseType: string | null;
+  aiEvidenceSummary: string | null;
+}) {
+  if (params.caption) return params.caption;
+
+  const kind = String(params.kind || "").toLowerCase();
+  const isVideo = kind === "video";
+  const isImage = kind === "image";
+
+  if (params.caseType === "damaged_product") {
+    if (isVideo) return "Hasarlı ürün videosu";
+    if (isImage) return "Hasarlı ürün fotoğrafı";
+    return "Hasarlı ürün kanıtı";
+  }
+
+  if (params.aiEvidenceSummary) return params.aiEvidenceSummary;
+
+  if (isVideo) return "Video mesajı alındı";
+  if (isImage) return "Görsel mesaj alındı";
+
+  return "Medya mesajı alındı";
+}
+
 function encodeStoragePath(path: string) {
   return path
     .split("/")
@@ -177,10 +211,21 @@ function mapSourceChannelLabel(channel: string | null | undefined) {
 }
 
 async function mapAttachmentRow(row: OperationCaseAttachmentRow) {
-  const meta = toMetaObject(row.meta);
+    const meta = toMetaObject(row.meta);
   const storageBucket = getMetaString(meta, "storage_bucket") || DEFAULT_EVIDENCE_BUCKET;
   const storagePath = row.storage_path || getMetaString(meta, "storage_path");
   const signed = await createStorageSignedUrl(storageBucket, storagePath);
+
+  const caption = getMetaString(meta, "caption");
+  const caseType = getMetaString(meta, "case_type");
+  const evidenceLinkSource = getMetaString(meta, "evidence_link_source");
+  const aiEvidenceSummary = getMetaString(meta, "ai_evidence_summary");
+  const displayTitle = buildAttachmentDisplayTitle({
+    kind: row.kind,
+    caption,
+    caseType,
+    aiEvidenceSummary,
+  });
 
   return {
     id: row.id,
@@ -194,14 +239,18 @@ async function mapAttachmentRow(row: OperationCaseAttachmentRow) {
     whatsappMediaId: getMetaString(meta, "whatsapp_media_id"),
     mediaSha256: getMetaString(meta, "media_sha256"),
     externalMessageId: getMetaString(meta, "external_message_id"),
-    caption: getMetaString(meta, "caption"),
+    caption,
     customerWaId: getMetaString(meta, "customer_wa_id"),
     linkedOrderId: getMetaString(meta, "linked_order_id"),
     caseNo: getMetaString(meta, "case_no"),
-    caseType: getMetaString(meta, "case_type"),
+    caseType,
     captureStatus: getMetaString(meta, "capture_status"),
     signedUrl: signed.signedUrl,
     signedUrlError: signed.signedUrlError,
+    evidenceLinkSource,
+    evidenceLinkSourceLabel: getEvidenceLinkSourceLabel(evidenceLinkSource),
+    aiEvidenceSummary,
+    displayTitle,
     createdAt: toIso(row.created_at),
   };
 }
