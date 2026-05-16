@@ -27,6 +27,11 @@ type EvidenceAttachmentRow = {
   evidence_summary: string | null;
   linked_order_id: string | null;
   customer_wa_id: string | null;
+  analysis_detected_intent: string | null;
+  analysis_detected_case_type: string | null;
+  analysis_detected_customer_intent: string | null;
+  analysis_summary_text: string | null;
+  analysis_structured_json: unknown;
   conversation_id: string | null;
 };
 
@@ -57,11 +62,118 @@ function toMetaObject(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function getMetaString(meta: Record<string, unknown>, key: string): string | null {
-  const value = meta[key];
+function getRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
+function getStringFromRecord(record: Record<string, unknown>, key: string): string | null {
+  const value = record[key];
   if (value === null || value === undefined) return null;
   const text = String(value).trim();
   return text || null;
+}
+
+function getEvidenceLinkSourceLabel(source: string | null) {
+  if (source === "ai_media_understanding") return "AI ile OP’ye bağlandı";
+  if (source === "manual_backfill_after_ai_evidence_error") return "Manuel backfill ile düzeltildi";
+  if (source === "force_evidence_case") return "Caption/kanıt sinyaliyle OP’ye bağlandı";
+  if (source === "saas_process_media_capture") return "İlk medya yakalama";
+  return null;
+}
+
+function getMediaProductMatch(structuredJson: unknown): Record<string, unknown> {
+  const structured = getRecord(structuredJson);
+  const direct = getRecord(structured.media_product_match);
+  if (Object.keys(direct).length > 0) return direct;
+
+  const nested = getRecord(getRecord(structured.image_understanding).media_product_match);
+  if (Object.keys(nested).length > 0) return nested;
+
+  return {};
+}
+
+function inferMediaPurpose(params: {
+  isLinked: boolean;
+  kind: string | null;
+  detectedIntent: string | null;
+  detectedCaseType: string | null;
+  mediaProductMatch: Record<string, unknown>;
+}) {
+  if (params.isLinked) return "case_evidence";
+
+  const detectedIntent = String(params.detectedIntent || "").toLowerCase();
+  const detectedCaseType = String(params.detectedCaseType || "").toLowerCase();
+  const matchedProductName = getStringFromRecord(params.mediaProductMatch, "matched_product_name");
+  const hasProductMatch =
+    params.mediaProductMatch.has_product_match === true ||
+    Boolean(matchedProductName);
+
+  if (detectedIntent.includes("product_question") && hasProductMatch) {
+    return "product_match_media";
+  }
+
+  if (detectedIntent.includes("product_question")) {
+    return "ambiguous_product_media";
+  }
+
+  if (
+    detectedIntent.includes("evidence") ||
+    detectedIntent.includes("damaged") ||
+    detectedCaseType === "damaged_product"
+  ) {
+    return "evidence_candidate";
+  }
+
+  return "general_media";
+}
+
+function getMediaPurposeLabel(purpose: string | null) {
+  if (purpose === "case_evidence") return "Vaka kanıtı";
+  if (purpose === "product_match_media") return "Ürün medyası";
+  if (purpose === "ambiguous_product_media") return "Belirsiz ürün medyası";
+  if (purpose === "evidence_candidate") return "Kanıt adayı";
+  return "Genel medya";
+}
+
+function buildDisplayTitle(params: {
+  kind: string | null;
+  caption: string | null;
+  caseType: string | null;
+  mediaPurpose: string;
+  matchedProductName: string | null;
+  summaryText: string | null;
+}) {
+  if (params.caption) return params.caption;
+
+  const kind = String(params.kind || "").toLowerCase();
+  const isVideo = kind === "video";
+  const isImage = kind === "image";
+
+  if (params.caseType === "damaged_product") {
+    if (isVideo) return "Hasarlı ürün videosu";
+    if (isImage) return "Hasarlı ürün fotoğrafı";
+    return "Hasarlı ürün kanıtı";
+  }
+
+  if (params.mediaPurpose === "product_match_media") {
+    return params.matchedProductName
+      ? `Ürün medyası: ${params.matchedProductName}`
+      : "Ürün medyası";
+  }
+
+  if (params.mediaPurpose === "ambiguous_product_media") {
+    if (isVideo) return "Belirsiz ürün videosu";
+    if (isImage) return "Belirsiz ürün görseli";
+    return "Belirsiz ürün medyası";
+  }
+
+  if (params.summaryText) return params.summaryText;
+
+  if (isVideo) return "Video mesajı alındı";
+  if (isImage) return "Görsel mesaj alındı";
+
+  return "Medya mesajı alındı";
 }
 
 function encodeStoragePath(path: string) {
@@ -123,10 +235,33 @@ async function createStorageSignedUrl(bucket: string, storagePath: string | null
 }
 
 async function mapEvidenceRow(row: EvidenceAttachmentRow) {
-  const meta = toMetaObject(row.meta);
+    const meta = toMetaObject(row.meta);
   const storageBucket = getMetaString(meta, "storage_bucket") || DEFAULT_EVIDENCE_BUCKET;
   const storagePath = row.storage_path || getMetaString(meta, "storage_path");
   const signed = await createStorageSignedUrl(storageBucket, storagePath);
+
+  const caseNo = row.case_no || getMetaString(meta, "case_no");
+  const operationCaseId = row.operation_case_id || getMetaString(meta, "operation_case_id");
+  const caseType = row.case_type || getMetaString(meta, "case_type");
+  const caption = getMetaString(meta, "caption");
+  const evidenceLinkSource = getMetaString(meta, "evidence_link_source");
+  const mediaProductMatch = getMediaProductMatch(row.analysis_structured_json);
+  const matchedProductName = getStringFromRecord(mediaProductMatch, "matched_product_name");
+  const mediaPurpose = inferMediaPurpose({
+    isLinked: Boolean(caseNo || operationCaseId),
+    kind: row.kind,
+    detectedIntent: row.analysis_detected_intent,
+    detectedCaseType: row.analysis_detected_case_type,
+    mediaProductMatch,
+  });
+  const displayTitle = buildDisplayTitle({
+    kind: row.kind,
+    caption,
+    caseType,
+    mediaPurpose,
+    matchedProductName,
+    summaryText: row.analysis_summary_text,
+  });
 
   return {
     id: row.id,
@@ -140,12 +275,12 @@ async function mapEvidenceRow(row: EvidenceAttachmentRow) {
     whatsappMediaId: getMetaString(meta, "whatsapp_media_id"),
     mediaSha256: getMetaString(meta, "media_sha256"),
     externalMessageId: getMetaString(meta, "external_message_id"),
-    caption: getMetaString(meta, "caption"),
+    caption,
     customerWaId: row.customer_wa_id || getMetaString(meta, "customer_wa_id"),
     linkedOrderId: row.linked_order_id || getMetaString(meta, "linked_order_id"),
-    caseNo: row.case_no || getMetaString(meta, "case_no"),
-    caseType: row.case_type || getMetaString(meta, "case_type"),
-    operationCaseId: row.operation_case_id || getMetaString(meta, "operation_case_id"),
+    caseNo,
+    caseType,
+    operationCaseId,
     caseTitle: row.case_title,
     caseStatus: row.case_status,
     casePriority: row.case_priority,
@@ -155,6 +290,14 @@ async function mapEvidenceRow(row: EvidenceAttachmentRow) {
     captureStatus: getMetaString(meta, "capture_status"),
     signedUrl: signed.signedUrl,
     signedUrlError: signed.signedUrlError,
+    evidenceLinkSource,
+    evidenceLinkSourceLabel: getEvidenceLinkSourceLabel(evidenceLinkSource),
+    mediaPurpose,
+    mediaPurposeLabel: getMediaPurposeLabel(mediaPurpose),
+    displayTitle,
+    analysisDetectedIntent: row.analysis_detected_intent,
+    analysisDetectedCaseType: row.analysis_detected_case_type,
+    matchedProductName,
     createdAt: toIso(row.created_at),
   };
 }
@@ -215,14 +358,31 @@ export async function GET(request: NextRequest) {
           oc.evidence_summary,
           coalesce(oc.linked_order_id, a.meta->>'linked_order_id') as linked_order_id,
           coalesce(oc.customer_wa_id, a.meta->>'customer_wa_id') as customer_wa_id,
-          coalesce(oc.conversation_id::text, a.meta->>'conversation_id') as conversation_id
+          coalesce(oc.conversation_id::text, a.meta->>'conversation_id') as conversation_id,
+          aa.detected_intent as analysis_detected_intent,
+          aa.detected_case_type as analysis_detected_case_type,
+          aa.detected_customer_intent as analysis_detected_customer_intent,
+          aa.summary_text as analysis_summary_text,
+          aa.structured_json as analysis_structured_json
         from public.attachments a
-        left join public.operation_cases oc
+                left join public.operation_cases oc
           on oc.tenant_id = a.tenant_id
          and (
            oc.id::text = a.meta->>'operation_case_id'
            or (a.meta->>'case_no' is not null and oc.case_no = a.meta->>'case_no')
          )
+        left join lateral (
+          select
+            aa.detected_intent,
+            aa.detected_case_type,
+            aa.detected_customer_intent,
+            aa.summary_text,
+            aa.structured_json
+          from public.attachment_analysis aa
+          where aa.attachment_id = a.id
+          order by aa.updated_at desc nulls last, aa.created_at desc nulls last
+          limit 1
+        ) aa on true
         where a.tenant_id = CAST(${tenant.tenantId} AS uuid)
         order by a.created_at desc nulls last
         limit 100
