@@ -100,14 +100,53 @@ function getMediaProductMatch(structuredJson: unknown): Record<string, unknown> 
   return {};
 }
 
+function getDocumentUnderstanding(structuredJson: unknown): Record<string, unknown> {
+  const structured = getRecord(structuredJson);
+
+  const direct = getRecord(structured.document_understanding);
+  if (Object.keys(direct).length > 0) return direct;
+
+  const nested = getRecord(getRecord(structured.document).document_understanding);
+  if (Object.keys(nested).length > 0) return nested;
+
+  return {};
+}
+
+function getDocumentTypeLabel(documentUnderstanding: Record<string, unknown>): string | null {
+  const explicitLabel = getStringFromRecord(documentUnderstanding, "document_type_label");
+  const documentType = getStringFromRecord(documentUnderstanding, "document_type");
+
+  if (explicitLabel) {
+    // Panel dilini daha gerçekçi tutuyoruz.
+    if (documentType === "damaged_product_document") return "Hasar / tutanak belgesi";
+    return explicitLabel;
+  }
+
+  if (documentType === "general_document") return "Genel belge";
+  if (documentType === "invoice_document") return "Fatura / e-fatura";
+  if (documentType === "payment_proof") return "Dekont / ödeme kanıtı";
+  if (documentType === "shipping_label") return "Kargo etiketi / takip belgesi";
+  if (documentType === "damaged_product_document") return "Hasar / tutanak belgesi";
+  if (documentType === "return_exchange_document") return "İade / değişim belgesi";
+
+  return null;
+}
+
 function inferMediaPurpose(params: {
   isLinked: boolean;
   kind: string | null;
   detectedIntent: string | null;
   detectedCaseType: string | null;
   mediaProductMatch: Record<string, unknown>;
+  documentTypeLabel: string | null;
 }) {
   if (params.isLinked) return "case_evidence";
+
+  const kind = String(params.kind || "").toLowerCase();
+
+  if ((kind === "document" || kind === "file") && params.documentTypeLabel) {
+    return "document_media";
+  }
 
   const detectedIntent = String(params.detectedIntent || "").toLowerCase();
   const detectedCaseType = String(params.detectedCaseType || "").toLowerCase();
@@ -139,6 +178,7 @@ function getMediaPurposeLabel(purpose: string | null) {
   if (purpose === "case_evidence") return "Vaka kanıtı";
   if (purpose === "product_match_media") return "Ürün medyası";
   if (purpose === "ambiguous_product_media") return "Belirsiz ürün medyası";
+  if (purpose === "document_media") return "Belge medyası";
   if (purpose === "evidence_candidate") return "Kanıt adayı";
   return "Genel medya";
 }
@@ -250,17 +290,29 @@ async function mapEvidenceRow(row: EvidenceAttachmentRow) {
   const caseNo = row.case_no || getMetaString(meta, "case_no");
   const operationCaseId = row.operation_case_id || getMetaString(meta, "operation_case_id");
   const caseType = row.case_type || getMetaString(meta, "case_type");
-  const caption = getMetaString(meta, "caption");
+    const caption = getMetaString(meta, "caption");
   const evidenceLinkSource = getMetaString(meta, "evidence_link_source");
   const mediaProductMatch = getMediaProductMatch(row.analysis_structured_json);
   const matchedProductName = getStringFromRecord(mediaProductMatch, "matched_product_name");
+
+  const documentUnderstanding = getDocumentUnderstanding(row.analysis_structured_json);
+  const documentType = getStringFromRecord(documentUnderstanding, "document_type");
+  const documentTypeLabel = getDocumentTypeLabel(documentUnderstanding);
+
   const mediaPurpose = inferMediaPurpose({
     isLinked: Boolean(caseNo || operationCaseId),
     kind: row.kind,
     detectedIntent: row.analysis_detected_intent,
     detectedCaseType: row.analysis_detected_case_type,
     mediaProductMatch,
+    documentTypeLabel,
   });
+
+  const mediaPurposeLabel =
+    mediaPurpose === "document_media"
+      ? documentTypeLabel || getMediaPurposeLabel(mediaPurpose)
+      : getMediaPurposeLabel(mediaPurpose);
+
   const displayTitle = buildDisplayTitle({
     kind: row.kind,
     caption,
@@ -300,7 +352,9 @@ async function mapEvidenceRow(row: EvidenceAttachmentRow) {
     evidenceLinkSource,
     evidenceLinkSourceLabel: getEvidenceLinkSourceLabel(evidenceLinkSource),
     mediaPurpose,
-    mediaPurposeLabel: getMediaPurposeLabel(mediaPurpose),
+    mediaPurposeLabel,
+    documentType,
+    documentTypeLabel,
     displayTitle,
     analysisDetectedIntent: row.analysis_detected_intent,
     analysisDetectedCaseType: row.analysis_detected_case_type,
