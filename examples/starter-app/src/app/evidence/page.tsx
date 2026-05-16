@@ -16,7 +16,10 @@ type EvidenceFilter =
   | 'damaged_product_images'
   | 'damaged_product'
   | 'payment_proof'
-  | 'unlinked';
+  | 'unlinked'
+  | 'product_media'
+  | 'ambiguous_product_media'
+  | 'general_unlinked';
 
 type EvidenceMediaItem = {
   id: string;
@@ -43,6 +46,14 @@ type EvidenceMediaItem = {
   evidenceSummary: string | null;
   conversationId: string | null;
   captureStatus: string | null;
+  evidenceLinkSource?: string | null;
+  evidenceLinkSourceLabel?: string | null;
+  mediaPurpose?: string | null;
+  mediaPurposeLabel?: string | null;
+  displayTitle?: string | null;
+  analysisDetectedIntent?: string | null;
+  analysisDetectedCaseType?: string | null;
+  matchedProductName?: string | null;
   signedUrl?: string | null;
   signedUrlError?: string | null;
   createdAt: string | null;
@@ -74,6 +85,9 @@ const FILTERS: Array<{ key: EvidenceFilter; label: string }> = [
   { key: 'damaged_product', label: 'Hasarlı Ürün Vakaları' },
   { key: 'payment_proof', label: 'Ödeme / Dekont' },
   { key: 'unlinked', label: 'Vakasız Medya' },
+  { key: 'product_media', label: 'Ürün Medyası' },
+  { key: 'ambiguous_product_media', label: 'Belirsiz Ürün Medyası' },
+  { key: 'general_unlinked', label: 'Genel Vakasız Medya' },
   { key: 'all', label: 'Tüm Medya Kayıtları' },
 ];
 
@@ -109,6 +123,26 @@ function isPreviewableItem(item: EvidenceMediaItem) {
 
 function isCaseLinked(item: EvidenceMediaItem) {
   return Boolean(item.caseNo || item.operationCaseId);
+}
+
+function isProductMedia(item: EvidenceMediaItem) {
+  return item.mediaPurpose === 'product_match_media';
+}
+
+function isAmbiguousProductMedia(item: EvidenceMediaItem) {
+  return item.mediaPurpose === 'ambiguous_product_media';
+}
+
+function isGeneralUnlinkedMedia(item: EvidenceMediaItem) {
+  return !isCaseLinked(item) && (item.mediaPurpose === 'general_media' || !item.mediaPurpose);
+}
+
+function mediaPurposeTone(purpose: string | null | undefined): 'neutral' | 'success' | 'warning' | 'info' | 'danger' {
+  if (purpose === 'case_evidence') return 'warning';
+  if (purpose === 'product_match_media') return 'success';
+  if (purpose === 'ambiguous_product_media') return 'info';
+  if (purpose === 'evidence_candidate') return 'warning';
+  return 'neutral';
 }
 
 function isArchivedEvidence(item: EvidenceMediaItem) {
@@ -229,14 +263,21 @@ const needsDownloadLater = item.captureStatus === 'metadata_only' && !item.stora
   return (
     <article style={{ border: caseLinked ? '1px solid #fed7aa' : '1px solid #e5e7eb', borderRadius: 18, background: '#ffffff', padding: 14, display: 'grid', gap: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-        <div>
+                <div>
           <div style={{ fontSize: 17, fontWeight: 900, color: '#111827' }}>{mapAttachmentKindLabel(item.kind)}</div>
           <div style={{ color: '#6b7280', fontSize: 12, marginTop: 3 }}>{item.mimeType || 'MIME yok'} · {formatDate(item.createdAt)}</div>
+          {item.displayTitle ? (
+            <div style={{ marginTop: 8, color: '#111827', fontSize: 14, fontWeight: 900, lineHeight: 1.45 }}>
+              {item.displayTitle}
+            </div>
+          ) : null}
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <Pill label={caseLinked ? 'Kanıt medyası' : 'Vakasız medya'} tone={caseLinked ? 'warning' : 'neutral'} />
-{archivedEvidence ? <Pill label="Arşiv kanıtı" tone="success" /> : null}
-<Pill label={mapCaptureStatusLabel(item.captureStatus)} tone={toneForStatus(item.captureStatus)} />
+                    <Pill label={caseLinked ? 'Kanıt medyası' : 'Vakasız medya'} tone={caseLinked ? 'warning' : 'neutral'} />
+          {item.mediaPurposeLabel ? <Pill label={item.mediaPurposeLabel} tone={mediaPurposeTone(item.mediaPurpose)} /> : null}
+          {item.evidenceLinkSourceLabel ? <Pill label={item.evidenceLinkSourceLabel} tone="info" /> : null}
+          {archivedEvidence ? <Pill label="Arşiv kanıtı" tone="success" /> : null}
+          <Pill label={mapCaptureStatusLabel(item.captureStatus)} tone={toneForStatus(item.captureStatus)} />
           {hasImagePreview || hasVideoPreview ? <Pill label="Önizleme var" tone="success" /> : null}
           {item.caseType ? <Pill label={mapCaseTypeLabel(item.caseType)} tone={item.caseType === 'damaged_product' ? 'warning' : 'info'} /> : null}
         </div>
@@ -289,7 +330,15 @@ const needsDownloadLater = item.captureStatus === 'metadata_only' && !item.stora
         </div>
       ) : null}
 
-      {item.caption ? <div style={{ border: '1px solid #dbeafe', background: '#eff6ff', color: '#1e3a8a', borderRadius: 12, padding: 10, fontSize: 13, fontWeight: 800, lineHeight: 1.55 }}>{item.caption}</div> : null}
+      {item.caption ? (
+        <div style={{ border: '1px solid #dbeafe', background: '#eff6ff', color: '#1e3a8a', borderRadius: 12, padding: 10, fontSize: 13, fontWeight: 800, lineHeight: 1.55 }}>
+          {item.caption}
+        </div>
+      ) : item.displayTitle ? (
+        <div style={{ border: '1px solid #f3f4f6', background: '#f9fafb', color: '#374151', borderRadius: 12, padding: 10, fontSize: 13, fontWeight: 800, lineHeight: 1.55 }}>
+          {item.displayTitle}
+        </div>
+      ) : null}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
         <Field label="Vaka" value={item.caseNo || '-'} />
@@ -368,12 +417,32 @@ export default function EvidencePage() {
                     ? isImageItem(item)
                     : activeFilter === 'damaged_product_images'
                       ? item.caseType === 'damaged_product' && isImageItem(item)
-                      : activeFilter === 'unlinked'
+                       : activeFilter === 'unlinked'
                         ? !isCaseLinked(item)
-                        : item.caseType === activeFilter;
+                        : activeFilter === 'product_media'
+                          ? isProductMedia(item)
+                          : activeFilter === 'ambiguous_product_media'
+                            ? isAmbiguousProductMedia(item)
+                            : activeFilter === 'general_unlinked'
+                              ? isGeneralUnlinkedMedia(item)
+                              : item.caseType === activeFilter;
       if (!matchesFilter) return false;
       if (!needle) return true;
-      const haystack = [item.caption, item.caseNo, item.caseType, item.caseTitle, item.customerWaId, item.linkedOrderId, item.whatsappMediaId, item.messageId, item.externalMessageId].filter(Boolean).join(' ').toLowerCase();
+      const haystack = [
+  item.caption,
+  item.displayTitle,
+  item.mediaPurposeLabel,
+  item.evidenceLinkSourceLabel,
+  item.matchedProductName,
+  item.caseNo,
+  item.caseType,
+  item.caseTitle,
+  item.customerWaId,
+  item.linkedOrderId,
+  item.whatsappMediaId,
+  item.messageId,
+  item.externalMessageId,
+].filter(Boolean).join(' ').toLowerCase();
       return haystack.includes(needle);
     });
   }, [activeFilter, items, query]);
