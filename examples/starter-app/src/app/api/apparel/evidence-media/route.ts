@@ -62,6 +62,13 @@ function toMetaObject(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function getMetaString(meta: Record<string, unknown>, key: string): string | null {
+  const value = meta[key];
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  return text || null;
+}
+
 function getRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return value as Record<string, unknown>;
