@@ -34,6 +34,10 @@ type OperationCaseAttachment = {
   caseNo: string | null;
   caseType: string | null;
   captureStatus: string | null;
+  evidenceLinkSource?: string | null;
+  evidenceLinkSourceLabel?: string | null;
+  aiEvidenceSummary?: string | null;
+  displayTitle?: string | null;
   signedUrl?: string | null;
   signedUrlError?: string | null;
   createdAt: string | null;
@@ -176,7 +180,7 @@ function mapCaptureStatusLabel(status: string | null | undefined) {
 
   if (normalized === 'metadata_only') return 'Metadata kaydedildi';
   if (normalized === 'downloaded') return 'Dosya indirildi';
-  if (normalized === 'stored') return 'Storage’a yüklendi';
+  if (normalized === 'stored') return 'Dosya kaydedildi';
   if (normalized === 'failed') return 'İşleme hatası';
 
   return status || 'Durum bilinmiyor';
@@ -315,16 +319,22 @@ const hasVideoPreview = Boolean(isVideo && attachment.signedUrl);
   return (
     <article style={{ border: '1px solid #e5e7eb', borderRadius: 16, background: '#f9fafb', padding: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 12 }}>
-        <div>
+                <div>
           <div style={{ color: '#111827', fontSize: 15, fontWeight: 900 }}>
             {mapAttachmentKindLabel(attachment.kind)} #{index + 1}
           </div>
           <div style={{ color: '#6b7280', fontSize: 12, marginTop: 3 }}>
             {attachment.mimeType || 'MIME bilgisi yok'} · {formatDate(attachment.createdAt)}
           </div>
+          {attachment.displayTitle ? (
+            <div style={{ marginTop: 8, color: '#111827', fontSize: 14, fontWeight: 900, lineHeight: 1.45 }}>
+              {attachment.displayTitle}
+            </div>
+          ) : null}
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <Badge label={mapAttachmentKindLabel(attachment.kind)} tone="neutral" />
+                    <Badge label={mapAttachmentKindLabel(attachment.kind)} tone="neutral" />
+          {attachment.evidenceLinkSourceLabel ? <Badge label={attachment.evidenceLinkSourceLabel} tone="info" /> : null}
           <Badge label={mapCaptureStatusLabel(attachment.captureStatus)} tone={captureStatusTone(attachment.captureStatus)} />
         </div>
       </div>
@@ -371,9 +381,13 @@ const hasVideoPreview = Boolean(isVideo && attachment.signedUrl);
   </div>
 ) : null}
 
-      {attachment.caption ? (
+            {attachment.caption ? (
         <div style={{ border: '1px solid #dbeafe', background: '#eff6ff', color: '#1e3a8a', borderRadius: 12, padding: 10, fontSize: 13, fontWeight: 800, lineHeight: 1.55, marginBottom: 12 }}>
           Caption: {attachment.caption}
+        </div>
+      ) : attachment.displayTitle ? (
+        <div style={{ border: '1px solid #f3f4f6', background: '#ffffff', color: '#374151', borderRadius: 12, padding: 10, fontSize: 13, fontWeight: 800, lineHeight: 1.55, marginBottom: 12 }}>
+          {attachment.displayTitle}
         </div>
       ) : null}
 
