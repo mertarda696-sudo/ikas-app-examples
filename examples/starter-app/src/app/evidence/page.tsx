@@ -54,6 +54,8 @@ type EvidenceMediaItem = {
   analysisDetectedIntent?: string | null;
   analysisDetectedCaseType?: string | null;
   matchedProductName?: string | null;
+  documentType?: string | null;
+  documentTypeLabel?: string | null;
   signedUrl?: string | null;
   signedUrlError?: string | null;
   createdAt: string | null;
@@ -141,6 +143,7 @@ function mediaPurposeTone(purpose: string | null | undefined): 'neutral' | 'succ
   if (purpose === 'case_evidence') return 'warning';
   if (purpose === 'product_match_media') return 'success';
   if (purpose === 'ambiguous_product_media') return 'info';
+  if (purpose === 'document_media') return 'info';
   if (purpose === 'evidence_candidate') return 'warning';
   return 'neutral';
 }
