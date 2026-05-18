@@ -42,6 +42,21 @@ type MessageLinkRow = {
   message_from_address: string | null;
   message_to_address: string | null;
   message_created_at: Date | string | null;
+  analysis_id: string | null;
+  analysis_type: string | null;
+  analysis_status: string | null;
+  analysis_link_type: string | null;
+  analysis_detected_intent: string | null;
+  analysis_detected_customer_intent: string | null;
+  analysis_summary_text: string | null;
+  analysis_confidence: number | string | null;
+  analysis_needs_operator_review: boolean | null;
+  analysis_safety_status: string | null;
+  analysis_safety_reason: string | null;
+  analysis_model_provider: string | null;
+  analysis_model_name: string | null;
+  analysis_created_at: Date | string | null;
+  analysis_updated_at: Date | string | null;
 };
 
 type MetricsRow = {
@@ -115,6 +130,14 @@ function mapClassificationStatusLabel(status: string | null | undefined) {
   return status || "Durum bilinmiyor";
 }
 
+function mapAnalysisStatusLabel(status: string | null | undefined) {
+  if (status === "completed") return "Analiz tamamlandı";
+  if (status === "pending") return "Analiz bekliyor";
+  if (status === "failed") return "Analiz hatası";
+  if (status === "skipped") return "Analiz atlandı";
+  return status || "Analiz yok";
+}
+
 function mapSafetyStatusLabel(status: string | null | undefined) {
   if (status === "unchecked") return "Kontrol edilmedi";
   if (status === "safe") return "Güvenli";
@@ -185,6 +208,28 @@ function mapRow(row: MessageLinkRow) {
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at),
     messageCreatedAt: toIso(row.message_created_at),
+    analysis: row.analysis_id
+      ? {
+          id: row.analysis_id,
+          analysisType: row.analysis_type,
+          analysisStatus: row.analysis_status,
+          analysisStatusLabel: mapAnalysisStatusLabel(row.analysis_status),
+          linkType: row.analysis_link_type,
+          linkTypeLabel: mapLinkTypeLabel(row.analysis_link_type),
+          detectedIntent: row.analysis_detected_intent,
+          detectedCustomerIntent: row.analysis_detected_customer_intent,
+          summaryText: row.analysis_summary_text,
+          confidence: toNullableNumber(row.analysis_confidence),
+          needsOperatorReview: toBoolean(row.analysis_needs_operator_review),
+          safetyStatus: row.analysis_safety_status,
+          safetyStatusLabel: mapSafetyStatusLabel(row.analysis_safety_status),
+          safetyReason: row.analysis_safety_reason,
+          modelProvider: row.analysis_model_provider,
+          modelName: row.analysis_model_name,
+          createdAt: toIso(row.analysis_created_at),
+          updatedAt: toIso(row.analysis_updated_at),
+        }
+      : null,
   };
 }
 
@@ -276,11 +321,50 @@ export async function GET(request: NextRequest) {
           m.text_body as message_text,
           m.from_address as message_from_address,
           m.to_address as message_to_address,
-          m.created_at as message_created_at
+          m.created_at as message_created_at,
+          la.id as analysis_id,
+          la.analysis_type as analysis_type,
+          la.analysis_status as analysis_status,
+          la.link_type as analysis_link_type,
+          la.detected_intent as analysis_detected_intent,
+          la.detected_customer_intent as analysis_detected_customer_intent,
+          la.summary_text as analysis_summary_text,
+          la.confidence as analysis_confidence,
+          la.needs_operator_review as analysis_needs_operator_review,
+          la.safety_status as analysis_safety_status,
+          la.safety_reason as analysis_safety_reason,
+          la.model_provider as analysis_model_provider,
+          la.model_name as analysis_model_name,
+          la.created_at as analysis_created_at,
+          la.updated_at as analysis_updated_at
         from public.message_links ml
-        left join public.messages m
+                left join public.messages m
           on m.id = ml.message_id
          and m.tenant_id = ml.tenant_id
+        left join lateral (
+          select
+            la.id,
+            la.analysis_type,
+            la.analysis_status,
+            la.link_type,
+            la.detected_intent,
+            la.detected_customer_intent,
+            la.summary_text,
+            la.confidence,
+            la.needs_operator_review,
+            la.safety_status,
+            la.safety_reason,
+            la.model_provider,
+            la.model_name,
+            la.created_at,
+            la.updated_at
+          from public.link_analysis la
+          where la.tenant_id = ml.tenant_id
+            and la.message_link_id = ml.id
+            and la.analysis_type = 'classification'
+          order by la.updated_at desc nulls last, la.created_at desc nulls last
+          limit 1
+        ) la on true
         where ml.tenant_id = CAST(${tenant.tenantId} AS uuid)
         order by ml.created_at desc nulls last
         limit 100
