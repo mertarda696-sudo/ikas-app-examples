@@ -57,6 +57,17 @@ type MessageLinkRow = {
   analysis_model_name: string | null;
   analysis_created_at: Date | string | null;
   analysis_updated_at: Date | string | null;
+  product_match_id: string | null;
+  product_match_analysis_status: string | null;
+  product_match_detected_intent: string | null;
+  product_match_detected_customer_intent: string | null;
+  product_match_summary_text: string | null;
+  product_match_confidence: number | string | null;
+  product_match_needs_operator_review: boolean | null;
+  product_match_matched_product_id: string | null;
+  product_match_matched_product_name: string | null;
+  product_match_created_at: Date | string | null;
+  product_match_updated_at: Date | string | null;
 };
 
 type MetricsRow = {
@@ -230,6 +241,22 @@ function mapRow(row: MessageLinkRow) {
           updatedAt: toIso(row.analysis_updated_at),
         }
       : null,
+        productMatch: row.product_match_id
+      ? {
+          id: row.product_match_id,
+          analysisStatus: row.product_match_analysis_status,
+          analysisStatusLabel: mapAnalysisStatusLabel(row.product_match_analysis_status),
+          detectedIntent: row.product_match_detected_intent,
+          detectedCustomerIntent: row.product_match_detected_customer_intent,
+          summaryText: row.product_match_summary_text,
+          confidence: toNullableNumber(row.product_match_confidence),
+          needsOperatorReview: toBoolean(row.product_match_needs_operator_review),
+          matchedProductId: row.product_match_matched_product_id,
+          matchedProductName: row.product_match_matched_product_name,
+          createdAt: toIso(row.product_match_created_at),
+          updatedAt: toIso(row.product_match_updated_at),
+        }
+      : null,
   };
 }
 
@@ -336,7 +363,18 @@ export async function GET(request: NextRequest) {
           la.model_provider as analysis_model_provider,
           la.model_name as analysis_model_name,
           la.created_at as analysis_created_at,
-          la.updated_at as analysis_updated_at
+          la.updated_at as analysis_updated_at,
+          la_pm.id as product_match_id,
+          la_pm.analysis_status as product_match_analysis_status,
+          la_pm.detected_intent as product_match_detected_intent,
+          la_pm.detected_customer_intent as product_match_detected_customer_intent,
+          la_pm.summary_text as product_match_summary_text,
+          la_pm.confidence as product_match_confidence,
+          la_pm.needs_operator_review as product_match_needs_operator_review,
+          la_pm.matched_product_id as product_match_matched_product_id,
+          la_pm.matched_product_name as product_match_matched_product_name,
+          la_pm.created_at as product_match_created_at,
+          la_pm.updated_at as product_match_updated_at
         from public.message_links ml
                 left join public.messages m
           on m.id = ml.message_id
@@ -364,7 +402,27 @@ export async function GET(request: NextRequest) {
             and la.analysis_type = 'classification'
           order by la.updated_at desc nulls last, la.created_at desc nulls last
           limit 1
-        ) la on true
+                ) la on true
+        left join lateral (
+          select
+            la_pm.id,
+            la_pm.analysis_status,
+            la_pm.detected_intent,
+            la_pm.detected_customer_intent,
+            la_pm.summary_text,
+            la_pm.confidence,
+            la_pm.needs_operator_review,
+            la_pm.matched_product_id,
+            la_pm.matched_product_name,
+            la_pm.created_at,
+            la_pm.updated_at
+          from public.link_analysis la_pm
+          where la_pm.tenant_id = ml.tenant_id
+            and la_pm.message_link_id = ml.id
+            and la_pm.analysis_type = 'product_matching'
+          order by la_pm.updated_at desc nulls last, la_pm.created_at desc nulls last
+          limit 1
+        ) la_pm on true
         where ml.tenant_id = CAST(${tenant.tenantId} AS uuid)
         order by ml.created_at desc nulls last
         limit 100
