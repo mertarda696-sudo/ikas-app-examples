@@ -155,10 +155,24 @@ function toneForSafetyStatus(status: string | null | undefined): 'neutral' | 'su
 
 function canOpenExternalLink(item: MessageLinkItem) {
   if (!item.normalizedUrl) return false;
+
   if (item.riskLevel === 'unsafe') return false;
+  if (item.riskLevel === 'review') return false;
+
+  if (item.captureStatus === 'safety_review') return false;
   if (item.safetyStatus === 'unsafe') return false;
+  if (item.safetyStatus === 'review') return false;
+
+  if (item.isShortenedUrl) return false;
   if (item.isPotentiallyUnsafe) return false;
-  if (item.urlHost === 'localhost') return false;
+
+  const host = String(item.urlHost || '').toLowerCase();
+
+  if (host === 'localhost') return false;
+  if (host === '127.0.0.1') return false;
+  if (host.startsWith('10.')) return false;
+  if (host.startsWith('192.168.')) return false;
+
   return true;
 }
 
@@ -267,7 +281,7 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
         {label}
       </div>
       <div style={{ color: '#111827', fontSize: 13, lineHeight: 1.55, minWidth: 0, overflowWrap: 'anywhere' }}>
-        {value || '-'}
+        {value === null || value === undefined || value === '' ? '-' : value}
       </div>
     </div>
   );
