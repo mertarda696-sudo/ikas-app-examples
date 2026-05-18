@@ -37,6 +37,21 @@ type LinkAnalysisItem = {
   updatedAt: string | null;
 };
 
+type ProductMatchItem = {
+  id: string;
+  analysisStatus: string | null;
+  analysisStatusLabel: string;
+  detectedIntent: string | null;
+  detectedCustomerIntent: string | null;
+  summaryText: string | null;
+  confidence: number | null;
+  needsOperatorReview: boolean;
+  matchedProductId: string | null;
+  matchedProductName: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
 type MessageLinkItem = {
   id: string;
   messageId: string | null;
@@ -79,6 +94,7 @@ type MessageLinkItem = {
   updatedAt: string | null;
   messageCreatedAt: string | null;
   analysis: LinkAnalysisItem | null;
+  productMatch: ProductMatchItem | null;
 };
 
 type MessageLinksResponse = {
@@ -212,6 +228,70 @@ function canOpenExternalLink(item: MessageLinkItem) {
   return true;
 }
 
+function getProductMatchView(item: MessageLinkItem) {
+  if (item.linkType !== 'product_link') return null;
+
+  const matchedProductName = item.matchedProductName || item.productMatch?.matchedProductName || null;
+
+  if (matchedProductName) {
+    return {
+      tone: 'success' as const,
+      title: 'Ürün eşleşti',
+      result: matchedProductName,
+      manualCheck: 'Hayır',
+      note: 'Bu müşteri linki katalogdaki ürünle eşleşti.',
+    };
+  }
+
+  if (!item.productMatch) {
+    return {
+      tone: 'warning' as const,
+      title: 'Ürün eşleşmesi bekliyor',
+      result: 'Henüz otomatik eşleştirme sonucu yok.',
+      manualCheck: 'Gerekebilir',
+      note: 'Bu link için ürün eşleştirme işlemi henüz çalışmamış olabilir.',
+    };
+  }
+
+  if (item.productMatch.detectedIntent === 'product_match_no_handle') {
+    return {
+      tone: 'warning' as const,
+      title: 'Ürün eşleşmedi',
+      result: 'Linkten geçerli ürün bilgisi çıkarılamadı.',
+      manualCheck: 'Gerekebilir',
+      note: 'Bu link mağaza ana sayfası, eksik ürün yolu veya test linki olabilir.',
+    };
+  }
+
+  if (item.productMatch.detectedIntent === 'product_match_not_found') {
+    return {
+      tone: 'warning' as const,
+      title: 'Ürün eşleşmedi',
+      result: 'Bu link katalogdaki bir ürünle otomatik eşleşmedi.',
+      manualCheck: 'Gerekebilir',
+      note: 'Ürün katalogda yok, silinmiş veya link yapısı değişmiş olabilir.',
+    };
+  }
+
+  if (item.productMatch.detectedIntent === 'product_match_ambiguous') {
+    return {
+      tone: 'warning' as const,
+      title: 'Manuel kontrol gerekebilir',
+      result: 'Birden fazla ürün adayı bulundu.',
+      manualCheck: 'Evet',
+      note: 'Doğru ürünün operatör tarafından seçilmesi gerekir.',
+    };
+  }
+
+  return {
+    tone: item.productMatch.needsOperatorReview ? 'warning' as const : 'neutral' as const,
+    title: item.productMatch.needsOperatorReview ? 'Manuel kontrol gerekebilir' : 'Ürün eşleşmesi kontrol edildi',
+    result: item.productMatch.summaryText || 'Ürün eşleşme sonucu kaydedildi.',
+    manualCheck: item.productMatch.needsOperatorReview ? 'Evet' : 'Hayır',
+    note: 'Ürün eşleşme sonucu otomatik olarak değerlendirildi.',
+  };
+}
+
 function matchesFilter(item: MessageLinkItem, filter: LinkFilter) {
   if (filter === 'all') return true;
   if (filter === 'product') return item.linkType === 'product_link';
@@ -325,6 +405,7 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 
 function LinkCard({ item }: { item: MessageLinkItem }) {
   const externalAllowed = canOpenExternalLink(item);
+  const productMatchView = getProductMatchView(item);
 
   return (
     <article
@@ -442,10 +523,6 @@ function LinkCard({ item }: { item: MessageLinkItem }) {
         <Field label="Link Index" value={item.linkIndex ?? '-'} />
         <Field label="Sınıflandırma" value={item.classificationStatusLabel} />
         <Field label="Güvenlik Nedeni" value={item.safetyReason || '-'} />
-        <Field label="Analiz Intent" value={item.analysis?.detectedIntent || '-'} />
-        <Field label="Analiz Güveni" value={formatConfidence(item.analysis?.confidence)} />
-        <Field label="Operatör İnceleme" value={item.analysis ? (item.analysis.needsOperatorReview ? 'Evet' : 'Hayır') : '-'} />
-        <Field label="Analiz Modeli" value={item.analysis ? `${item.analysis.modelProvider || '-'} / ${item.analysis.modelName || '-'}` : '-'} />
       </div>
 
       <div
@@ -461,38 +538,25 @@ function LinkCard({ item }: { item: MessageLinkItem }) {
         <Field label="Müşteri Mesajı" value={item.messageText || item.originalText || '-'} />
         <Field label="Orijinal URL" value={item.originalUrl || '-'} />
       </div>
-            {item.analysis ? (
-        <div
-          style={{
-            border: item.analysis.needsOperatorReview ? '1px solid #fde68a' : '1px solid #e5e7eb',
-            borderRadius: 14,
-            background: item.analysis.needsOperatorReview ? '#fffbeb' : '#ffffff',
-            padding: 12,
-            display: 'grid',
-            gap: 8,
-          }}
-        >
-          <Field label="Analiz Özeti" value={item.analysis.summaryText || '-'} />
-          <Field label="Analiz Müşteri Niyeti" value={item.analysis.detectedCustomerIntent || '-'} />
-          <Field label="Analysis ID" value={item.analysis.id} />
-        </div>
-      ) : null}
 
-      {(item.matchedProductName || item.linkedOrderId || item.caseNo) ? (
+            {productMatchView ? (
         <div
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
             gap: 12,
-            border: '1px solid #ecfdf5',
+            border: productMatchView.tone === 'success' ? '1px solid #bbf7d0' : '1px solid #fde68a',
             borderRadius: 14,
-            background: '#f0fdf4',
+            background: productMatchView.tone === 'success' ? '#f0fdf4' : '#fffbeb',
             padding: 12,
           }}
         >
-          <Field label="Eşleşen Ürün" value={item.matchedProductName || '-'} />
-          <Field label="Bağlı Sipariş" value={item.linkedOrderId || '-'} />
-          <Field label="Bağlı Vaka" value={item.caseNo || '-'} />
+          <Field label="Ürün Durumu" value={productMatchView.title} />
+          <Field label="Sonuç" value={productMatchView.result} />
+          <Field label="Manuel Kontrol" value={productMatchView.manualCheck} />
+          <Field label="Not" value={productMatchView.note} />
+          {item.linkedOrderId ? <Field label="Bağlı Sipariş" value={item.linkedOrderId} /> : null}
+          {item.caseNo ? <Field label="Bağlı Vaka" value={item.caseNo} /> : null}
         </div>
       ) : null}
     </article>
