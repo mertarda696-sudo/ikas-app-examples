@@ -39,15 +39,20 @@ const NAV_ITEMS: NavItem[] = [
     hint: 'Vaka merkezi',
   },
   {
-    href: '/evidence',
-    label: 'Kanıtlar',
-    hint: 'Medya ve dekont',
-  },
-  {
-    href: '/system-health',
-    label: 'Sistem Sağlığı',
-    hint: 'Teknik özet',
-  },
+  href: '/evidence',
+  label: 'Kanıtlar',
+  hint: 'Medya ve dekont',
+},
+{
+  href: '/links',
+  label: 'Linkler',
+  hint: 'Müşteri linkleri',
+},
+{
+  href: '/system-health',
+  label: 'Sistem Sağlığı',
+  hint: 'Teknik özet',
+},
   {
     href: '/catalog',
     label: 'Katalog',
