@@ -37,6 +37,27 @@ type LinkAnalysisItem = {
   updatedAt: string | null;
 };
 
+type LinkAnalysisItem = {
+  id: string;
+  analysisType: string | null;
+  analysisStatus: string | null;
+  analysisStatusLabel: string;
+  linkType: string | null;
+  linkTypeLabel: string;
+  detectedIntent: string | null;
+  detectedCustomerIntent: string | null;
+  summaryText: string | null;
+  confidence: number | null;
+  needsOperatorReview: boolean;
+  safetyStatus: string | null;
+  safetyStatusLabel: string;
+  safetyReason: string | null;
+  modelProvider: string | null;
+  modelName: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
 type MessageLinkItem = {
   id: string;
   messageId: string | null;
@@ -77,6 +98,8 @@ type MessageLinkItem = {
   caseNo: string | null;
   createdAt: string | null;
   updatedAt: string | null;
+  messageCreatedAt: string | null;
+  analysis: LinkAnalysisItem | null;
   analysis: LinkAnalysisItem | null;
 };
 
