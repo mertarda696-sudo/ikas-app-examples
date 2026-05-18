@@ -35,6 +35,13 @@ type MessageLinkRow = {
   linked_order_id: string | null;
   operation_case_id: string | null;
   case_no: string | null;
+  review_status: string | null;
+  review_note: string | null;
+  reviewed_at: Date | string | null;
+  reviewed_by: string | null;
+  operator_action_kind: string | null;
+  operator_action_label: string | null;
+  operator_action_note: string | null;
   meta: unknown;
   created_at: Date | string | null;
   updated_at: Date | string | null;
@@ -215,6 +222,17 @@ function mapRow(row: MessageLinkRow) {
     linkedOrderId: row.linked_order_id,
     operationCaseId: row.operation_case_id,
     caseNo: row.case_no,
+    reviewStatus: row.review_status || "open",
+    reviewNote: row.review_note,
+    reviewedAt: toIso(row.reviewed_at),
+    reviewedBy: row.reviewed_by,
+    operatorReview: row.operator_action_kind
+      ? {
+          kind: row.operator_action_kind,
+          label: row.operator_action_label || "Manuel kontrol",
+          note: row.operator_action_note || "Bu link için manuel kontrol gerekebilir.",
+        }
+      : null,
     meta,
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at),
@@ -342,6 +360,13 @@ export async function GET(request: NextRequest) {
           ml.linked_order_id,
           ml.operation_case_id,
           ml.case_no,
+          ml.review_status,
+          ml.review_note,
+          ml.reviewed_at,
+          ml.reviewed_by,
+          lor.operator_action_kind,
+          lor.operator_action_label,
+          lor.operator_action_note,
           ml.meta,
           ml.created_at,
           ml.updated_at,
@@ -422,7 +447,10 @@ export async function GET(request: NextRequest) {
             and la_pm.analysis_type = 'product_matching'
           order by la_pm.updated_at desc nulls last, la_pm.created_at desc nulls last
           limit 1
-        ) la_pm on true
+                ) la_pm on true
+        left join public.link_operator_review_candidates_v1 lor
+          on lor.tenant_id = ml.tenant_id
+         and lor.message_link_id = ml.id
         where ml.tenant_id = CAST(${tenant.tenantId} AS uuid)
         order by ml.created_at desc nulls last
         limit 100
