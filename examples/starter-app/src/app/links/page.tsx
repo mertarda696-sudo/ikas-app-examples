@@ -197,6 +197,7 @@ function canOpenExternalLink(item: MessageLinkItem) {
   if (item.captureStatus === 'safety_review') return false;
   if (item.safetyStatus === 'unsafe') return false;
   if (item.safetyStatus === 'review') return false;
+  if (item.linkType === 'unknown_link' && item.analysis?.needsOperatorReview) return false;
 
   if (item.isShortenedUrl) return false;
   if (item.isPotentiallyUnsafe) return false;
