@@ -52,6 +52,12 @@ type ProductMatchItem = {
   updatedAt: string | null;
 };
 
+type OperatorReviewItem = {
+  kind: string;
+  label: string;
+  note: string;
+};
+
 type MessageLinkItem = {
   id: string;
   messageId: string | null;
@@ -90,6 +96,11 @@ type MessageLinkItem = {
   linkedOrderId: string | null;
   operationCaseId: string | null;
   caseNo: string | null;
+  reviewStatus: string | null;
+  reviewNote: string | null;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  operatorReview: OperatorReviewItem | null;
   createdAt: string | null;
   updatedAt: string | null;
   messageCreatedAt: string | null;
@@ -139,7 +150,7 @@ const FILTERS: Array<{ key: LinkFilter; label: string; helper: string }> = [
   { key: 'product', label: 'Ürün Linkleri', helper: 'Mağaza veya ürün sayfası linkleri.' },
   { key: 'tracking', label: 'Kargo / Takip', helper: 'Takip ve teslimat bağlantıları.' },
   { key: 'social', label: 'Sosyal Medya', helper: 'Instagram ve benzeri sosyal medya linkleri.' },
-  { key: 'review', label: 'İnceleme Gerekli', helper: 'Kısa link veya güvenlik kontrolü gerekenler.' },
+  { key: 'review', label: 'İnceleme Kuyruğu', helper: 'Operatörün kontrol etmesi gereken linkler.' },
   { key: 'unsafe', label: 'Güvensiz', helper: 'Localhost/private/unsafe olarak işaretlenenler.' },
   { key: 'shortened', label: 'Kısaltılmış', helper: 'bit.ly gibi açılmadan bekletilen linkler.' },
   { key: 'tenant_domain', label: 'Tenant Domain', helper: 'Markanın kendi domaini olarak yakalananlar.' },
@@ -202,6 +213,14 @@ function toneForAnalysisStatus(status: string | null | undefined): 'neutral' | '
   if (status === 'failed') return 'danger';
   if (status === 'skipped') return 'neutral';
   return 'neutral';
+}
+
+function toneForOperatorReviewKind(kind: string | null | undefined): 'neutral' | 'success' | 'warning' | 'info' | 'danger' {
+  if (kind === 'security_review') return 'danger';
+  if (kind === 'manual_product_check') return 'warning';
+  if (kind === 'social_media_check') return 'info';
+  if (kind === 'unknown_link_review') return 'warning';
+  return 'warning';
 }
 
 function canOpenExternalLink(item: MessageLinkItem) {
@@ -298,7 +317,9 @@ function matchesFilter(item: MessageLinkItem, filter: LinkFilter) {
   if (filter === 'social') return item.linkType === 'social_media_link';
   if (filter === 'tracking') return item.linkType === 'tracking_link';
   if (filter === 'unknown') return item.linkType === 'unknown_link';
-  if (filter === 'review') return item.captureStatus === 'safety_review' || item.safetyStatus === 'review' || item.riskLevel === 'review';
+  if (filter === 'review') {
+  return Boolean(item.operatorReview) || item.captureStatus === 'safety_review' || item.safetyStatus === 'review' || item.riskLevel === 'review';
+}
   if (filter === 'unsafe') return item.linkType === 'unsafe_link' || item.safetyStatus === 'unsafe' || item.isPotentiallyUnsafe;
   if (filter === 'shortened') return item.isShortenedUrl;
   if (filter === 'tenant_domain') return item.isTenantDomain;
@@ -437,7 +458,9 @@ function LinkCard({ item }: { item: MessageLinkItem }) {
             ) : (
               <Pill label="Analiz yok" tone="neutral" />
             )}
-            {item.analysis?.needsOperatorReview ? <Pill label="Operatör inceleme" tone="warning" /> : null}
+            {item.operatorReview ? (
+  <Pill label={item.operatorReview.label} tone={toneForOperatorReviewKind(item.operatorReview.kind)} />
+) : null}
             {item.isShortenedUrl ? <Pill label="Kısaltılmış link" tone="warning" /> : null}
             {item.isTenantDomain ? <Pill label="Tenant domain" tone="success" /> : null}
             {item.isKnownCommerceDomain ? <Pill label="Ticaret domaini" tone="info" /> : null}
@@ -539,6 +562,24 @@ function LinkCard({ item }: { item: MessageLinkItem }) {
         <Field label="Orijinal URL" value={item.originalUrl || '-'} />
       </div>
 
+      {item.operatorReview && !productMatchView ? (
+  <div
+    style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+      gap: 12,
+      border: '1px solid #fde68a',
+      borderRadius: 14,
+      background: '#fffbeb',
+      padding: 12,
+    }}
+  >
+    <Field label="İnceleme Durumu" value={item.operatorReview.label} />
+    <Field label="Not" value={item.operatorReview.note} />
+    <Field label="İşlem Durumu" value={item.reviewStatus || 'open'} />
+  </div>
+) : null}
+
             {productMatchView ? (
         <div
           style={{
@@ -605,6 +646,17 @@ export default function LinksPage() {
 
   const items = data?.items || [];
   const metrics = data?.metrics || EMPTY_RESPONSE.metrics;
+    const reviewQueueSummary = useMemo(() => {
+    const reviewItems = items.filter((item) => Boolean(item.operatorReview));
+
+    return {
+      total: reviewItems.length,
+      security: reviewItems.filter((item) => item.operatorReview?.kind === 'security_review').length,
+      product: reviewItems.filter((item) => item.operatorReview?.kind === 'manual_product_check').length,
+      social: reviewItems.filter((item) => item.operatorReview?.kind === 'social_media_check').length,
+      unknown: reviewItems.filter((item) => item.operatorReview?.kind === 'unknown_link_review').length,
+    };
+  }, [items]);
 
   const filteredItems = useMemo(() => {
     return items.filter((item) => matchesFilter(item, activeFilter));
@@ -688,10 +740,105 @@ export default function LinksPage() {
         >
           <MetricCard label="Toplam Link" value={metrics.total} helper="Tenant için yakalanan toplam link sayısı." tone="neutral" onClick={() => setActiveFilter('all')} />
           <MetricCard label="Yakalanan" value={metrics.captured} helper="Normal şekilde yakalanan linkler." tone="success" onClick={() => setActiveFilter('all')} />
-          <MetricCard label="İnceleme" value={metrics.safetyReview} helper="Kısa link veya güvenlik incelemesi gerekenler." tone="warning" onClick={() => setActiveFilter('review')} />
+          <MetricCard label="Güvenlik İncelemesi" value={metrics.safetyReview} helper="Kısa link veya güvenlik nedeniyle bekletilenler." tone="warning" onClick={() => setActiveFilter('review')} />
           <MetricCard label="Güvensiz" value={metrics.unsafe} helper="Localhost/private/unsafe olarak işaretlenenler." tone="danger" onClick={() => setActiveFilter('unsafe')} />
           <MetricCard label="Kısaltılmış" value={metrics.shortened} helper="bit.ly gibi açılmadan bekletilen linkler." tone="warning" onClick={() => setActiveFilter('shortened')} />
         </section>
+
+        <section
+  style={{
+    border: '1px solid #fde68a',
+    borderRadius: 18,
+    background: '#fffbeb',
+    padding: 16,
+    marginBottom: 18,
+  }}
+>
+  <div
+    style={{
+      display: 'flex',
+      justifyContent: 'space-between',
+      gap: 12,
+      alignItems: 'flex-start',
+      flexWrap: 'wrap',
+      marginBottom: 12,
+    }}
+  >
+    <div>
+      <div style={{ fontSize: 16, fontWeight: 900, color: '#111827' }}>
+        İnceleme Kuyruğu
+      </div>
+      <div style={{ color: '#6b7280', fontSize: 13, marginTop: 4, lineHeight: 1.6 }}>
+        Operatörün kontrol etmesi gerekebilecek linkler burada özetlenir.
+      </div>
+    </div>
+
+    <button
+      type="button"
+      onClick={() => setActiveFilter('review')}
+      style={{
+        border: '1px solid #92400e',
+        background: activeFilter === 'review' ? '#92400e' : '#ffffff',
+        color: activeFilter === 'review' ? '#ffffff' : '#92400e',
+        borderRadius: 999,
+        padding: '9px 12px',
+        fontSize: 13,
+        fontWeight: 900,
+        cursor: 'pointer',
+      }}
+    >
+      Kuyruğu Gör
+    </button>
+  </div>
+
+  <div
+    style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+      gap: 10,
+    }}
+  >
+    <MetricCard
+      label="Toplam"
+      value={reviewQueueSummary.total}
+      helper="Kontrol bekleyen toplam link."
+      tone="warning"
+      onClick={() => setActiveFilter('review')}
+    />
+
+    <MetricCard
+      label="Güvenlik"
+      value={reviewQueueSummary.security}
+      helper="Şüpheli, kısaltılmış veya güvenli olmayan linkler."
+      tone="danger"
+      onClick={() => setActiveFilter('review')}
+    />
+
+    <MetricCard
+      label="Ürün Kontrolü"
+      value={reviewQueueSummary.product}
+      helper="Ürünle otomatik eşleşmeyen ürün linkleri."
+      tone="warning"
+      onClick={() => setActiveFilter('review')}
+    />
+
+    <MetricCard
+      label="Sosyal Medya"
+      value={reviewQueueSummary.social}
+      helper="Sosyal medya içeriği kontrol gerektiren linkler."
+      tone="info"
+      onClick={() => setActiveFilter('review')}
+    />
+
+    <MetricCard
+      label="Genel Link"
+      value={reviewQueueSummary.unknown}
+      helper="Otomatik sınıfa güvenle alınmayan genel linkler."
+      tone="neutral"
+      onClick={() => setActiveFilter('review')}
+    />
+  </div>
+</section>
 
         <section
           style={{
