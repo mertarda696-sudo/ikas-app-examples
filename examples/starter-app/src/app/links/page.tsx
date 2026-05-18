@@ -16,6 +16,27 @@ type LinkFilter =
   | 'shortened'
   | 'tenant_domain';
 
+type LinkAnalysisItem = {
+  id: string;
+  analysisType: string | null;
+  analysisStatus: string | null;
+  analysisStatusLabel: string;
+  linkType: string | null;
+  linkTypeLabel: string;
+  detectedIntent: string | null;
+  detectedCustomerIntent: string | null;
+  summaryText: string | null;
+  confidence: number | null;
+  needsOperatorReview: boolean;
+  safetyStatus: string | null;
+  safetyStatusLabel: string;
+  safetyReason: string | null;
+  modelProvider: string | null;
+  modelName: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
 type MessageLinkItem = {
   id: string;
   messageId: string | null;
@@ -56,7 +77,7 @@ type MessageLinkItem = {
   caseNo: string | null;
   createdAt: string | null;
   updatedAt: string | null;
-  messageCreatedAt: string | null;
+  analysis: LinkAnalysisItem | null;
 };
 
 type MessageLinksResponse = {
@@ -118,6 +139,11 @@ function formatDate(value: string | null | undefined) {
   }
 }
 
+function formatConfidence(value: number | null | undefined) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '-';
+  return `${Math.round(value * 100)}%`;
+}
+
 function truncateMiddle(value: string | null | undefined, max = 86) {
   const text = String(value || '').trim();
   if (!text) return '-';
@@ -150,6 +176,14 @@ function toneForSafetyStatus(status: string | null | undefined): 'neutral' | 'su
   if (status === 'review') return 'warning';
   if (status === 'unsafe') return 'danger';
   if (status === 'unchecked') return 'neutral';
+  return 'neutral';
+}
+
+function toneForAnalysisStatus(status: string | null | undefined): 'neutral' | 'success' | 'warning' | 'info' | 'danger' {
+  if (status === 'completed') return 'success';
+  if (status === 'pending') return 'warning';
+  if (status === 'failed') return 'danger';
+  if (status === 'skipped') return 'neutral';
   return 'neutral';
 }
 
@@ -315,6 +349,12 @@ function LinkCard({ item }: { item: MessageLinkItem }) {
             <Pill label={item.linkTypeLabel} tone={toneForLinkType(item.linkType)} />
             <Pill label={item.captureStatusLabel} tone={toneForCaptureStatus(item.captureStatus)} />
             <Pill label={item.safetyStatusLabel} tone={toneForSafetyStatus(item.safetyStatus)} />
+                        {item.analysis ? (
+              <Pill label={item.analysis.analysisStatusLabel} tone={toneForAnalysisStatus(item.analysis.analysisStatus)} />
+            ) : (
+              <Pill label="Analiz yok" tone="neutral" />
+            )}
+            {item.analysis?.needsOperatorReview ? <Pill label="Operatör inceleme" tone="warning" /> : null}
             {item.isShortenedUrl ? <Pill label="Kısaltılmış link" tone="warning" /> : null}
             {item.isTenantDomain ? <Pill label="Tenant domain" tone="success" /> : null}
             {item.isKnownCommerceDomain ? <Pill label="Ticaret domaini" tone="info" /> : null}
@@ -400,6 +440,10 @@ function LinkCard({ item }: { item: MessageLinkItem }) {
         <Field label="Link Index" value={item.linkIndex ?? '-'} />
         <Field label="Sınıflandırma" value={item.classificationStatusLabel} />
         <Field label="Güvenlik Nedeni" value={item.safetyReason || '-'} />
+        <Field label="Analiz Intent" value={item.analysis?.detectedIntent || '-'} />
+        <Field label="Analiz Güveni" value={formatConfidence(item.analysis?.confidence)} />
+        <Field label="Operatör İnceleme" value={item.analysis ? (item.analysis.needsOperatorReview ? 'Evet' : 'Hayır') : '-'} />
+        <Field label="Analiz Modeli" value={item.analysis ? `${item.analysis.modelProvider || '-'} / ${item.analysis.modelName || '-'}` : '-'} />
       </div>
 
       <div
@@ -415,6 +459,22 @@ function LinkCard({ item }: { item: MessageLinkItem }) {
         <Field label="Müşteri Mesajı" value={item.messageText || item.originalText || '-'} />
         <Field label="Orijinal URL" value={item.originalUrl || '-'} />
       </div>
+            {item.analysis ? (
+        <div
+          style={{
+            border: item.analysis.needsOperatorReview ? '1px solid #fde68a' : '1px solid #e5e7eb',
+            borderRadius: 14,
+            background: item.analysis.needsOperatorReview ? '#fffbeb' : '#ffffff',
+            padding: 12,
+            display: 'grid',
+            gap: 8,
+          }}
+        >
+          <Field label="Analiz Özeti" value={item.analysis.summaryText || '-'} />
+          <Field label="Analiz Müşteri Niyeti" value={item.analysis.detectedCustomerIntent || '-'} />
+          <Field label="Analysis ID" value={item.analysis.id} />
+        </div>
+      ) : null}
 
       {(item.matchedProductName || item.linkedOrderId || item.caseNo) ? (
         <div
