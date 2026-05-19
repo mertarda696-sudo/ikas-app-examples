@@ -318,7 +318,7 @@ function matchesFilter(item: MessageLinkItem, filter: LinkFilter) {
   if (filter === 'tracking') return item.linkType === 'tracking_link';
   if (filter === 'unknown') return item.linkType === 'unknown_link';
   if (filter === 'review') {
-  return Boolean(item.operatorReview) || item.captureStatus === 'safety_review' || item.safetyStatus === 'review' || item.riskLevel === 'review';
+  return Boolean(item.operatorReview);
 }
   if (filter === 'unsafe') return item.linkType === 'unsafe_link' || item.safetyStatus === 'unsafe' || item.isPotentiallyUnsafe;
   if (filter === 'shortened') return item.isShortenedUrl;
