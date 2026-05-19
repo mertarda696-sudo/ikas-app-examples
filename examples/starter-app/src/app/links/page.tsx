@@ -424,9 +424,22 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function LinkCard({ item }: { item: MessageLinkItem }) {
+function LinkCard({
+  item,
+  onMarkNoActionNeeded,
+  isReviewUpdating,
+}: {
+  item: MessageLinkItem;
+  onMarkNoActionNeeded: (item: MessageLinkItem) => void;
+  isReviewUpdating: boolean;
+}) {
   const externalAllowed = canOpenExternalLink(item);
   const productMatchView = getProductMatchView(item);
+    const canMarkNoActionNeeded =
+    Boolean(item.operatorReview) &&
+    (item.reviewStatus === null ||
+      item.reviewStatus === "open" ||
+      item.reviewStatus === "manual_review_needed");
 
   return (
     <article
@@ -600,6 +613,48 @@ function LinkCard({ item }: { item: MessageLinkItem }) {
           {item.caseNo ? <Field label="Bağlı Vaka" value={item.caseNo} /> : null}
         </div>
       ) : null}
+            {canMarkNoActionNeeded ? (
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            alignItems: "center",
+            flexWrap: "wrap",
+            border: "1px solid #e5e7eb",
+            borderRadius: 14,
+            background: "#ffffff",
+            padding: 12,
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 900, color: "#111827" }}>
+              Operatör Aksiyonu
+            </div>
+            <div style={{ marginTop: 4, color: "#6b7280", fontSize: 13, lineHeight: 1.6 }}>
+              Bu link için işlem gerekmiyorsa kuyruktan çıkarabilirsiniz.
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => onMarkNoActionNeeded(item)}
+            disabled={isReviewUpdating}
+            style={{
+              border: "1px solid #d1d5db",
+              background: isReviewUpdating ? "#f3f4f6" : "#ffffff",
+              color: "#111827",
+              borderRadius: 12,
+              padding: "9px 12px",
+              fontSize: 13,
+              fontWeight: 900,
+              cursor: isReviewUpdating ? "not-allowed" : "pointer",
+            }}
+          >
+            {isReviewUpdating ? "İşaretleniyor..." : "İşlem gerekmez olarak işaretle"}
+          </button>
+        </div>
+      ) : null}
     </article>
   );
 }
@@ -608,6 +663,9 @@ export default function LinksPage() {
   const [data, setData] = useState<MessageLinksResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<LinkFilter>('all');
+  const [reviewUpdatingId, setReviewUpdatingId] = useState<string | null>(null);
+  const [reviewActionError, setReviewActionError] = useState<string | null>(null);
+  const [reviewActionSuccess, setReviewActionSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     const run = async () => {
@@ -661,6 +719,59 @@ export default function LinksPage() {
   const filteredItems = useMemo(() => {
     return items.filter((item) => matchesFilter(item, activeFilter));
   }, [activeFilter, items]);
+
+    const handleMarkNoActionNeeded = async (item: MessageLinkItem) => {
+    try {
+      setReviewActionError(null);
+      setReviewActionSuccess(null);
+      setReviewUpdatingId(item.id);
+
+      const token = await TokenHelpers.getTokenForIframeApp();
+
+      if (!token) {
+        throw new Error("iFrame JWT token alınamadı.");
+      }
+
+      const updateResponse = await fetch(`/api/apparel/message-links/${item.id}/review-status`, {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          Authorization: "JWT " + token,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          reviewStatus: "no_action_needed",
+          reviewNote: "Operatör tarafından işlem gerekmez olarak işaretlendi.",
+        }),
+      });
+
+      const updateRaw = await updateResponse.json();
+
+      if (!updateResponse.ok || !updateRaw?.ok) {
+        throw new Error(updateRaw?.error || "Link inceleme durumu güncellenemedi.");
+      }
+
+      const listResponse = await fetch("/api/apparel/message-links", {
+        cache: "no-store",
+        headers: {
+          Authorization: "JWT " + token,
+        },
+      });
+
+      const listRaw = (await listResponse.json()) as MessageLinksResponse;
+
+      setData(listRaw);
+      setReviewActionSuccess("Link işlem gerekmez olarak işaretlendi.");
+    } catch (error) {
+      setReviewActionError(
+        error instanceof Error
+          ? error.message
+          : "Link inceleme durumu güncellenirken hata oluştu.",
+      );
+    } finally {
+      setReviewUpdatingId(null);
+    }
+  };
 
   return (
     <AppShell>
@@ -727,6 +838,41 @@ export default function LinksPage() {
             <strong>Link kayıtları alınamadı.</strong>
             <br />
             {data.error}
+          </div>
+        ) : null}
+                {reviewActionError ? (
+          <div
+            style={{
+              border: "1px solid #fecaca",
+              borderRadius: 18,
+              background: "#fef2f2",
+              padding: 14,
+              color: "#991b1b",
+              marginBottom: 18,
+              fontSize: 14,
+              fontWeight: 800,
+              lineHeight: 1.6,
+            }}
+          >
+            {reviewActionError}
+          </div>
+        ) : null}
+
+        {reviewActionSuccess ? (
+          <div
+            style={{
+              border: "1px solid #bbf7d0",
+              borderRadius: 18,
+              background: "#f0fdf4",
+              padding: 14,
+              color: "#166534",
+              marginBottom: 18,
+              fontSize: 14,
+              fontWeight: 800,
+              lineHeight: 1.6,
+            }}
+          >
+            {reviewActionSuccess}
           </div>
         ) : null}
 
@@ -884,7 +1030,14 @@ export default function LinksPage() {
 
         <section style={{ display: 'grid', gap: 14 }}>
           {filteredItems.length > 0 ? (
-            filteredItems.map((item) => <LinkCard key={item.id} item={item} />)
+            filteredItems.map((item) => (
+  <LinkCard
+    key={item.id}
+    item={item}
+    onMarkNoActionNeeded={handleMarkNoActionNeeded}
+    isReviewUpdating={reviewUpdatingId === item.id}
+  />
+))
           ) : (
             <div
               style={{
