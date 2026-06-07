@@ -755,7 +755,6 @@ export async function POST(request: NextRequest) {
         const sourceVariantDimensions = uniqueNonEmpty(
           normalizedVariants.map((variant: any) => variant.source_variant_dimension),
         );
-          .filter((variant: { id: string }) => !!variant.id);
 
         return {
           id: item?.id ?? '',
