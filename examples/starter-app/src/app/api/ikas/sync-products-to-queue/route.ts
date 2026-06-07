@@ -82,15 +82,280 @@ function extractColorFromText(...values: Array<string | null | undefined>) {
   return null;
 }
 
+const COLOR_OPTION_ALIASES = ['renk', 'color', 'colour'];
+
+const APPAREL_SIZE_OPTION_ALIASES = [
+  'beden',
+  'size',
+  'talla',
+];
+
+const NUMBER_OPTION_ALIASES = [
+  'numara',
+  'number',
+  'ayakkabi numarasi',
+  'ayakkabı numarası',
+  'ayakkabi numarası',
+  'ayakkabı numarasi',
+  'shoe number',
+  'shoe size',
+];
+
+const EYEWEAR_FRAME_OPTION_ALIASES = [
+  'ekartman',
+  'ekartman ölçüsü',
+  'ekartman olcusu',
+  'frame size',
+  'frame',
+  'lens width',
+  'cam genisligi',
+  'cam genişliği',
+];
+
+const ONE_SIZE_OPTION_ALIASES = [
+  'standart',
+  'tek beden',
+  'one size',
+  'standard',
+];
+
+const FOOTWEAR_HINTS = [
+  'ayakkabi',
+  'ayakkabı',
+  'topuklu',
+  'sandalet',
+  'terlik',
+  'bot',
+  'cizme',
+  'çizme',
+  'sneaker',
+];
+
+const EYEWEAR_HINTS = [
+  'gozluk',
+  'gözlük',
+  'gunes gozlugu',
+  'güneş gözlüğü',
+  'cat eye',
+  'eyewear',
+  'sunglasses',
+];
+
+const NUMERIC_APPAREL_HINTS = [
+  'pantolon',
+  'etek',
+  'elbise',
+  'sort',
+  'şort',
+  'jean',
+  'denim',
+];
+
+function uniqueNonEmpty(values: Array<string | null | undefined>) {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => String(value || '').trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function hasAnyHint(surface: string, hints: string[]) {
+  const normalizedSurface = normalizeText(surface);
+
+  return hints.some((hint) =>
+    normalizedSurface.includes(normalizeText(hint)),
+  );
+}
+
+function isNumericLike(value: string | null | undefined) {
+  return /^\d{1,3}$/.test(String(value || '').trim());
+}
+
+function getVariantOptionRows(variantValues: any[]) {
+  return variantValues
+    .map((value: any) => {
+      const typeName = String(value?.variantTypeName || '').trim();
+      const valueName = String(value?.variantValueName || '').trim();
+
+      return {
+        typeName,
+        normalizedTypeName: normalizeText(typeName),
+        valueName,
+      };
+    })
+    .filter((value) => value.typeName || value.valueName);
+}
+
+function getVariantOptionMatch(
+  variantValues: any[],
+  aliases: string[],
+) {
+  const aliasSet = new Set(aliases.map((alias) => normalizeText(alias)));
+
+  return getVariantOptionRows(variantValues).find((value) =>
+    aliasSet.has(value.normalizedTypeName),
+  ) || null;
+}
+
 function getVariantOptionValue(
   variantValues: any[],
   aliases: string[],
 ) {
-  const match = variantValues.find((value: any) =>
-    aliases.includes(normalizeText(value?.variantTypeName)),
+  return getVariantOptionMatch(variantValues, aliases)?.valueName ?? null;
+}
+
+function resolveVariantSizeOption(input: {
+  variantValues: any[];
+  productName: string | null | undefined;
+  categoryName: string | null | undefined;
+}) {
+  const variantValues = Array.isArray(input.variantValues)
+    ? input.variantValues
+    : [];
+
+  const optionRows = getVariantOptionRows(variantValues);
+
+  const productSurface = [
+    input.productName,
+    input.categoryName,
+  ].filter(Boolean).join(' ');
+
+  const isFootwear = hasAnyHint(productSurface, FOOTWEAR_HINTS);
+  const isEyewear = hasAnyHint(productSurface, EYEWEAR_HINTS);
+  const isNumericApparel = hasAnyHint(productSurface, NUMERIC_APPAREL_HINTS);
+
+  const apparelSizeMatch = getVariantOptionMatch(
+    variantValues,
+    APPAREL_SIZE_OPTION_ALIASES,
   );
 
-  return match?.variantValueName ?? null;
+  const numberMatch = getVariantOptionMatch(
+    variantValues,
+    NUMBER_OPTION_ALIASES,
+  );
+
+  const eyewearFrameMatch = getVariantOptionMatch(
+    variantValues,
+    EYEWEAR_FRAME_OPTION_ALIASES,
+  );
+
+  const oneSizeMatch = getVariantOptionMatch(
+    variantValues,
+    ONE_SIZE_OPTION_ALIASES,
+  );
+
+  const apparelSizeValue = apparelSizeMatch?.valueName || null;
+  const numberValue = numberMatch?.valueName || null;
+  const eyewearFrameValue = eyewearFrameMatch?.valueName || null;
+  const oneSizeValue = oneSizeMatch?.valueName || null;
+
+  if (isEyewear && eyewearFrameValue) {
+    return {
+      size_value: eyewearFrameValue,
+      size_system: 'eyewear_frame',
+      variant_dimension: 'frame_size',
+      size_source_option_name: eyewearFrameMatch?.typeName || null,
+      option_type_names: uniqueNonEmpty(optionRows.map((value) => value.typeName)),
+      option_values: optionRows,
+    };
+  }
+
+  if (
+    isFootwear &&
+    (
+      numberValue ||
+      (apparelSizeValue && isNumericLike(apparelSizeValue))
+    )
+  ) {
+    return {
+      size_value: numberValue || apparelSizeValue,
+      size_system: 'shoe_number',
+      variant_dimension: 'shoe_number',
+      size_source_option_name:
+        numberMatch?.typeName ||
+        apparelSizeMatch?.typeName ||
+        null,
+      option_type_names: uniqueNonEmpty(optionRows.map((value) => value.typeName)),
+      option_values: optionRows,
+    };
+  }
+
+  if (
+    isNumericApparel &&
+    (
+      (apparelSizeValue && isNumericLike(apparelSizeValue)) ||
+      (numberValue && isNumericLike(numberValue))
+    )
+  ) {
+    return {
+      size_value: apparelSizeValue || numberValue,
+      size_system: 'numeric_apparel',
+      variant_dimension: 'apparel_numeric_size',
+      size_source_option_name:
+        apparelSizeMatch?.typeName ||
+        numberMatch?.typeName ||
+        null,
+      option_type_names: uniqueNonEmpty(optionRows.map((value) => value.typeName)),
+      option_values: optionRows,
+    };
+  }
+
+  if (apparelSizeValue) {
+    return {
+      size_value: apparelSizeValue,
+      size_system: isNumericLike(apparelSizeValue) ? 'numeric_apparel' : 'alpha',
+      variant_dimension: isNumericLike(apparelSizeValue)
+        ? 'apparel_numeric_size'
+        : 'apparel_alpha_size',
+      size_source_option_name: apparelSizeMatch?.typeName || null,
+      option_type_names: uniqueNonEmpty(optionRows.map((value) => value.typeName)),
+      option_values: optionRows,
+    };
+  }
+
+  if (numberValue) {
+    return {
+      size_value: numberValue,
+      size_system: isNumericLike(numberValue) ? 'generic_number' : 'number',
+      variant_dimension: 'number',
+      size_source_option_name: numberMatch?.typeName || null,
+      option_type_names: uniqueNonEmpty(optionRows.map((value) => value.typeName)),
+      option_values: optionRows,
+    };
+  }
+
+  if (eyewearFrameValue) {
+    return {
+      size_value: eyewearFrameValue,
+      size_system: 'eyewear_frame',
+      variant_dimension: 'frame_size',
+      size_source_option_name: eyewearFrameMatch?.typeName || null,
+      option_type_names: uniqueNonEmpty(optionRows.map((value) => value.typeName)),
+      option_values: optionRows,
+    };
+  }
+
+  if (oneSizeValue) {
+    return {
+      size_value: oneSizeValue,
+      size_system: 'one_size',
+      variant_dimension: 'standard',
+      size_source_option_name: oneSizeMatch?.typeName || null,
+      option_type_names: uniqueNonEmpty(optionRows.map((value) => value.typeName)),
+      option_values: optionRows,
+    };
+  }
+
+  return {
+    size_value: null,
+    size_system: 'unknown',
+    variant_dimension: null,
+    size_source_option_name: null,
+    option_type_names: uniqueNonEmpty(optionRows.map((value) => value.typeName)),
+    option_values: optionRows,
+  };
 }
 
 async function triggerCatalogImportProcess(input: {
@@ -396,7 +661,7 @@ export async function POST(request: NextRequest) {
 
         const variantsRaw = Array.isArray(item?.variants) ? item.variants : [];
 
-        const normalizedVariants = variantsRaw
+                const normalizedVariants = variantsRaw
           .map((variant: any) => {
             const variantValues = Array.isArray(variant?.variantValues)
               ? variant.variantValues
@@ -412,14 +677,22 @@ export async function POST(request: NextRequest) {
                 .filter(Boolean)
                 .join(' / ') || null;
 
-            const sizeValue = getVariantOptionValue(variantValues, ['beden', 'size']);
+            const sizeMeta = resolveVariantSizeOption({
+              variantValues,
+              productName: item?.name,
+              categoryName: firstCategoryName,
+            });
+
+            const sizeValue = sizeMeta.size_value;
+
             const colorValue =
-              getVariantOptionValue(variantValues, ['renk', 'color']) ||
+              getVariantOptionValue(variantValues, COLOR_OPTION_ALIASES) ||
               extractColorFromText(
                 item?.name,
                 optionSummary,
                 variant?.sku,
               );
+
             const prices = Array.isArray(variant?.prices) ? variant.prices : [];
             const firstPrice = prices[0] || null;
             const sellPrice =
@@ -451,12 +724,37 @@ export async function POST(request: NextRequest) {
               stock_status: stockStatus,
               is_active: productIsActive,
               sell_if_out_of_stock: variant?.sellIfOutOfStock ?? null,
+
+              source_option_summary: optionSummary,
+              source_option_values: sizeMeta.option_values,
+              source_option_type_names: sizeMeta.option_type_names,
+              source_size_system: sizeMeta.size_system,
+              source_variant_dimension: sizeMeta.variant_dimension,
+              source_size_option_name: sizeMeta.size_source_option_name,
+
               stock_preview: stocks.slice(0, 10).map((stock: any) => ({
                 stock_location_id: stock?.stockLocationId ?? null,
                 stock_count: typeof stock?.stockCount === 'number' ? stock.stockCount : null,
               })),
             };
           })
+          .filter((variant: { id: string }) => !!variant.id);
+
+        const sourceOptionTypeNames = uniqueNonEmpty(
+          normalizedVariants.flatMap((variant: any) =>
+            Array.isArray(variant.source_option_type_names)
+              ? variant.source_option_type_names
+              : [],
+          ),
+        );
+
+        const sourceSizeSystems = uniqueNonEmpty(
+          normalizedVariants.map((variant: any) => variant.source_size_system),
+        );
+
+        const sourceVariantDimensions = uniqueNonEmpty(
+          normalizedVariants.map((variant: any) => variant.source_variant_dimension),
+        );
           .filter((variant: { id: string }) => !!variant.id);
 
         return {
@@ -483,6 +781,12 @@ export async function POST(request: NextRequest) {
             source_short_description_present: !!item?.shortDescription,
             source_description_present: !!item?.description,
             source_variant_count: normalizedVariants.length,
+            source_option_type_names: sourceOptionTypeNames,
+            source_size_systems: sourceSizeSystems,
+            source_variant_dimensions: sourceVariantDimensions,
+            source_has_shoe_number_option: sourceSizeSystems.includes('shoe_number'),
+            source_has_eyewear_frame_option: sourceSizeSystems.includes('eyewear_frame'),
+            source_has_numeric_apparel_option: sourceSizeSystems.includes('numeric_apparel'),
             source_variant_price_mode: 'sell_price_only',
             source_variant_stock_mode: 'stocks_sum',
           },
