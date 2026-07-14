@@ -10,7 +10,6 @@ type SourceRow = {
   tenant_id: string;
   source_name: string;
   source_type: string | null;
-  fetch_mode: string | null;
   config_json: Record<string, unknown> | null;
 };
 
@@ -521,14 +520,14 @@ export async function POST(request: NextRequest) {
     tenant_id,
     source_name,
     source_type,
-    fetch_mode,
     config_json
   from public.catalog_sources
   where is_active = true
     and (
-      fetch_mode = ${IKAS_FETCH_MODE}
+      config_json ->> 'fetch_mode' = ${IKAS_FETCH_MODE}
       or config_json ->> 'source_platform' = ${IKAS_SOURCE_PLATFORM}
       or config_json ->> 'platform' = ${IKAS_SOURCE_PLATFORM}
+      or config_json ->> 'source_type' = ${IKAS_SOURCE_PLATFORM}
     )
   order by created_at desc
 `;
