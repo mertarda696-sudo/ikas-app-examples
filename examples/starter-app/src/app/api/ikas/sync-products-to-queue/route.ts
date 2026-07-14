@@ -9,6 +9,9 @@ type SourceRow = {
   id: string;
   tenant_id: string;
   source_name: string;
+  source_type: string | null;
+  fetch_mode: string | null;
+  config_json: Record<string, unknown> | null;
 };
 
 type PayloadItem = {
@@ -24,7 +27,8 @@ type CatalogImportTriggerResult = {
   error: string | null;
 };
 
-const IKAS_SOURCE_NAME = 'MIRELLE IKAS App Catalog';
+const IKAS_SOURCE_PLATFORM = 'ikas';
+const IKAS_FETCH_MODE = 'ikas_app_json';
 const PRODUCT_LIMIT = 50;
 
 function normalizeText(value: string | null | undefined) {
@@ -512,30 +516,92 @@ export async function POST(request: NextRequest) {
     }
 
     const sourceRows = await prisma.$queryRaw<SourceRow[]>`
-      select id, tenant_id, source_name
-      from public.catalog_sources
-      where source_name = ${IKAS_SOURCE_NAME}
-        and is_active = true
-      order by created_at desc
-      limit 1
-    `;
+  select
+    id,
+    tenant_id,
+    source_name,
+    source_type,
+    fetch_mode,
+    config_json
+  from public.catalog_sources
+  where is_active = true
+    and (
+      fetch_mode = ${IKAS_FETCH_MODE}
+      or config_json ->> 'source_platform' = ${IKAS_SOURCE_PLATFORM}
+      or config_json ->> 'platform' = ${IKAS_SOURCE_PLATFORM}
+    )
+  order by created_at desc
+`;
 
-    const source = sourceRows[0];
+const sourceMatches = sourceRows.filter((row) => {
+  const sourceConfig =
+    row.config_json && typeof row.config_json === 'object'
+      ? row.config_json
+      : {};
 
-    if (!source) {
-      return NextResponse.json(
-        {
-          ok: false,
-          fetchedAt: new Date().toISOString(),
-          runId: null,
-          sourceName: IKAS_SOURCE_NAME,
-          queuedCount: 0,
-          queuedExternalProductIds: [],
-          error: 'IKAS catalog source not found',
-        },
-        { status: 404 },
-      );
-    }
+  const configMerchantId =
+    typeof sourceConfig.merchant_id === 'string'
+      ? sourceConfig.merchant_id
+      : null;
+
+  const configAuthorizedAppId =
+    typeof sourceConfig.authorized_app_id === 'string'
+      ? sourceConfig.authorized_app_id
+      : null;
+
+  return (
+    (configMerchantId && configMerchantId === syncMerchantId) ||
+    (configAuthorizedAppId && configAuthorizedAppId === user.authorizedAppId)
+  );
+});
+
+const sourceCandidates = sourceMatches.length ? sourceMatches : sourceRows;
+
+if (!sourceCandidates.length) {
+  return NextResponse.json(
+    {
+      ok: false,
+      fetchedAt: new Date().toISOString(),
+      runId: null,
+      sourceName: null,
+      queuedCount: 0,
+      queuedExternalProductIds: [],
+      error: 'IKAS catalog source not found',
+    },
+    { status: 404 },
+  );
+}
+
+if (sourceCandidates.length > 1) {
+  return NextResponse.json(
+    {
+      ok: false,
+      fetchedAt: new Date().toISOString(),
+      runId: null,
+      sourceName: null,
+      queuedCount: 0,
+      queuedExternalProductIds: [],
+      error: 'IKAS catalog source is ambiguous',
+      matchingSourceCount: sourceCandidates.length,
+    },
+    { status: 409 },
+  );
+}
+
+const source = sourceCandidates[0];
+const sourceConfig =
+  source.config_json && typeof source.config_json === 'object'
+    ? source.config_json
+    : {};
+
+const sourceStoreName =
+  typeof sourceConfig.store_name === 'string'
+    ? sourceConfig.store_name
+    : typeof sourceConfig.store_domain === 'string'
+      ? sourceConfig.store_domain
+      : typeof sourceConfig.domain === 'string'
+        ? sourceConfig.domain
+        : source.source_name;
 
     const query = `
       query SyncProductsToQueueVariantPilot {
@@ -769,7 +835,7 @@ export async function POST(request: NextRequest) {
             source_platform: 'ikas',
             sync_origin: 'ikas_app',
             merchant_id: syncMerchantId,
-            store_name: 'mirellestudio',
+            store_name: sourceStoreName,
             source_deleted: item?.deleted === true,
             source_sales_channels: sourceSalesChannels,
             source_sales_channel_statuses: sourceSalesChannelStatuses,
@@ -861,13 +927,20 @@ export async function POST(request: NextRequest) {
           0,
           'IKAS app queue write variant pilot',
           jsonb_build_object(
-            'trigger', 'ikas_app_queue_variant_pilot',
-            'source_name', ${source.source_name},
-            'merchant_id', ${syncMerchantId},
-            'queued_count', ${payloadItems.length},
-            'product_limit', ${PRODUCT_LIMIT},
-            'passive_product_count', ${passiveProductCount}
-          )
+  'run_type', 'fetch_queue_write',
+  'run_type_contract_version', 'p1_c3_run_type_v1',
+  'source_adapter', 'ikas_sync_products_to_queue',
+  'workflow_phase', 'p1_c4_r1',
+  'source_platform', ${IKAS_SOURCE_PLATFORM},
+  'fetch_mode', ${IKAS_FETCH_MODE},
+  'trigger', 'ikas_app_queue_variant_pilot',
+  'source_name', ${source.source_name},
+  'merchant_id', ${syncMerchantId},
+  'authorized_app_id', ${user.authorizedAppId},
+  'queued_count', ${payloadItems.length},
+  'product_limit', ${PRODUCT_LIMIT},
+  'passive_product_count', ${passiveProductCount}
+)
         )
         returning id
       `;
@@ -881,23 +954,25 @@ export async function POST(request: NextRequest) {
       for (const item of payloadItems) {
         await tx.$executeRaw`
           insert into public.catalog_sync_raw_items (
-            tenant_id,
-            catalog_source_id,
-            catalog_sync_run_id,
-            external_product_id,
-            item_type,
-            processed_status,
-            payload_json
-          )
+  tenant_id,
+  catalog_source_id,
+  catalog_sync_run_id,
+  created_by_sync_run_id,
+  external_product_id,
+  item_type,
+  processed_status,
+  payload_json
+)
           values (
-            CAST(${source.tenant_id} AS uuid),
-            CAST(${source.id} AS uuid),
-            CAST(${runId} AS uuid),
-            ${item.id},
-            'product',
-            'pending',
-            CAST(${JSON.stringify(item)} AS jsonb)
-          )
+  CAST(${source.tenant_id} AS uuid),
+  CAST(${source.id} AS uuid),
+  CAST(${runId} AS uuid),
+  CAST(${runId} AS uuid),
+  ${item.id},
+  'product',
+  'pending',
+  CAST(${JSON.stringify(item)} AS jsonb)
+)
         `;
       }
 
@@ -935,7 +1010,7 @@ export async function POST(request: NextRequest) {
         ok: false,
         fetchedAt: new Date().toISOString(),
         runId: null,
-        sourceName: IKAS_SOURCE_NAME,
+        sourceName: null,
         queuedCount: 0,
         queuedExternalProductIds: [],
         error: error instanceof Error ? error.message : 'Unknown error',
