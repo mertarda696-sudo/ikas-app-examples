@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
-import { JwtHelpers } from '@/helpers/jwt-helpers';
+import { runIkasCatalogSchemaAudit } from '@/lib/catalog/ikas-catalog-schema-audit';
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/session';
 
@@ -32,13 +32,22 @@ async function resolvePreviewAuditIdentity(): Promise<{
   const activeTokenIdentities = await prisma.authToken.findMany({
     where: {
       deleted: false,
+      merchantId: {
+        not: '',
+      },
       authorizedAppId: {
         not: null,
+      },
+      NOT: {
+        authorizedAppId: '',
       },
     },
     select: {
       merchantId: true,
       authorizedAppId: true,
+    },
+    orderBy: {
+      updatedAt: 'desc',
     },
     take: 2,
   });
@@ -68,13 +77,14 @@ async function resolvePreviewAuditIdentity(): Promise<{
   };
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     if (process.env.VERCEL_ENV === 'production') {
       return NextResponse.json(
         {
           ok: false,
           mutationPerformed: false,
+          credentialMutationPerformed: false,
           error: 'Not found',
         },
         { status: 404 },
@@ -88,58 +98,28 @@ export async function GET(request: NextRequest) {
         {
           ok: false,
           mutationPerformed: false,
+          credentialMutationPerformed: false,
           error: 'PREVIEW_IDENTITY_NOT_UNIQUE',
           message:
-            'Preview audit için tek ve aktif bir commerce OAuth identity belirlenemedi. Session veya tek aktif AuthToken gereklidir.',
+            'Preview audit için tek ve aktif bir commerce OAuth identity belirlenemedi.',
         },
         { status: 409 },
       );
     }
 
-    const jwtToken = JwtHelpers.createToken(
-      identity.merchantId,
-      identity.authorizedAppId,
-    );
-
-    const auditUrl = new URL(
-      '/api/ikas/catalog-schema-audit',
-      request.url,
-    );
-
-    const upstream = await fetch(auditUrl, {
-      method: 'GET',
-      cache: 'no-store',
-      headers: {
-        Authorization: 'JWT ' + jwtToken,
-      },
+    const execution = await runIkasCatalogSchemaAudit({
+      merchantId: identity.merchantId,
+      authorizedAppId: identity.authorizedAppId,
     });
 
-    const responseText = await upstream.text();
-
-    let responseBody: Record<string, unknown> | null = null;
-
-    try {
-      responseBody = responseText
-        ? (JSON.parse(responseText) as Record<string, unknown>)
-        : null;
-    } catch {
-      responseBody = null;
-    }
-
-    if (responseBody) {
-      responseBody.previewIdentitySource = identity.source;
-    }
-
-    return new NextResponse(
-      responseBody
-        ? JSON.stringify(responseBody)
-        : responseText,
+    return NextResponse.json(
       {
-        status: upstream.status,
+        ...execution.body,
+        previewIdentitySource: identity.source,
+      },
+      {
+        status: execution.status,
         headers: {
-          'Content-Type':
-            upstream.headers.get('content-type') ||
-            'application/json; charset=utf-8',
           'Cache-Control': 'no-store',
         },
       },
@@ -149,10 +129,11 @@ export async function GET(request: NextRequest) {
       {
         ok: false,
         mutationPerformed: false,
+        credentialMutationPerformed: false,
         error:
           error instanceof Error
             ? error.message
-            : 'Unknown preview audit bridge error',
+            : 'UNKNOWN_PREVIEW_AUDIT_ERROR',
       },
       { status: 500 },
     );
