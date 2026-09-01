@@ -1,17 +1,17 @@
 import { getUserFromRequest } from '@/lib/auth-helpers';
 import { AuthTokenManager } from '@/models/auth-token/manager';
-import { onCheckToken } from '@/helpers/api-helpers';
+import {
+  isIkasTokenRefreshDue,
+  onCheckToken,
+} from '@/helpers/api-helpers';
 import { config } from '@/globals/config';
 import { prisma } from '@/lib/prisma';
+import {
+  CommerceSourceResolutionError,
+  resolveCatalogSourceByCommerceIdentity,
+  type CatalogSourceResolution,
+} from '@/lib/catalog/commerce-source-resolver';
 import { NextRequest, NextResponse } from 'next/server';
-
-type SourceRow = {
-  id: string;
-  tenant_id: string;
-  source_name: string;
-  source_type: string | null;
-  config_json: Record<string, unknown> | null;
-};
 
 type PayloadItem = {
   id: string;
@@ -450,7 +450,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const authToken = await AuthTokenManager.get(user.authorizedAppId);
+        const syncMerchantId = String(user.merchantId ?? '').trim();
+    const syncAuthorizedAppId = String(
+      user.authorizedAppId ?? '',
+    ).trim();
+
+    if (!syncMerchantId || !syncAuthorizedAppId) {
+      return NextResponse.json(
+        {
+          ok: false,
+          fetchedAt: new Date().toISOString(),
+          runId: null,
+          sourceName: null,
+          queuedCount: 0,
+          queuedExternalProductIds: [],
+          error: 'IKAS_IDENTITY_CONTRACT_INCOMPLETE',
+          message:
+            'ikas JWT kimliği merchant_id ve authorized_app_id alanlarının ikisini de içermelidir.',
+        },
+        { status: 400 },
+      );
+    }
+
+    const authToken =
+  await AuthTokenManager.getActiveByIdentity({
+    authorizedAppId: syncAuthorizedAppId,
+    merchantId: syncMerchantId,
+  });
 
     if (!authToken?.accessToken) {
       return NextResponse.json(
@@ -462,20 +488,23 @@ export async function POST(request: NextRequest) {
           queuedCount: 0,
           queuedExternalProductIds: [],
           error: 'Auth token not found',
-          message: 'MIRELLE ikas OAuth token kaydı bulunamadı.',
+          message: 'Aktif ikas OAuth token kaydı bulunamadı.',
         },
         { status: 404 },
       );
     }
 
-    const expireTime = new Date(authToken.expireDate).getTime();
-    const tokenExpired = Number.isFinite(expireTime) && expireTime <= Date.now() + 60 * 1000;
+    const tokenRefreshDue =
+  isIkasTokenRefreshDue(authToken);
 
-    const refreshedTokenResult = await onCheckToken(authToken);
+const refreshedTokenResult =
+  await onCheckToken(authToken);
 
-    const ikasAccessToken =
-      refreshedTokenResult.accessToken ||
-      (!tokenExpired ? authToken.accessToken : null);
+const ikasAccessToken =
+  refreshedTokenResult.accessToken ||
+  (!tokenRefreshDue
+    ? authToken.accessToken
+    : null);
 
     if (!ikasAccessToken) {
       return NextResponse.json(
@@ -488,16 +517,15 @@ export async function POST(request: NextRequest) {
           queuedExternalProductIds: [],
           error: 'IKAS_TOKEN_REFRESH_FAILED',
           message:
-            'ikas OAuth token süresi dolmuş ve refresh edilemedi. Uygulamanın OAuth bağlantısı yenilenmeli.',
+  'ikas OAuth token süresi dolmuş ve refresh edilemedi. Bağlı ikas hesabının yeniden yetkilendirilmesi gerekiyor.',
           tokenMerchantId: authToken.merchantId || null,
-          tokenAuthorizedAppId: authToken.authorizedAppId || null,
+          tokenAuthorizedAppId:
+  authToken.authorizedAppId || syncAuthorizedAppId,
           tokenExpireDate: authToken.expireDate || null,
         },
         { status: 401 },
       );
     }
-
-    const syncMerchantId = user.merchantId;
 
     if (!config.graphApiUrl) {
       return NextResponse.json(
@@ -514,93 +542,65 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const sourceRows = await prisma.$queryRaw<SourceRow[]>`
-  select
-    id,
-    tenant_id,
-    source_name,
-    source_type,
-    config_json
-  from public.catalog_sources
-  where is_active = true
-    and (
-      config_json ->> 'fetch_mode' = ${IKAS_FETCH_MODE}
-      or config_json ->> 'source_platform' = ${IKAS_SOURCE_PLATFORM}
-      or config_json ->> 'platform' = ${IKAS_SOURCE_PLATFORM}
-      or config_json ->> 'source_type' = ${IKAS_SOURCE_PLATFORM}
-    )
-  order by created_at desc
-`;
+        let catalogSource: CatalogSourceResolution;
 
-const sourceMatches = sourceRows.filter((row) => {
-  const sourceConfig =
-    row.config_json && typeof row.config_json === 'object'
-      ? row.config_json
-      : {};
+    try {
+      catalogSource =
+        await resolveCatalogSourceByCommerceIdentity({
+          providerKey: IKAS_SOURCE_PLATFORM,
+          bindingRole: 'catalog_feed',
+          identities: [
+            {
+              identifierType: 'merchant_id',
+              identifierValue: syncMerchantId,
+            },
+            {
+              identifierType: 'authorized_app_id',
+              identifierValue: syncAuthorizedAppId,
+            },
+          ],
+        });
+    } catch (error) {
+      if (error instanceof CommerceSourceResolutionError) {
+        const status =
+          error.code === 'COMMERCE_SOURCE_AMBIGUOUS'
+            ? 409
+            : error.code === 'COMMERCE_SOURCE_NOT_FOUND'
+              ? 404
+              : 400;
 
-  const configMerchantId =
-    typeof sourceConfig.merchant_id === 'string'
-      ? sourceConfig.merchant_id
-      : null;
+        return NextResponse.json(
+          {
+            ok: false,
+            fetchedAt: new Date().toISOString(),
+            runId: null,
+            sourceName: null,
+            queuedCount: 0,
+            queuedExternalProductIds: [],
+            error: error.code,
+            message: error.message,
+          },
+          { status },
+        );
+      }
 
-  const configAuthorizedAppId =
-    typeof sourceConfig.authorized_app_id === 'string'
-      ? sourceConfig.authorized_app_id
-      : null;
+      throw error;
+    }
 
-  return (
-    (configMerchantId && configMerchantId === syncMerchantId) ||
-    (configAuthorizedAppId && configAuthorizedAppId === user.authorizedAppId)
-  );
-});
+    const sourceConfig =
+      catalogSource.sourceConfig &&
+      typeof catalogSource.sourceConfig === 'object'
+        ? catalogSource.sourceConfig
+        : {};
 
-const sourceCandidates = sourceMatches.length ? sourceMatches : sourceRows;
-
-if (!sourceCandidates.length) {
-  return NextResponse.json(
-    {
-      ok: false,
-      fetchedAt: new Date().toISOString(),
-      runId: null,
-      sourceName: null,
-      queuedCount: 0,
-      queuedExternalProductIds: [],
-      error: 'IKAS catalog source not found',
-    },
-    { status: 404 },
-  );
-}
-
-if (sourceCandidates.length > 1) {
-  return NextResponse.json(
-    {
-      ok: false,
-      fetchedAt: new Date().toISOString(),
-      runId: null,
-      sourceName: null,
-      queuedCount: 0,
-      queuedExternalProductIds: [],
-      error: 'IKAS catalog source is ambiguous',
-      matchingSourceCount: sourceCandidates.length,
-    },
-    { status: 409 },
-  );
-}
-
-const source = sourceCandidates[0];
-const sourceConfig =
-  source.config_json && typeof source.config_json === 'object'
-    ? source.config_json
-    : {};
-
-const sourceStoreName =
-  typeof sourceConfig.store_name === 'string'
-    ? sourceConfig.store_name
-    : typeof sourceConfig.store_domain === 'string'
-      ? sourceConfig.store_domain
-      : typeof sourceConfig.domain === 'string'
-        ? sourceConfig.domain
-        : source.source_name;
+    const sourceStoreName =
+      typeof sourceConfig.store_name === 'string'
+        ? sourceConfig.store_name
+        : typeof sourceConfig.store_domain === 'string'
+          ? sourceConfig.store_domain
+          : typeof sourceConfig.domain === 'string'
+            ? sourceConfig.domain
+            : catalogSource.sourceName;
 
     const query = `
       query SyncProductsToQueueVariantPilot {
@@ -679,17 +679,18 @@ const sourceStoreName =
           ok: false,
           fetchedAt: new Date().toISOString(),
           runId: null,
-          sourceName: source.source_name,
+          sourceName: catalogSource.sourceName,
           queuedCount: 0,
           queuedExternalProductIds: [],
           error: isLoginRequired
             ? 'IKAS_LOGIN_REQUIRED_TOKEN_EXPIRED'
             : upstreamError,
           message: isLoginRequired
-            ? 'ikas access token geçersiz veya süresi dolmuş. MIRELLE uygulamasının ikas içinde yeniden yetkilendirilmesi gerekiyor.'
+            ? 'ikas access token geçersiz veya süresi dolmuş. Bağlı ikas hesabının yeniden yetkilendirilmesi gerekiyor.'
             : undefined,
           tokenMerchantId: authToken.merchantId || syncMerchantId,
-          tokenAuthorizedAppId: authToken.authorizedAppId || user.authorizedAppId,
+          tokenAuthorizedAppId:
+  authToken.authorizedAppId || syncAuthorizedAppId,
           tokenExpireDate: authToken.expireDate || null,
           tokenMode: 'oauth_refresh',
           upstreamError,
@@ -877,7 +878,7 @@ const sourceStoreName =
         ok: true,
         fetchedAt: new Date().toISOString(),
         runId: null,
-        sourceName: source.source_name,
+        sourceName: catalogSource.sourceName,
         queuedCount: 0,
         queuedExternalProductIds: [],
         importTrigger: {
@@ -913,8 +914,8 @@ const sourceStoreName =
           metadata
         )
         values (
-          CAST(${source.tenant_id} AS uuid),
-          CAST(${source.id} AS uuid),
+  CAST(${catalogSource.tenantId} AS uuid),
+  CAST(${catalogSource.catalogSourceId} AS uuid),
           'manual',
           'success',
           now(),
@@ -933,9 +934,22 @@ const sourceStoreName =
   'source_platform', ${IKAS_SOURCE_PLATFORM},
   'fetch_mode', ${IKAS_FETCH_MODE},
   'trigger', 'ikas_app_queue_variant_pilot',
-  'source_name', ${source.source_name},
-  'merchant_id', ${syncMerchantId},
-  'authorized_app_id', ${user.authorizedAppId},
+  'source_name', ${catalogSource.sourceName},
+
+'external_commerce_account_id',
+${catalogSource.externalCommerceAccountId},
+
+'catalog_source_account_binding_id',
+${catalogSource.bindingId},
+
+'binding_role',
+${catalogSource.bindingRole},
+
+'identity_resolution_contract_version',
+'commerce_source_resolver_v1',
+
+'merchant_id', ${syncMerchantId},
+'authorized_app_id', ${syncAuthorizedAppId},
   'queued_count', ${payloadItems.length},
   'product_limit', ${PRODUCT_LIMIT},
   'passive_product_count', ${passiveProductCount}
@@ -963,8 +977,8 @@ const sourceStoreName =
   payload_json
 )
           values (
-  CAST(${source.tenant_id} AS uuid),
-  CAST(${source.id} AS uuid),
+  CAST(${catalogSource.tenantId} AS uuid),
+  CAST(${catalogSource.catalogSourceId} AS uuid),
   CAST(${runId} AS uuid),
   CAST(${runId} AS uuid),
   ${item.id},
@@ -985,19 +999,19 @@ const sourceStoreName =
     );
 
     const importTrigger = await triggerCatalogImportProcess({
-      runId: transactionResult.runId,
-      tenantId: source.tenant_id,
-      catalogSourceId: source.id,
-      sourceName: source.source_name,
-      queuedCount: payloadItems.length,
-      queuedExternalProductIds,
-    });
+  runId: transactionResult.runId,
+  tenantId: catalogSource.tenantId,
+  catalogSourceId: catalogSource.catalogSourceId,
+  sourceName: catalogSource.sourceName,
+  queuedCount: payloadItems.length,
+  queuedExternalProductIds,
+});
 
     return NextResponse.json({
       ok: true,
       fetchedAt: new Date().toISOString(),
       runId: transactionResult.runId,
-      sourceName: source.source_name,
+      sourceName: catalogSource.sourceName,
       queuedCount: payloadItems.length,
       queuedExternalProductIds,
       importTrigger,
