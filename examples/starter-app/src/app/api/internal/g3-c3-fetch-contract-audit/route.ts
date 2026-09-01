@@ -28,6 +28,10 @@ function authorityLines(definition: string) {
     .filter(Boolean);
 }
 
+function bigintCount(value: bigint | null | undefined): number {
+  return value == null ? 0 : Number(value);
+}
+
 export async function GET() {
   try {
     if (process.env.VERCEL_ENV === 'production') {
@@ -98,16 +102,20 @@ export async function GET() {
         consumerCount: consumers.length,
         consumers,
         contractBaseline: {
-          totalContractCount: Number(baseline?.total_contract_count ?? 0n),
-          nonQaContractCount: Number(baseline?.non_qa_contract_count ?? 0n),
-          providerSequenceCount: Number(
-            baseline?.provider_sequence_count ?? 0n,
+          totalContractCount: bigintCount(
+            baseline?.total_contract_count,
           ),
-          providerObservedAtCount: Number(
-            baseline?.provider_observed_at_count ?? 0n,
+          nonQaContractCount: bigintCount(
+            baseline?.non_qa_contract_count,
           ),
-          fetchCompletedAtCount: Number(
-            baseline?.fetch_completed_at_count ?? 0n,
+          providerSequenceCount: bigintCount(
+            baseline?.provider_sequence_count,
+          ),
+          providerObservedAtCount: bigintCount(
+            baseline?.provider_observed_at_count,
+          ),
+          fetchCompletedAtCount: bigintCount(
+            baseline?.fetch_completed_at_count,
           ),
         },
       },
