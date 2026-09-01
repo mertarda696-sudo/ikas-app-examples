@@ -11,6 +11,11 @@ import {
   resolveCatalogSourceByCommerceIdentity,
   type CatalogSourceResolution,
 } from '@/lib/catalog/commerce-source-resolver';
+import {
+  fetchIkasProductTraversal,
+  IkasProductTraversalError,
+} from '@/lib/catalog/ikas-product-traversal';
+import { PaginatedTraversalError } from '@/lib/catalog/paginated-traversal';
 import { NextRequest, NextResponse } from 'next/server';
 
 type PayloadItem = {
@@ -28,7 +33,6 @@ type CatalogImportTriggerResult = {
 
 const IKAS_SOURCE_PLATFORM = 'ikas';
 const IKAS_FETCH_MODE = 'ikas_app_json';
-const PRODUCT_LIMIT = 50;
 
 function normalizeText(value: string | null | undefined) {
   return String(value || '')
@@ -450,7 +454,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-        const syncMerchantId = String(user.merchantId ?? '').trim();
+    const syncMerchantId = String(user.merchantId ?? '').trim();
     const syncAuthorizedAppId = String(
       user.authorizedAppId ?? '',
     ).trim();
@@ -472,11 +476,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const authToken =
-  await AuthTokenManager.getActiveByIdentity({
-    authorizedAppId: syncAuthorizedAppId,
-    merchantId: syncMerchantId,
-  });
+    const authToken = await AuthTokenManager.getActiveByIdentity({
+      authorizedAppId: syncAuthorizedAppId,
+      merchantId: syncMerchantId,
+    });
 
     if (!authToken?.accessToken) {
       return NextResponse.json(
@@ -494,17 +497,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const tokenRefreshDue =
-  isIkasTokenRefreshDue(authToken);
+    const tokenRefreshDue = isIkasTokenRefreshDue(authToken);
+    const refreshedTokenResult = await onCheckToken(authToken);
 
-const refreshedTokenResult =
-  await onCheckToken(authToken);
-
-const ikasAccessToken =
-  refreshedTokenResult.accessToken ||
-  (!tokenRefreshDue
-    ? authToken.accessToken
-    : null);
+    const ikasAccessToken =
+      refreshedTokenResult.accessToken ||
+      (!tokenRefreshDue ? authToken.accessToken : null);
 
     if (!ikasAccessToken) {
       return NextResponse.json(
@@ -517,10 +515,10 @@ const ikasAccessToken =
           queuedExternalProductIds: [],
           error: 'IKAS_TOKEN_REFRESH_FAILED',
           message:
-  'ikas OAuth token süresi dolmuş ve refresh edilemedi. Bağlı ikas hesabının yeniden yetkilendirilmesi gerekiyor.',
+            'ikas OAuth token süresi dolmuş ve refresh edilemedi. Bağlı ikas hesabının yeniden yetkilendirilmesi gerekiyor.',
           tokenMerchantId: authToken.merchantId || null,
           tokenAuthorizedAppId:
-  authToken.authorizedAppId || syncAuthorizedAppId,
+            authToken.authorizedAppId || syncAuthorizedAppId,
           tokenExpireDate: authToken.expireDate || null,
         },
         { status: 401 },
@@ -542,24 +540,23 @@ const ikasAccessToken =
       );
     }
 
-        let catalogSource: CatalogSourceResolution;
+    let catalogSource: CatalogSourceResolution;
 
     try {
-      catalogSource =
-        await resolveCatalogSourceByCommerceIdentity({
-          providerKey: IKAS_SOURCE_PLATFORM,
-          bindingRole: 'catalog_feed',
-          identities: [
-            {
-              identifierType: 'merchant_id',
-              identifierValue: syncMerchantId,
-            },
-            {
-              identifierType: 'authorized_app_id',
-              identifierValue: syncAuthorizedAppId,
-            },
-          ],
-        });
+      catalogSource = await resolveCatalogSourceByCommerceIdentity({
+        providerKey: IKAS_SOURCE_PLATFORM,
+        bindingRole: 'catalog_feed',
+        identities: [
+          {
+            identifierType: 'merchant_id',
+            identifierValue: syncMerchantId,
+          },
+          {
+            identifierType: 'authorized_app_id',
+            identifierValue: syncAuthorizedAppId,
+          },
+        ],
+      });
     } catch (error) {
       if (error instanceof CommerceSourceResolutionError) {
         const status =
@@ -602,106 +599,44 @@ const ikasAccessToken =
             ? sourceConfig.domain
             : catalogSource.sourceName;
 
-    const query = `
-      query SyncProductsToQueueVariantPilot {
-        listProduct {
-          data {
-            id
-            name
-            createdAt
-            shortDescription
-            description
-            totalStock
-            deleted
-            salesChannels {
-              id
-              status
-            }
-            brand {
-              name
-            }
-            categories {
-              name
-            }
-            variants {
-              id
-              sku
-              sellIfOutOfStock
-              variantValues {
-                variantTypeName
-                variantValueName
-              }
-              prices {
-                buyPrice
-                discountPrice
-                sellPrice
-                priceListId
-                currency
-                currencyCode
-                currencySymbol
-              }
-              stocks {
-                id
-                productId
-                variantId
-                stockLocationId
-                stockCount
-              }
-            }
-          }
-        }
+    let productTraversal;
+
+    try {
+      productTraversal = await fetchIkasProductTraversal({
+        graphApiUrl: config.graphApiUrl,
+        accessToken: ikasAccessToken,
+        mode: 'full',
+      });
+    } catch (error) {
+      if (
+        error instanceof IkasProductTraversalError ||
+        error instanceof PaginatedTraversalError
+      ) {
+        return NextResponse.json(
+          {
+            ok: false,
+            fetchedAt: new Date().toISOString(),
+            runId: null,
+            sourceName: catalogSource.sourceName,
+            queuedCount: 0,
+            queuedExternalProductIds: [],
+            traversalComplete: false,
+            error: error.code,
+            message: error.message,
+          },
+          {
+            status:
+              error instanceof IkasProductTraversalError
+                ? error.status
+                : 502,
+          },
+        );
       }
-    `;
 
-    const upstreamResponse = await fetch(config.graphApiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer ' + ikasAccessToken,
-      },
-      body: JSON.stringify({ query }),
-      cache: 'no-store',
-    });
-
-    const raw = await upstreamResponse.json();
-
-    if (!upstreamResponse.ok || raw?.errors) {
-      const upstreamError =
-        raw?.errors?.[0]?.message ||
-        raw?.errors?.[0]?.extensions?.code ||
-        'Graph API request failed with status ' + upstreamResponse.status;
-
-      const isLoginRequired =
-        String(upstreamError).toUpperCase().includes('LOGIN_REQUIRED');
-
-      return NextResponse.json(
-        {
-          ok: false,
-          fetchedAt: new Date().toISOString(),
-          runId: null,
-          sourceName: catalogSource.sourceName,
-          queuedCount: 0,
-          queuedExternalProductIds: [],
-          error: isLoginRequired
-            ? 'IKAS_LOGIN_REQUIRED_TOKEN_EXPIRED'
-            : upstreamError,
-          message: isLoginRequired
-            ? 'ikas access token geçersiz veya süresi dolmuş. Bağlı ikas hesabının yeniden yetkilendirilmesi gerekiyor.'
-            : undefined,
-          tokenMerchantId: authToken.merchantId || syncMerchantId,
-          tokenAuthorizedAppId:
-  authToken.authorizedAppId || syncAuthorizedAppId,
-          tokenExpireDate: authToken.expireDate || null,
-          tokenMode: 'oauth_refresh',
-          upstreamError,
-        },
-        { status: isLoginRequired ? 401 : upstreamResponse.ok ? 500 : upstreamResponse.status },
-      );
+      throw error;
     }
 
-    const fetchedItems = Array.isArray(raw?.data?.listProduct?.data)
-      ? raw.data.listProduct.data.slice(0, PRODUCT_LIMIT)
-      : [];
+    const fetchedItems = productTraversal.items;
 
     const payloadItems = fetchedItems
       .map((item: any) => {
@@ -723,11 +658,14 @@ const ikasAccessToken =
         const sourceSalesChannelIsPassive = sourceSalesChannelStatuses.some(
           (status: string) => isPassiveSalesChannelStatus(status),
         );
-        const productIsActive = item?.deleted !== true && !sourceSalesChannelIsPassive;
+        const productIsActive =
+          item?.deleted !== true && !sourceSalesChannelIsPassive;
 
-        const variantsRaw = Array.isArray(item?.variants) ? item.variants : [];
+        const variantsRaw = Array.isArray(item?.variants)
+          ? item.variants
+          : [];
 
-                const normalizedVariants = variantsRaw
+        const normalizedVariants = variantsRaw
           .map((variant: any) => {
             const variantValues = Array.isArray(variant?.variantValues)
               ? variant.variantValues
@@ -738,7 +676,9 @@ const ikasAccessToken =
                 .map((value: any) => {
                   const typeName = value?.variantTypeName ?? '';
                   const valueName = value?.variantValueName ?? '';
-                  return [typeName, valueName].filter(Boolean).join(': ');
+                  return [typeName, valueName]
+                    .filter(Boolean)
+                    .join(': ');
                 })
                 .filter(Boolean)
                 .join(' / ') || null;
@@ -752,23 +692,38 @@ const ikasAccessToken =
             const sizeValue = sizeMeta.size_value;
 
             const colorValue =
-              getVariantOptionValue(variantValues, COLOR_OPTION_ALIASES) ||
+              getVariantOptionValue(
+                variantValues,
+                COLOR_OPTION_ALIASES,
+              ) ||
               extractColorFromText(
                 item?.name,
                 optionSummary,
                 variant?.sku,
               );
 
-            const prices = Array.isArray(variant?.prices) ? variant.prices : [];
+            const prices = Array.isArray(variant?.prices)
+              ? variant.prices
+              : [];
             const firstPrice = prices[0] || null;
             const sellPrice =
-              typeof firstPrice?.sellPrice === 'number' ? firstPrice.sellPrice : null;
+              typeof firstPrice?.sellPrice === 'number'
+                ? firstPrice.sellPrice
+                : null;
 
-            const stocks = Array.isArray(variant?.stocks) ? variant.stocks : [];
-            const stockQty = stocks.reduce((sum: number, stock: any) => {
-              const count = typeof stock?.stockCount === 'number' ? stock.stockCount : 0;
-              return sum + count;
-            }, 0);
+            const stocks = Array.isArray(variant?.stocks)
+              ? variant.stocks
+              : [];
+            const stockQty = stocks.reduce(
+              (sum: number, stock: any) => {
+                const count =
+                  typeof stock?.stockCount === 'number'
+                    ? stock.stockCount
+                    : 0;
+                return sum + count;
+              },
+              0,
+            );
 
             const stockStatus = !productIsActive
               ? 'out_of_stock'
@@ -789,19 +744,29 @@ const ikasAccessToken =
               stock_qty: productIsActive ? stockQty : 0,
               stock_status: stockStatus,
               is_active: productIsActive,
-              sell_if_out_of_stock: variant?.sellIfOutOfStock ?? null,
+              sell_if_out_of_stock:
+                variant?.sellIfOutOfStock ?? null,
 
               source_option_summary: optionSummary,
               source_option_values: sizeMeta.option_values,
-              source_option_type_names: sizeMeta.option_type_names,
+              source_option_type_names:
+                sizeMeta.option_type_names,
               source_size_system: sizeMeta.size_system,
-              source_variant_dimension: sizeMeta.variant_dimension,
-              source_size_option_name: sizeMeta.size_source_option_name,
+              source_variant_dimension:
+                sizeMeta.variant_dimension,
+              source_size_option_name:
+                sizeMeta.size_source_option_name,
 
-              stock_preview: stocks.slice(0, 10).map((stock: any) => ({
-                stock_location_id: stock?.stockLocationId ?? null,
-                stock_count: typeof stock?.stockCount === 'number' ? stock.stockCount : null,
-              })),
+              stock_preview: stocks
+                .slice(0, 10)
+                .map((stock: any) => ({
+                  stock_location_id:
+                    stock?.stockLocationId ?? null,
+                  stock_count:
+                    typeof stock?.stockCount === 'number'
+                      ? stock.stockCount
+                      : null,
+                })),
             };
           })
           .filter((variant: { id: string }) => !!variant.id);
@@ -815,11 +780,15 @@ const ikasAccessToken =
         );
 
         const sourceSizeSystems = uniqueNonEmpty(
-          normalizedVariants.map((variant: any) => variant.source_size_system),
+          normalizedVariants.map(
+            (variant: any) => variant.source_size_system,
+          ),
         );
 
         const sourceVariantDimensions = uniqueNonEmpty(
-          normalizedVariants.map((variant: any) => variant.source_variant_dimension),
+          normalizedVariants.map(
+            (variant: any) => variant.source_variant_dimension,
+          ),
         );
 
         return {
@@ -838,20 +807,27 @@ const ikasAccessToken =
             store_name: sourceStoreName,
             source_deleted: item?.deleted === true,
             source_sales_channels: sourceSalesChannels,
-            source_sales_channel_statuses: sourceSalesChannelStatuses,
-            source_sales_channel_is_passive: sourceSalesChannelIsPassive,
+            source_sales_channel_statuses:
+              sourceSalesChannelStatuses,
+            source_sales_channel_is_passive:
+              sourceSalesChannelIsPassive,
             source_category_name: firstCategoryName,
             source_brand_name: sourceBrandName,
             source_total_stock: totalStock,
-            source_short_description_present: !!item?.shortDescription,
+            source_short_description_present:
+              !!item?.shortDescription,
             source_description_present: !!item?.description,
             source_variant_count: normalizedVariants.length,
             source_option_type_names: sourceOptionTypeNames,
             source_size_systems: sourceSizeSystems,
-            source_variant_dimensions: sourceVariantDimensions,
-            source_has_shoe_number_option: sourceSizeSystems.includes('shoe_number'),
-            source_has_eyewear_frame_option: sourceSizeSystems.includes('eyewear_frame'),
-            source_has_numeric_apparel_option: sourceSizeSystems.includes('numeric_apparel'),
+            source_variant_dimensions:
+              sourceVariantDimensions,
+            source_has_shoe_number_option:
+              sourceSizeSystems.includes('shoe_number'),
+            source_has_eyewear_frame_option:
+              sourceSizeSystems.includes('eyewear_frame'),
+            source_has_numeric_apparel_option:
+              sourceSizeSystems.includes('numeric_apparel'),
             source_variant_price_mode: 'sell_price_only',
             source_variant_stock_mode: 'stocks_sum',
           },
@@ -868,7 +844,9 @@ const ikasAccessToken =
           short_description: item?.shortDescription ?? null,
           external_product_id: item?.id ?? '',
           created_at_source:
-            item?.createdAt != null ? String(item.createdAt) : null,
+            item?.createdAt != null
+              ? String(item.createdAt)
+              : null,
         };
       })
       .filter((item: { id: string }) => !!item.id);
@@ -881,8 +859,18 @@ const ikasAccessToken =
         sourceName: catalogSource.sourceName,
         queuedCount: 0,
         queuedExternalProductIds: [],
+        traversal: {
+          contractVersion: productTraversal.contractVersion,
+          sort: productTraversal.sort,
+          pageSize: productTraversal.pageSize,
+          pagesFetched: productTraversal.pagesFetched,
+          upstreamCount: productTraversal.upstreamCount,
+          traversalComplete: productTraversal.traversalComplete,
+        },
         importTrigger: {
-          configured: Boolean(process.env.N8N_CATALOG_IMPORT_WEBHOOK_URL),
+          configured: Boolean(
+            process.env.N8N_CATALOG_IMPORT_WEBHOOK_URL,
+          ),
           ok: false,
           status: null,
           response: null,
@@ -914,8 +902,8 @@ const ikasAccessToken =
           metadata
         )
         values (
-  CAST(${catalogSource.tenantId} AS uuid),
-  CAST(${catalogSource.catalogSourceId} AS uuid),
+          CAST(${catalogSource.tenantId} AS uuid),
+          CAST(${catalogSource.catalogSourceId} AS uuid),
           'manual',
           'success',
           now(),
@@ -927,33 +915,29 @@ const ikasAccessToken =
           0,
           'IKAS app queue write variant pilot',
           jsonb_build_object(
-  'run_type', 'fetch_queue_write',
-  'run_type_contract_version', 'p1_c3_run_type_v1',
-  'source_adapter', 'ikas_sync_products_to_queue',
-  'workflow_phase', 'p1_c4_r1',
-  'source_platform', ${IKAS_SOURCE_PLATFORM},
-  'fetch_mode', ${IKAS_FETCH_MODE},
-  'trigger', 'ikas_app_queue_variant_pilot',
-  'source_name', ${catalogSource.sourceName},
-
-'external_commerce_account_id',
-${catalogSource.externalCommerceAccountId},
-
-'catalog_source_account_binding_id',
-${catalogSource.bindingId},
-
-'binding_role',
-${catalogSource.bindingRole},
-
-'identity_resolution_contract_version',
-'commerce_source_resolver_v1',
-
-'merchant_id', ${syncMerchantId},
-'authorized_app_id', ${syncAuthorizedAppId},
-  'queued_count', ${payloadItems.length},
-  'product_limit', ${PRODUCT_LIMIT},
-  'passive_product_count', ${passiveProductCount}
-)
+            'run_type', 'fetch_queue_write',
+            'run_type_contract_version', 'p1_c3_run_type_v1',
+            'source_adapter', 'ikas_sync_products_to_queue',
+            'workflow_phase', 'p1_c4_r1',
+            'source_platform', ${IKAS_SOURCE_PLATFORM},
+            'fetch_mode', ${IKAS_FETCH_MODE},
+            'trigger', 'ikas_app_queue_variant_pilot',
+            'source_name', ${catalogSource.sourceName},
+            'external_commerce_account_id', ${catalogSource.externalCommerceAccountId},
+            'catalog_source_account_binding_id', ${catalogSource.bindingId},
+            'binding_role', ${catalogSource.bindingRole},
+            'identity_resolution_contract_version', 'commerce_source_resolver_v1',
+            'merchant_id', ${syncMerchantId},
+            'authorized_app_id', ${syncAuthorizedAppId},
+            'queued_count', ${payloadItems.length},
+            'traversal_contract_version', ${productTraversal.contractVersion},
+            'pagination_sort', ${productTraversal.sort},
+            'pagination_page_size', ${productTraversal.pageSize},
+            'pages_fetched', ${productTraversal.pagesFetched},
+            'upstream_count', ${productTraversal.upstreamCount},
+            'traversal_complete', ${productTraversal.traversalComplete},
+            'passive_product_count', ${passiveProductCount}
+          )
         )
         returning id
       `;
@@ -967,25 +951,25 @@ ${catalogSource.bindingRole},
       for (const item of payloadItems) {
         await tx.$executeRaw`
           insert into public.catalog_sync_raw_items (
-  tenant_id,
-  catalog_source_id,
-  catalog_sync_run_id,
-  created_by_sync_run_id,
-  external_product_id,
-  item_type,
-  processed_status,
-  payload_json
-)
+            tenant_id,
+            catalog_source_id,
+            catalog_sync_run_id,
+            created_by_sync_run_id,
+            external_product_id,
+            item_type,
+            processed_status,
+            payload_json
+          )
           values (
-  CAST(${catalogSource.tenantId} AS uuid),
-  CAST(${catalogSource.catalogSourceId} AS uuid),
-  CAST(${runId} AS uuid),
-  CAST(${runId} AS uuid),
-  ${item.id},
-  'product',
-  'pending',
-  CAST(${JSON.stringify(item)} AS jsonb)
-)
+            CAST(${catalogSource.tenantId} AS uuid),
+            CAST(${catalogSource.catalogSourceId} AS uuid),
+            CAST(${runId} AS uuid),
+            CAST(${runId} AS uuid),
+            ${item.id},
+            'product',
+            'pending',
+            CAST(${JSON.stringify(item)} AS jsonb)
+          )
         `;
       }
 
@@ -999,13 +983,13 @@ ${catalogSource.bindingRole},
     );
 
     const importTrigger = await triggerCatalogImportProcess({
-  runId: transactionResult.runId,
-  tenantId: catalogSource.tenantId,
-  catalogSourceId: catalogSource.catalogSourceId,
-  sourceName: catalogSource.sourceName,
-  queuedCount: payloadItems.length,
-  queuedExternalProductIds,
-});
+      runId: transactionResult.runId,
+      tenantId: catalogSource.tenantId,
+      catalogSourceId: catalogSource.catalogSourceId,
+      sourceName: catalogSource.sourceName,
+      queuedCount: payloadItems.length,
+      queuedExternalProductIds,
+    });
 
     return NextResponse.json({
       ok: true,
@@ -1014,6 +998,14 @@ ${catalogSource.bindingRole},
       sourceName: catalogSource.sourceName,
       queuedCount: payloadItems.length,
       queuedExternalProductIds,
+      traversal: {
+        contractVersion: productTraversal.contractVersion,
+        sort: productTraversal.sort,
+        pageSize: productTraversal.pageSize,
+        pagesFetched: productTraversal.pagesFetched,
+        upstreamCount: productTraversal.upstreamCount,
+        traversalComplete: productTraversal.traversalComplete,
+      },
       importTrigger,
       error: undefined,
     });
@@ -1026,7 +1018,10 @@ ${catalogSource.bindingRole},
         sourceName: null,
         queuedCount: 0,
         queuedExternalProductIds: [],
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Unknown error',
       },
       { status: 500 },
     );
