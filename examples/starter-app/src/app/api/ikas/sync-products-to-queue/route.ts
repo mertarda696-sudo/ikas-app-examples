@@ -12,6 +12,10 @@ import {
   type CatalogSourceResolution,
 } from '@/lib/catalog/commerce-source-resolver';
 import {
+  CatalogFetchRunContractError,
+  writeCatalogFetchRunContract,
+} from '@/lib/catalog/catalog-fetch-run-contract-writer';
+import {
   fetchIkasProductTraversal,
   IkasProductTraversalError,
 } from '@/lib/catalog/ikas-product-traversal';
@@ -948,6 +952,40 @@ export async function POST(request: NextRequest) {
         throw new Error('Failed to create catalog sync run');
       }
 
+      const fetchContract = await writeCatalogFetchRunContract(tx, {
+        catalogSyncRunId: runId,
+        tenantId: catalogSource.tenantId,
+        catalogSourceId: catalogSource.catalogSourceId,
+        catalogSourceAccountBindingId: catalogSource.bindingId,
+        adapterMode: 'ikas_admin_graphql',
+        fetchSemantics: 'full_snapshot',
+        completionState: 'complete',
+        traversalComplete: productTraversal.traversalComplete,
+        productCollectionComplete: true,
+        variantCollectionComplete: false,
+        authority: {
+          basis: 'fetch_completed_at',
+        },
+        adapterEvidence: {
+          evidence_contract_version:
+            'g3_c3_ikas_fetch_adapter_evidence_v1',
+          source_platform: IKAS_SOURCE_PLATFORM,
+          fetch_mode: IKAS_FETCH_MODE,
+          traversal_contract_version:
+            productTraversal.contractVersion,
+          pagination_sort: productTraversal.sort,
+          pagination_page_size: productTraversal.pageSize,
+          pages_fetched: productTraversal.pagesFetched,
+          upstream_product_count:
+            productTraversal.upstreamCount,
+          collected_product_count: payloadItems.length,
+          product_collection_complete: true,
+          variant_collection_complete: false,
+          variant_collection_completeness_reason:
+            'runtime_schema_proof_pending',
+        },
+      });
+
       for (const item of payloadItems) {
         await tx.$executeRaw`
           insert into public.catalog_sync_raw_items (
@@ -975,6 +1013,7 @@ export async function POST(request: NextRequest) {
 
       return {
         runId,
+        fetchContract,
       };
     });
 
@@ -1006,10 +1045,66 @@ export async function POST(request: NextRequest) {
         upstreamCount: productTraversal.upstreamCount,
         traversalComplete: productTraversal.traversalComplete,
       },
+      fetchContract: {
+        contractVersion:
+          transactionResult.fetchContract.contractVersion,
+        authorityContractVersion:
+          transactionResult.fetchContract.authorityContractVersion,
+        adapterMode:
+          transactionResult.fetchContract.adapterMode,
+        fetchSemantics:
+          transactionResult.fetchContract.fetchSemantics,
+        completionState:
+          transactionResult.fetchContract.completionState,
+        traversalComplete:
+          transactionResult.fetchContract.traversalComplete,
+        productCollectionComplete:
+          transactionResult.fetchContract.productCollectionComplete,
+        variantCollectionComplete:
+          transactionResult.fetchContract.variantCollectionComplete,
+        productReconciliationState:
+          transactionResult.fetchContract.productReconciliationState,
+        variantReconciliationState:
+          transactionResult.fetchContract.variantReconciliationState,
+        authorityBasis:
+          transactionResult.fetchContract.authorityBasis,
+        authorityOrder:
+          transactionResult.fetchContract.authorityOrder,
+      },
       importTrigger,
       error: undefined,
     });
   } catch (error) {
+    if (error instanceof CatalogFetchRunContractError) {
+      const status =
+        error.code === 'FETCH_CONTRACT_ALREADY_EXISTS' ||
+        error.code === 'FETCH_CONTRACT_AUTHORITY_HISTORY_MIXED' ||
+        error.code === 'FETCH_CONTRACT_AUTHORITY_BASIS_CHANGE_NOT_ALLOWED'
+          ? 409
+          : error.code === 'FETCH_CONTRACT_INVALID_INPUT' ||
+              error.code === 'FETCH_CONTRACT_RUN_STATE_MISMATCH' ||
+              error.code === 'FETCH_CONTRACT_AUTHORITY_ORDER_INVALID' ||
+              error.code === 'FETCH_CONTRACT_SOURCE_OBSERVED_AT_INVALID' ||
+              error.code === 'FETCH_CONTRACT_COLLECTION_INCONSISTENT' ||
+              error.code === 'FETCH_CONTRACT_ADAPTER_EVIDENCE_INVALID'
+            ? 422
+            : 500;
+
+      return NextResponse.json(
+        {
+          ok: false,
+          fetchedAt: new Date().toISOString(),
+          runId: null,
+          sourceName: null,
+          queuedCount: 0,
+          queuedExternalProductIds: [],
+          error: error.code,
+          message: error.message,
+        },
+        { status },
+      );
+    }
+
     return NextResponse.json(
       {
         ok: false,
