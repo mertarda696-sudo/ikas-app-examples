@@ -1,9 +1,14 @@
 import { config } from '@/globals/config';
 import { isIkasTokenRefreshDue } from '@/helpers/api-helpers';
+import {
+  fetchIkasProductTraversal,
+  IkasProductTraversalError,
+} from '@/lib/catalog/ikas-product-traversal';
+import { PaginatedTraversalError } from '@/lib/catalog/paginated-traversal';
 import { AuthTokenManager } from '@/models/auth-token/manager';
 
 export const IKAS_CATALOG_SCHEMA_AUDIT_VERSION =
-  'g3_c2a_ikas_catalog_schema_v3';
+  'g3_c2a_ikas_catalog_schema_v4';
 
 type GraphTypeRef = {
   kind?: string | null;
@@ -28,15 +33,6 @@ type GraphSchemaType = {
   name?: string | null;
   inputFields?: GraphArgument[] | null;
   fields?: GraphField[] | null;
-};
-
-type PaginationProbePage = {
-  count: number | null;
-  hasNext: boolean | null;
-  limit: number | null;
-  page: number | null;
-  itemCount: number;
-  ids: string[];
 };
 
 export type IkasCatalogSchemaAuditIdentity = {
@@ -117,11 +113,9 @@ function unwrapNamedType(type?: GraphTypeRef | null): {
 function normalizeFieldContract(field?: GraphField | null) {
   if (!field) return null;
 
-  const returnType = unwrapNamedType(field.type);
-
   return {
     name: field.name ?? null,
-    returnType,
+    returnType: unwrapNamedType(field.type),
     args: Array.isArray(field.args)
       ? field.args.map((arg) => ({
           name: arg?.name ?? null,
@@ -145,22 +139,6 @@ function normalizeInputType(type?: GraphSchemaType | null) {
           ...unwrapNamedType(field?.type),
         }))
       : [],
-  };
-}
-
-function normalizeProbePage(value: any): PaginationProbePage {
-  const data = Array.isArray(value?.data) ? value.data : [];
-
-  return {
-    count: Number.isInteger(value?.count) ? value.count : null,
-    hasNext:
-      typeof value?.hasNext === 'boolean' ? value.hasNext : null,
-    limit: Number.isInteger(value?.limit) ? value.limit : null,
-    page: Number.isInteger(value?.page) ? value.page : null,
-    itemCount: data.length,
-    ids: data
-      .map((item: any) => String(item?.id ?? '').trim())
-      .filter(Boolean),
   };
 }
 
@@ -255,31 +233,7 @@ const INTROSPECTION_QUERY = `
   }
 `;
 
-const PAGINATION_PROBE_QUERY = `
-  query G3CatalogPaginationBehaviorProbe(
-    $pagination: PaginationInput,
-    $sort: String
-  ) {
-    listProduct(
-      pagination: $pagination,
-      sort: $sort
-    ) {
-      count
-      hasNext
-      limit
-      page
-      data {
-        id
-      }
-    }
-  }
-`;
-
-async function fetchJsonGraphQl(input: {
-  accessToken: string;
-  query: string;
-  variables?: Record<string, unknown>;
-}): Promise<{
+async function fetchIntrospection(accessToken: string): Promise<{
   ok: boolean;
   status: number;
   raw: Record<string, any> | null;
@@ -289,12 +243,9 @@ async function fetchJsonGraphQl(input: {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: 'Bearer ' + input.accessToken,
+      Authorization: 'Bearer ' + accessToken,
     },
-    body: JSON.stringify({
-      query: input.query,
-      variables: input.variables ?? undefined,
-    }),
+    body: JSON.stringify({ query: INTROSPECTION_QUERY }),
     cache: 'no-store',
   });
 
@@ -322,7 +273,7 @@ async function fetchJsonGraphQl(input: {
       raw,
       error: String(
         raw?.errors?.[0]?.message ||
-          'IKAS_GRAPHQL_REQUEST_FAILED',
+          'IKAS_GRAPHQL_INTROSPECTION_FAILED',
       ),
     };
   }
@@ -332,123 +283,6 @@ async function fetchJsonGraphQl(input: {
     status: response.status,
     raw,
     error: null,
-  };
-}
-
-async function runPaginationBehaviorProbe(accessToken: string) {
-  const pageSize = 2;
-  const sort = 'id';
-
-  const firstResponse = await fetchJsonGraphQl({
-    accessToken,
-    query: PAGINATION_PROBE_QUERY,
-    variables: {
-      pagination: {
-        page: 1,
-        limit: pageSize,
-      },
-      sort,
-    },
-  });
-
-  if (!firstResponse.ok) {
-    return {
-      ready: false,
-      sort,
-      pageSize,
-      error: firstResponse.error,
-      upstreamStatus: firstResponse.status,
-    };
-  }
-
-  const firstPage = normalizeProbePage(
-    firstResponse.raw?.data?.listProduct,
-  );
-
-  let secondPage: PaginationProbePage | null = null;
-  let secondResponseError: string | null = null;
-  let secondResponseStatus: number | null = null;
-
-  if (firstPage.hasNext === true) {
-    const secondResponse = await fetchJsonGraphQl({
-      accessToken,
-      query: PAGINATION_PROBE_QUERY,
-      variables: {
-        pagination: {
-          page: 2,
-          limit: pageSize,
-        },
-        sort,
-      },
-    });
-
-    secondResponseStatus = secondResponse.status;
-
-    if (!secondResponse.ok) {
-      secondResponseError = secondResponse.error;
-    } else {
-      secondPage = normalizeProbePage(
-        secondResponse.raw?.data?.listProduct,
-      );
-    }
-  }
-
-  const firstIds = new Set(firstPage.ids);
-  const duplicateIdsAcrossPages = secondPage
-    ? secondPage.ids.filter((id) => firstIds.has(id))
-    : [];
-
-  const stableCountAcrossPages = secondPage
-    ? firstPage.count === secondPage.count
-    : true;
-
-  const secondPageContractValid = firstPage.hasNext === true
-    ? Boolean(
-        secondPage &&
-          secondPage.page === 2 &&
-          secondPage.limit === pageSize &&
-          secondResponseError == null,
-      )
-    : true;
-
-  const evidence = {
-    sortByIdAccepted: true,
-    firstPageNumberMatchesRequest: firstPage.page === 1,
-    firstPageLimitMatchesRequest: firstPage.limit === pageSize,
-    firstPageHasBooleanHasNext:
-      typeof firstPage.hasNext === 'boolean',
-    firstPageHasIntegerCount:
-      Number.isInteger(firstPage.count),
-    firstPageRespectsLimit: firstPage.itemCount <= pageSize,
-    secondPageContractValid,
-    stableCountAcrossPages,
-    noDuplicateIdsAcrossProbePages:
-      duplicateIdsAcrossPages.length === 0,
-  };
-
-  return {
-    ready: Object.values(evidence).every(Boolean),
-    sort,
-    pageSize,
-    firstPage: {
-      count: firstPage.count,
-      hasNext: firstPage.hasNext,
-      limit: firstPage.limit,
-      page: firstPage.page,
-      itemCount: firstPage.itemCount,
-    },
-    secondPage: secondPage
-      ? {
-          count: secondPage.count,
-          hasNext: secondPage.hasNext,
-          limit: secondPage.limit,
-          page: secondPage.page,
-          itemCount: secondPage.itemCount,
-        }
-      : null,
-    secondResponseStatus,
-    secondResponseError,
-    evidence,
   };
 }
 
@@ -486,10 +320,9 @@ export async function runIkasCatalogSchemaAudit(
       );
     }
 
-    const introspectionResponse = await fetchJsonGraphQl({
-      accessToken: authToken.accessToken,
-      query: INTROSPECTION_QUERY,
-    });
+    const introspectionResponse = await fetchIntrospection(
+      authToken.accessToken,
+    );
 
     if (!introspectionResponse.ok) {
       return fail(
@@ -560,26 +393,53 @@ export async function runIkasCatalogSchemaAudit(
       returnHasHasNext: returnFieldNames.includes('hasNext'),
       returnHasLimit: returnFieldNames.includes('limit'),
       returnHasPage: returnFieldNames.includes('page'),
-      returnHasPaginationObject: returnFieldNames.includes('pagination'),
     };
 
-    const schemaReady =
-      evidence.fieldFound &&
-      evidence.paginationArgumentFound &&
-      evidence.paginationInputHasPage &&
-      evidence.paginationInputHasLimit &&
-      evidence.returnHasData &&
-      evidence.returnHasHasNext &&
-      evidence.returnHasCount &&
-      evidence.returnHasLimit &&
-      evidence.returnHasPage;
+    const schemaReady = Object.values(evidence).every(Boolean);
 
-    const paginationBehaviorProbe = schemaReady
-      ? await runPaginationBehaviorProbe(authToken.accessToken)
-      : {
-          ready: false,
-          error: 'SCHEMA_CONTRACT_NOT_READY_FOR_BEHAVIOR_PROBE',
+    let traversalProbe: Record<string, unknown>;
+
+    if (!schemaReady) {
+      traversalProbe = {
+        ready: false,
+        error: 'SCHEMA_CONTRACT_NOT_READY_FOR_TRAVERSAL_PROBE',
+      };
+    } else {
+      try {
+        const traversal = await fetchIkasProductTraversal({
+          graphApiUrl: config.graphApiUrl,
+          accessToken: authToken.accessToken,
+          mode: 'id_only',
+          pageSize: 2,
+        });
+
+        traversalProbe = {
+          ready:
+            traversal.traversalComplete === true &&
+            traversal.items.length === traversal.upstreamCount,
+          contractVersion: traversal.contractVersion,
+          sort: traversal.sort,
+          pageSize: traversal.pageSize,
+          pagesFetched: traversal.pagesFetched,
+          upstreamCount: traversal.upstreamCount,
+          collectedItemCount: traversal.items.length,
+          firstPage: traversal.firstPage,
+          lastPage: traversal.lastPage,
+          traversalComplete: traversal.traversalComplete,
         };
+      } catch (error) {
+        traversalProbe = {
+          ready: false,
+          error:
+            error instanceof IkasProductTraversalError ||
+            error instanceof PaginatedTraversalError
+              ? error.code
+              : error instanceof Error
+                ? error.message
+                : 'UNKNOWN_TRAVERSAL_PROBE_ERROR',
+        };
+      }
+    }
 
     return {
       status: 200,
@@ -594,9 +454,9 @@ export async function runIkasCatalogSchemaAudit(
         },
         evidence,
         schemaReady,
-        paginationBehaviorProbe,
+        traversalProbe,
         c2aReady:
-          schemaReady && paginationBehaviorProbe.ready === true,
+          schemaReady && traversalProbe.ready === true,
       },
     };
   } catch (error) {
