@@ -4,7 +4,7 @@ import {
 } from '@/lib/catalog/paginated-traversal';
 
 export const IKAS_PRODUCT_TRAVERSAL_CONTRACT_VERSION =
-  'g3_c2_ikas_product_traversal_v1';
+  'ikas_product_traversal_v1';
 
 export const IKAS_PRODUCT_PAGE_SIZE = 50;
 export const IKAS_PRODUCT_SORT = 'id';
@@ -30,7 +30,7 @@ export class IkasProductTraversalError extends Error {
 }
 
 const ID_ONLY_QUERY = `
-  query G3IkasProductIdTraversal(
+  query IkasProductIdTraversal(
     $pagination: PaginationInput,
     $sort: String
   ) {
@@ -50,7 +50,7 @@ const ID_ONLY_QUERY = `
 `;
 
 const FULL_PRODUCT_QUERY = `
-  query G3IkasProductTraversal(
+  query IkasProductTraversal(
     $pagination: PaginationInput,
     $sort: String
   ) {
