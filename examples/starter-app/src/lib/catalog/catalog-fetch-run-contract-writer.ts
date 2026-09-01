@@ -68,12 +68,15 @@ export type CatalogFetchRunContractErrorCode =
   | 'FETCH_CONTRACT_INVALID_INPUT'
   | 'FETCH_CONTRACT_RUN_NOT_FOUND'
   | 'FETCH_CONTRACT_RUN_NOT_FINISHED'
+  | 'FETCH_CONTRACT_RUN_STATE_MISMATCH'
   | 'FETCH_CONTRACT_BINDING_NOT_ACTIVE'
   | 'FETCH_CONTRACT_ALREADY_EXISTS'
+  | 'FETCH_CONTRACT_AUTHORITY_HISTORY_MIXED'
   | 'FETCH_CONTRACT_AUTHORITY_BASIS_CHANGE_NOT_ALLOWED'
   | 'FETCH_CONTRACT_AUTHORITY_ORDER_INVALID'
   | 'FETCH_CONTRACT_SOURCE_OBSERVED_AT_INVALID'
   | 'FETCH_CONTRACT_COLLECTION_INCONSISTENT'
+  | 'FETCH_CONTRACT_ADAPTER_EVIDENCE_INVALID'
   | 'FETCH_CONTRACT_WRITE_FAILED';
 
 export class CatalogFetchRunContractError extends Error {
@@ -90,6 +93,7 @@ type RunRow = {
   id: string;
   tenant_id: string;
   catalog_source_id: string;
+  status: string;
   finished_at: Date | string | null;
 };
 
@@ -107,6 +111,10 @@ type AuthorityBasisRow = {
 
 type AuthorityOrderRow = {
   next_authority_order: string;
+};
+
+type AdvisoryLockRow = {
+  lock_acquired: boolean;
 };
 
 type InsertedContractRow = {
@@ -233,6 +241,24 @@ function validateCollectionContract(input: {
   }
 }
 
+function validateRunCompletionState(
+  runStatus: string,
+  completionState: CatalogFetchCompletionState,
+) {
+  const expectedRunStatus: Record<CatalogFetchCompletionState, string> = {
+    complete: 'success',
+    partial: 'partial',
+    failed: 'failed',
+  };
+
+  if (runStatus !== expectedRunStatus[completionState]) {
+    throw new CatalogFetchRunContractError(
+      'FETCH_CONTRACT_RUN_STATE_MISMATCH',
+      `Fetch contract completion_state=${completionState} requires catalog_sync_runs.status=${expectedRunStatus[completionState]}.`,
+    );
+  }
+}
+
 function deriveReconciliationStates(input: {
   fetchSemantics: CatalogFetchSemantics;
   completionState: CatalogFetchCompletionState;
@@ -256,6 +282,27 @@ function deriveReconciliationStates(input: {
     product: productEligible ? 'pending' : 'not_eligible',
     variant: variantEligible ? 'pending' : 'not_eligible',
   };
+}
+
+function serializeAdapterEvidence(
+  evidence: Record<string, unknown>,
+): string {
+  try {
+    const serialized = JSON.stringify(evidence);
+
+    if (!serialized) {
+      throw new Error('Adapter evidence serialized to an empty value.');
+    }
+
+    return serialized;
+  } catch (error) {
+    throw new CatalogFetchRunContractError(
+      'FETCH_CONTRACT_ADAPTER_EVIDENCE_INVALID',
+      error instanceof Error
+        ? `Adapter evidence must be JSON-serializable: ${error.message}`
+        : 'Adapter evidence must be JSON-serializable.',
+    );
+  }
 }
 
 export async function writeCatalogFetchRunContract(
@@ -313,11 +360,16 @@ export async function writeCatalogFetchRunContract(
     variantCollectionComplete: input.variantCollectionComplete,
   });
 
+  const evidenceJson = serializeAdapterEvidence(
+    input.adapterEvidence,
+  );
+
   const runRows = await tx.$queryRaw<RunRow[]>`
     SELECT
       r.id,
       r.tenant_id,
       r.catalog_source_id,
+      r.status,
       r.finished_at
     FROM public.catalog_sync_runs r
     WHERE r.id = CAST(${catalogSyncRunId} AS uuid)
@@ -344,6 +396,11 @@ export async function writeCatalogFetchRunContract(
     );
   }
 
+  validateRunCompletionState(
+    String(run.status ?? '').trim(),
+    input.completionState,
+  );
+
   const bindingRows = await tx.$queryRaw<BindingRow[]>`
     SELECT b.id
     FROM public.catalog_source_account_bindings b
@@ -356,7 +413,7 @@ export async function writeCatalogFetchRunContract(
       AND b.is_active IS TRUE
       AND b.retired_at IS NULL
       AND s.is_active IS TRUE
-    FOR UPDATE OF b
+    FOR UPDATE OF b, s
   `;
 
   if (!bindingRows[0]) {
@@ -383,23 +440,42 @@ export async function writeCatalogFetchRunContract(
   const lockKey =
     `catalog_source_lifecycle_v2:${tenantId}:${catalogSourceId}`;
 
-  await tx.$queryRaw`
-    SELECT pg_advisory_xact_lock(
-      hashtextextended(${lockKey}, 0)
-    )
+  const lockRows = await tx.$queryRaw<AdvisoryLockRow[]>`
+    SELECT (
+      pg_advisory_xact_lock(
+        hashtextextended(${lockKey}, 0)
+      ) IS NULL
+    ) AS lock_acquired
   `;
 
+  if (lockRows[0]?.lock_acquired !== true) {
+    throw new CatalogFetchRunContractError(
+      'FETCH_CONTRACT_WRITE_FAILED',
+      'Failed to enter the catalog source lifecycle transaction lock domain.',
+    );
+  }
+
   const existingBasisRows = await tx.$queryRaw<AuthorityBasisRow[]>`
-    SELECT fc.authority_basis
+    SELECT DISTINCT fc.authority_basis
     FROM public.catalog_fetch_run_contracts fc
     WHERE fc.tenant_id = CAST(${tenantId} AS uuid)
       AND fc.catalog_source_id = CAST(${catalogSourceId} AS uuid)
       AND fc.adapter_mode <> 'qa_fixture'
-    ORDER BY fc.created_at DESC, fc.catalog_sync_run_id DESC
-    LIMIT 1
+    ORDER BY fc.authority_basis
   `;
 
-  const existingBasis = existingBasisRows[0]?.authority_basis ?? null;
+  const existingProductionBases = existingBasisRows.map(
+    (row) => row.authority_basis,
+  );
+
+  if (existingProductionBases.length > 1) {
+    throw new CatalogFetchRunContractError(
+      'FETCH_CONTRACT_AUTHORITY_HISTORY_MIXED',
+      'Catalog source already contains mixed production authority bases and requires explicit reconciliation before new authority publication.',
+    );
+  }
+
+  const existingBasis = existingProductionBases[0] ?? null;
 
   if (existingBasis && existingBasis !== input.authority.basis) {
     throw new CatalogFetchRunContractError(
@@ -460,8 +536,6 @@ export async function writeCatalogFetchRunContract(
     productCollectionComplete: input.productCollectionComplete,
     variantCollectionComplete: input.variantCollectionComplete,
   });
-
-  const evidenceJson = JSON.stringify(input.adapterEvidence);
 
   const insertedRows = await tx.$queryRaw<InsertedContractRow[]>`
     INSERT INTO public.catalog_fetch_run_contracts (
