@@ -8,7 +8,7 @@ import { PaginatedTraversalError } from '@/lib/catalog/paginated-traversal';
 import { AuthTokenManager } from '@/models/auth-token/manager';
 
 export const IKAS_CATALOG_SCHEMA_AUDIT_VERSION =
-  'g3_c2a_ikas_catalog_schema_v4';
+  'g3_c3_ikas_variant_collection_schema_v1';
 
 type GraphTypeRef = {
   kind?: string | null;
@@ -142,48 +142,43 @@ function normalizeInputType(type?: GraphSchemaType | null) {
   };
 }
 
+const TYPE_REF_SELECTION = `
+  kind
+  name
+  ofType {
+    kind
+    name
+    ofType {
+      kind
+      name
+      ofType {
+        kind
+        name
+      }
+    }
+  }
+`;
+
+const FIELD_SELECTION = `
+  name
+  args {
+    name
+    defaultValue
+    type {
+      ${TYPE_REF_SELECTION}
+    }
+  }
+  type {
+    ${TYPE_REF_SELECTION}
+  }
+`;
+
 const INTROSPECTION_QUERY = `
   query G3CatalogPaginationSchemaAudit {
     __schema {
       queryType {
         fields(includeDeprecated: true) {
-          name
-          args {
-            name
-            defaultValue
-            type {
-              kind
-              name
-              ofType {
-                kind
-                name
-                ofType {
-                  kind
-                  name
-                  ofType {
-                    kind
-                    name
-                  }
-                }
-              }
-            }
-          }
-          type {
-            kind
-            name
-            ofType {
-              kind
-              name
-              ofType {
-                kind
-                name
-                ofType {
-                  kind
-                  name
-                }
-              }
-            }
-          }
+          ${FIELD_SELECTION}
         }
       }
       types {
@@ -193,40 +188,11 @@ const INTROSPECTION_QUERY = `
           name
           defaultValue
           type {
-            kind
-            name
-            ofType {
-              kind
-              name
-              ofType {
-                kind
-                name
-                ofType {
-                  kind
-                  name
-                }
-              }
-            }
+            ${TYPE_REF_SELECTION}
           }
         }
         fields(includeDeprecated: true) {
-          name
-          type {
-            kind
-            name
-            ofType {
-              kind
-              name
-              ofType {
-                kind
-                name
-                ofType {
-                  kind
-                  name
-                }
-              }
-            }
-          }
+          ${FIELD_SELECTION}
         }
       }
     }
@@ -377,6 +343,63 @@ export async function runIkasCatalogSchemaAudit(
           .sort()
       : [];
 
+    const returnDataField = Array.isArray(returnSchemaType?.fields)
+      ? returnSchemaType.fields.find((field) => field?.name === 'data') ?? null
+      : null;
+
+    const returnDataContract = normalizeFieldContract(returnDataField);
+    const productTypeName = returnDataContract?.returnType.typeName ?? null;
+    const productSchemaType = productTypeName
+      ? schemaTypes.find((type) => type?.name === productTypeName) ?? null
+      : null;
+
+    const variantsField = Array.isArray(productSchemaType?.fields)
+      ? productSchemaType.fields.find((field) => field?.name === 'variants') ?? null
+      : null;
+
+    const variantsContract = normalizeFieldContract(variantsField);
+    const variantPaginationArg = variantsContract?.args.find(
+      (arg) => arg.name === 'pagination',
+    );
+
+    const variantsReturnTypeName =
+      variantsContract?.returnType.typeName ?? null;
+    const variantsReturnSchemaType = variantsReturnTypeName
+      ? schemaTypes.find((type) => type?.name === variantsReturnTypeName) ?? null
+      : null;
+
+    const variantsReturnFieldNames = Array.isArray(
+      variantsReturnSchemaType?.fields,
+    )
+      ? variantsReturnSchemaType.fields
+          .map((field) => String(field?.name ?? '').trim())
+          .filter(Boolean)
+          .sort()
+      : [];
+
+    const variantCollectionEvidence = {
+      returnDataFieldFound: Boolean(returnDataField),
+      productTypeResolved: Boolean(productTypeName),
+      variantsFieldFound: Boolean(variantsField),
+      variantsIsDirectList:
+        variantsContract?.returnType.isList === true,
+      variantsHasNoArguments:
+        (variantsContract?.args.length ?? -1) === 0,
+      variantsHasPaginationArgument: Boolean(variantPaginationArg),
+      variantsReturnLooksPaginated:
+        variantsReturnFieldNames.includes('data') &&
+        variantsReturnFieldNames.includes('hasNext'),
+    };
+
+    const variantCollectionSchemaComplete =
+      variantCollectionEvidence.returnDataFieldFound &&
+      variantCollectionEvidence.productTypeResolved &&
+      variantCollectionEvidence.variantsFieldFound &&
+      variantCollectionEvidence.variantsIsDirectList &&
+      variantCollectionEvidence.variantsHasNoArguments &&
+      !variantCollectionEvidence.variantsHasPaginationArgument &&
+      !variantCollectionEvidence.variantsReturnLooksPaginated;
+
     const evidence = {
       fieldFound: Boolean(listProductField),
       paginationArgumentFound: Boolean(paginationArg),
@@ -452,11 +475,24 @@ export async function runIkasCatalogSchemaAudit(
           name: returnTypeName,
           fields: returnFieldNames,
         },
+        productCollection: {
+          returnData: returnDataContract,
+          productTypeName,
+        },
+        variantCollection: {
+          variants: variantsContract,
+          variantsReturnTypeName,
+          variantsReturnFields: variantsReturnFieldNames,
+          evidence: variantCollectionEvidence,
+          schemaComplete: variantCollectionSchemaComplete,
+        },
         evidence,
         schemaReady,
         traversalProbe,
         c2aReady:
           schemaReady && traversalProbe.ready === true,
+        c3VariantCollectionSchemaReady:
+          variantCollectionSchemaComplete,
       },
     };
   } catch (error) {
