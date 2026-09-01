@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useState } from 'react';
 
 import { TokenHelpers } from '@/helpers/token-helpers';
@@ -10,6 +9,7 @@ type AuditResult = {
   fetchedAt?: string;
   auditVersion?: string;
   mutationPerformed?: boolean;
+  credentialMutationPerformed?: boolean;
   c2aReady?: boolean;
   evidence?: Record<string, boolean>;
   listProduct?: unknown;
@@ -17,6 +17,8 @@ type AuditResult = {
   returnType?: unknown;
   error?: string;
   message?: string;
+  previewIdentitySource?: string;
+  tokenRefreshRequired?: boolean;
   [key: string]: unknown;
 };
 
@@ -58,6 +60,8 @@ export default function G3CatalogSchemaAuditPage() {
       } catch {
         raw = {
           ok: false,
+          mutationPerformed: false,
+          credentialMutationPerformed: false,
           error:
             rawText ||
             `HTTP ${response.status} ${response.statusText}`,
@@ -71,6 +75,7 @@ export default function G3CatalogSchemaAuditPage() {
       setResult({
         ok: false,
         mutationPerformed: false,
+        credentialMutationPerformed: false,
         error:
           error instanceof Error
             ? error.message
@@ -94,9 +99,12 @@ export default function G3CatalogSchemaAuditPage() {
     }
   };
 
-  const needsPreviewSession =
-    httpStatus === 401 &&
-    result?.error === 'PREVIEW_SESSION_REQUIRED';
+  const identityBlocked =
+    result?.error === 'PREVIEW_IDENTITY_NOT_UNIQUE';
+
+  const tokenRefreshBlocked =
+    result?.error ===
+    'IKAS_TOKEN_REFRESH_REQUIRED_FOR_READ_ONLY_AUDIT';
 
   return (
     <main
@@ -150,8 +158,9 @@ export default function G3CatalogSchemaAuditPage() {
               lineHeight: 1.7,
             }}
           >
-            Bu araç yalnız GraphQL şemasını okur. Ürün yazmaz, katalog sync başlatmaz,
-            Supabase mutation yapmaz ve n8n workflow çalıştırmaz.
+            Bu araç yalnız IKAS GraphQL şemasını okur. Ürün yazmaz, katalog sync
+            başlatmaz, Supabase/n8n mutation yapmaz ve audit sırasında OAuth token
+            refresh/persist işlemi de yapmaz.
           </p>
         </div>
 
@@ -204,7 +213,7 @@ export default function G3CatalogSchemaAuditPage() {
           ) : null}
         </div>
 
-        {needsPreviewSession ? (
+        {identityBlocked ? (
           <div
             style={{
               border: '1px solid #fde68a',
@@ -215,27 +224,24 @@ export default function G3CatalogSchemaAuditPage() {
               lineHeight: 1.7,
             }}
           >
-            <div style={{ fontWeight: 800, marginBottom: 8 }}>
-              Preview OAuth oturumu gerekli.
-            </div>
-            <div style={{ marginBottom: 10 }}>
-              Aşağıdaki bağlantıyı aç, mağaza adını girip OAuth yetkilendirmesini tamamla.
-              ikas paneline geri döndükten sonra bu audit sayfasını yeniden aç ve butona tekrar bas.
-            </div>
-            <Link
-              href="/authorize-store"
-              style={{
-                display: 'inline-flex',
-                textDecoration: 'none',
-                borderRadius: 10,
-                padding: '9px 13px',
-                background: '#92400e',
-                color: '#ffffff',
-                fontWeight: 800,
-              }}
-            >
-              Preview OAuth Oturumunu Aç
-            </Link>
+            Preview ortamında tek ve aktif commerce OAuth identity belirlenemedi.
+            Audit fail-closed durdu; herhangi bir mutation yapılmadı.
+          </div>
+        ) : null}
+
+        {tokenRefreshBlocked ? (
+          <div
+            style={{
+              border: '1px solid #fde68a',
+              borderRadius: 14,
+              background: '#fffbeb',
+              padding: 14,
+              color: '#92400e',
+              lineHeight: 1.7,
+            }}
+          >
+            Mevcut IKAS token refresh penceresine girmiş. READ-ONLY audit tokenı
+            yenilemedi ve fail-closed durdu.
           </div>
         ) : null}
 
