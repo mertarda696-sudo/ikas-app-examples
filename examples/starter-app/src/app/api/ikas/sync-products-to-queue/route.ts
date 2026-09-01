@@ -5,19 +5,25 @@ import {
   onCheckToken,
 } from '@/helpers/api-helpers';
 import { config } from '@/globals/config';
-import { prisma } from '@/lib/prisma';
 import {
   CommerceSourceResolutionError,
   resolveCatalogSourceByCommerceIdentity,
   type CatalogSourceResolution,
 } from '@/lib/catalog/commerce-source-resolver';
 import {
+  CatalogFetchOutcomeError,
+  persistCatalogFetchOutcome,
+} from '@/lib/catalog/catalog-fetch-outcome-writer';
+import {
   CatalogFetchRunContractError,
-  writeCatalogFetchRunContract,
+  type CatalogFetchRunContractWriteResult,
 } from '@/lib/catalog/catalog-fetch-run-contract-writer';
 import {
   fetchIkasProductTraversal,
   IkasProductTraversalError,
+  IKAS_PRODUCT_PAGE_SIZE,
+  IKAS_PRODUCT_SORT,
+  IKAS_PRODUCT_TRAVERSAL_CONTRACT_VERSION,
 } from '@/lib/catalog/ikas-product-traversal';
 import { PaginatedTraversalError } from '@/lib/catalog/paginated-traversal';
 import { NextRequest, NextResponse } from 'next/server';
@@ -35,8 +41,21 @@ type CatalogImportTriggerResult = {
   error: string | null;
 };
 
+type TraversalEvidence = {
+  contractVersion: string;
+  sort: string;
+  pageSize: number;
+  pagesFetched: number;
+  upstreamCount: number;
+  traversalComplete: boolean;
+};
+
 const IKAS_SOURCE_PLATFORM = 'ikas';
 const IKAS_FETCH_MODE = 'ikas_app_json';
+const IKAS_ADAPTER_MODE = 'ikas_admin_graphql';
+const IKAS_FETCH_RUN_CONTRACT_VERSION = 'g3_catalog_fetch_run_v1';
+const IKAS_ADAPTER_EVIDENCE_VERSION =
+  'g3_c4_ikas_fetch_adapter_evidence_v1';
 
 function normalizeText(value: string | null | undefined) {
   return String(value || '')
@@ -438,6 +457,138 @@ async function triggerCatalogImportProcess(input: {
   }
 }
 
+function summarizeFetchContract(
+  contract: CatalogFetchRunContractWriteResult,
+) {
+  return {
+    contractVersion: contract.contractVersion,
+    authorityContractVersion: contract.authorityContractVersion,
+    adapterMode: contract.adapterMode,
+    fetchSemantics: contract.fetchSemantics,
+    completionState: contract.completionState,
+    traversalComplete: contract.traversalComplete,
+    productCollectionComplete: contract.productCollectionComplete,
+    variantCollectionComplete: contract.variantCollectionComplete,
+    productReconciliationState: contract.productReconciliationState,
+    variantReconciliationState: contract.variantReconciliationState,
+    authorityBasis: contract.authorityBasis,
+    authorityOrder: contract.authorityOrder,
+  };
+}
+
+function buildRunMetadata(input: {
+  catalogSource: CatalogSourceResolution;
+  outcome: 'complete' | 'complete_zero_items' | 'failed';
+  queuedCount: number;
+  passiveProductCount?: number;
+  traversal?: TraversalEvidence | null;
+  errorCode?: string | null;
+  errorStatus?: number | null;
+}) {
+  return {
+    run_type: 'catalog_fetch',
+    run_type_contract_version: IKAS_FETCH_RUN_CONTRACT_VERSION,
+    source_adapter: 'ikas_sync_products_to_queue',
+    workflow_phase: 'p1_c10_e2_g3',
+    source_platform: IKAS_SOURCE_PLATFORM,
+    fetch_mode: IKAS_FETCH_MODE,
+    trigger: 'ikas_app_catalog_fetch',
+    source_name: input.catalogSource.sourceName,
+    external_commerce_account_id:
+      input.catalogSource.externalCommerceAccountId,
+    catalog_source_account_binding_id:
+      input.catalogSource.bindingId,
+    binding_role: input.catalogSource.bindingRole,
+    identity_resolution_contract_version:
+      'commerce_source_resolver_v1',
+    outcome: input.outcome,
+    queued_count: input.queuedCount,
+    passive_product_count: input.passiveProductCount ?? 0,
+    traversal_contract_version:
+      input.traversal?.contractVersion ??
+      IKAS_PRODUCT_TRAVERSAL_CONTRACT_VERSION,
+    pagination_sort:
+      input.traversal?.sort ?? IKAS_PRODUCT_SORT,
+    pagination_page_size:
+      input.traversal?.pageSize ?? IKAS_PRODUCT_PAGE_SIZE,
+    pages_fetched: input.traversal?.pagesFetched ?? null,
+    upstream_count: input.traversal?.upstreamCount ?? null,
+    traversal_complete:
+      input.traversal?.traversalComplete ?? false,
+    error_code: input.errorCode ?? null,
+    error_status: input.errorStatus ?? null,
+  };
+}
+
+function buildAdapterEvidence(input: {
+  completionState: 'complete' | 'failed';
+  traversal?: TraversalEvidence | null;
+  collectedProductCount: number;
+  errorCode?: string | null;
+  errorStatus?: number | null;
+}) {
+  const complete = input.completionState === 'complete';
+
+  return {
+    evidence_contract_version: IKAS_ADAPTER_EVIDENCE_VERSION,
+    source_platform: IKAS_SOURCE_PLATFORM,
+    fetch_mode: IKAS_FETCH_MODE,
+    traversal_contract_version:
+      input.traversal?.contractVersion ??
+      IKAS_PRODUCT_TRAVERSAL_CONTRACT_VERSION,
+    pagination_sort:
+      input.traversal?.sort ?? IKAS_PRODUCT_SORT,
+    pagination_page_size:
+      input.traversal?.pageSize ?? IKAS_PRODUCT_PAGE_SIZE,
+    pages_fetched: input.traversal?.pagesFetched ?? null,
+    upstream_product_count: input.traversal?.upstreamCount ?? null,
+    collected_product_count: input.collectedProductCount,
+    traversal_complete:
+      complete && input.traversal?.traversalComplete === true,
+    product_collection_complete: complete,
+    variant_collection_complete: false,
+    variant_collection_completeness_reason:
+      'runtime_schema_proof_pending',
+    error_code: input.errorCode ?? null,
+    error_status: input.errorStatus ?? null,
+  };
+}
+
+function skippedImportTrigger(
+  error: string,
+): CatalogImportTriggerResult {
+  return {
+    configured: Boolean(process.env.N8N_CATALOG_IMPORT_WEBHOOK_URL),
+    ok: false,
+    status: null,
+    response: null,
+    error,
+  };
+}
+
+function persistenceErrorStatus(
+  error: CatalogFetchOutcomeError | CatalogFetchRunContractError,
+) {
+  if (error instanceof CatalogFetchOutcomeError) {
+    return error.code === 'FETCH_OUTCOME_RUN_CREATE_FAILED'
+      ? 500
+      : 422;
+  }
+
+  return error.code === 'FETCH_CONTRACT_ALREADY_EXISTS' ||
+    error.code === 'FETCH_CONTRACT_AUTHORITY_HISTORY_MIXED' ||
+    error.code === 'FETCH_CONTRACT_AUTHORITY_BASIS_CHANGE_NOT_ALLOWED'
+    ? 409
+    : error.code === 'FETCH_CONTRACT_INVALID_INPUT' ||
+        error.code === 'FETCH_CONTRACT_RUN_STATE_MISMATCH' ||
+        error.code === 'FETCH_CONTRACT_AUTHORITY_ORDER_INVALID' ||
+        error.code === 'FETCH_CONTRACT_SOURCE_OBSERVED_AT_INVALID' ||
+        error.code === 'FETCH_CONTRACT_COLLECTION_INCONSISTENT' ||
+        error.code === 'FETCH_CONTRACT_ADAPTER_EVIDENCE_INVALID'
+      ? 422
+      : 500;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const user = getUserFromRequest(request);
@@ -603,6 +754,7 @@ export async function POST(request: NextRequest) {
             ? sourceConfig.domain
             : catalogSource.sourceName;
 
+    const fetchStartedAt = new Date().toISOString();
     let productTraversal;
 
     try {
@@ -616,30 +768,75 @@ export async function POST(request: NextRequest) {
         error instanceof IkasProductTraversalError ||
         error instanceof PaginatedTraversalError
       ) {
+        const fetchFinishedAt = new Date().toISOString();
+        const errorStatus =
+          error instanceof IkasProductTraversalError
+            ? error.status
+            : 502;
+
+        const failedOutcome = await persistCatalogFetchOutcome({
+          tenantId: catalogSource.tenantId,
+          catalogSourceId: catalogSource.catalogSourceId,
+          catalogSourceAccountBindingId: catalogSource.bindingId,
+          syncMode: 'manual',
+          startedAt: fetchStartedAt,
+          finishedAt: fetchFinishedAt,
+          notes: 'IKAS catalog fetch failed during product traversal',
+          metadata: buildRunMetadata({
+            catalogSource,
+            outcome: 'failed',
+            queuedCount: 0,
+            errorCode: error.code,
+            errorStatus,
+          }),
+          itemsSeen: 0,
+          errorCount: 1,
+          contract: {
+            adapterMode: IKAS_ADAPTER_MODE,
+            fetchSemantics: 'full_snapshot',
+            completionState: 'failed',
+            traversalComplete: false,
+            productCollectionComplete: false,
+            variantCollectionComplete: false,
+            authority: {
+              basis: 'fetch_completed_at',
+            },
+            adapterEvidence: buildAdapterEvidence({
+              completionState: 'failed',
+              collectedProductCount: 0,
+              errorCode: error.code,
+              errorStatus,
+            }),
+          },
+          rawItems: [],
+        });
+
         return NextResponse.json(
           {
             ok: false,
-            fetchedAt: new Date().toISOString(),
-            runId: null,
+            fetchedAt: fetchFinishedAt,
+            runId: failedOutcome.runId,
             sourceName: catalogSource.sourceName,
             queuedCount: 0,
             queuedExternalProductIds: [],
             traversalComplete: false,
+            fetchContract: summarizeFetchContract(
+              failedOutcome.fetchContract,
+            ),
+            importTrigger: skippedImportTrigger(
+              'Fetch traversal failed, import trigger skipped',
+            ),
             error: error.code,
             message: error.message,
           },
-          {
-            status:
-              error instanceof IkasProductTraversalError
-                ? error.status
-                : 502,
-          },
+          { status: errorStatus },
         );
       }
 
       throw error;
     }
 
+    const fetchFinishedAt = new Date().toISOString();
     const fetchedItems = productTraversal.items;
 
     const payloadItems = fetchedItems
@@ -855,109 +1052,44 @@ export async function POST(request: NextRequest) {
       })
       .filter((item: { id: string }) => !!item.id);
 
-    if (!payloadItems.length) {
-      return NextResponse.json({
-        ok: true,
-        fetchedAt: new Date().toISOString(),
-        runId: null,
-        sourceName: catalogSource.sourceName,
-        queuedCount: 0,
-        queuedExternalProductIds: [],
-        traversal: {
-          contractVersion: productTraversal.contractVersion,
-          sort: productTraversal.sort,
-          pageSize: productTraversal.pageSize,
-          pagesFetched: productTraversal.pagesFetched,
-          upstreamCount: productTraversal.upstreamCount,
-          traversalComplete: productTraversal.traversalComplete,
-        },
-        importTrigger: {
-          configured: Boolean(
-            process.env.N8N_CATALOG_IMPORT_WEBHOOK_URL,
-          ),
-          ok: false,
-          status: null,
-          response: null,
-          error: 'No products fetched, import trigger skipped',
-        } satisfies CatalogImportTriggerResult,
-        error: undefined,
-      });
-    }
-
     const passiveProductCount = payloadItems.filter(
       (item: PayloadItem) => item.is_active === false,
     ).length;
 
-    const transactionResult = await prisma.$transaction(async (tx) => {
-      const runRows = await tx.$queryRaw<{ id: string }[]>`
-        insert into public.catalog_sync_runs (
-          tenant_id,
-          catalog_source_id,
-          sync_mode,
-          status,
-          started_at,
-          finished_at,
-          items_seen,
-          items_created,
-          items_updated,
-          items_deactivated,
-          error_count,
-          notes,
-          metadata
-        )
-        values (
-          CAST(${catalogSource.tenantId} AS uuid),
-          CAST(${catalogSource.catalogSourceId} AS uuid),
-          'manual',
-          'success',
-          now(),
-          now(),
-          ${payloadItems.length},
-          0,
-          0,
-          ${passiveProductCount},
-          0,
-          'IKAS app queue write variant pilot',
-          jsonb_build_object(
-            'run_type', 'fetch_queue_write',
-            'run_type_contract_version', 'p1_c3_run_type_v1',
-            'source_adapter', 'ikas_sync_products_to_queue',
-            'workflow_phase', 'p1_c4_r1',
-            'source_platform', ${IKAS_SOURCE_PLATFORM},
-            'fetch_mode', ${IKAS_FETCH_MODE},
-            'trigger', 'ikas_app_queue_variant_pilot',
-            'source_name', ${catalogSource.sourceName},
-            'external_commerce_account_id', ${catalogSource.externalCommerceAccountId},
-            'catalog_source_account_binding_id', ${catalogSource.bindingId},
-            'binding_role', ${catalogSource.bindingRole},
-            'identity_resolution_contract_version', 'commerce_source_resolver_v1',
-            'merchant_id', ${syncMerchantId},
-            'authorized_app_id', ${syncAuthorizedAppId},
-            'queued_count', ${payloadItems.length},
-            'traversal_contract_version', ${productTraversal.contractVersion},
-            'pagination_sort', ${productTraversal.sort},
-            'pagination_page_size', ${productTraversal.pageSize},
-            'pages_fetched', ${productTraversal.pagesFetched},
-            'upstream_count', ${productTraversal.upstreamCount},
-            'traversal_complete', ${productTraversal.traversalComplete},
-            'passive_product_count', ${passiveProductCount}
-          )
-        )
-        returning id
-      `;
+    const traversalEvidence: TraversalEvidence = {
+      contractVersion: productTraversal.contractVersion,
+      sort: productTraversal.sort,
+      pageSize: productTraversal.pageSize,
+      pagesFetched: productTraversal.pagesFetched,
+      upstreamCount: productTraversal.upstreamCount,
+      traversalComplete: productTraversal.traversalComplete,
+    };
 
-      const runId = runRows[0]?.id;
+    const zeroItems = payloadItems.length === 0;
 
-      if (!runId) {
-        throw new Error('Failed to create catalog sync run');
-      }
-
-      const fetchContract = await writeCatalogFetchRunContract(tx, {
-        catalogSyncRunId: runId,
-        tenantId: catalogSource.tenantId,
-        catalogSourceId: catalogSource.catalogSourceId,
-        catalogSourceAccountBindingId: catalogSource.bindingId,
-        adapterMode: 'ikas_admin_graphql',
+    const outcome = await persistCatalogFetchOutcome({
+      tenantId: catalogSource.tenantId,
+      catalogSourceId: catalogSource.catalogSourceId,
+      catalogSourceAccountBindingId: catalogSource.bindingId,
+      syncMode: 'manual',
+      startedAt: fetchStartedAt,
+      finishedAt: fetchFinishedAt,
+      notes: zeroItems
+        ? 'IKAS catalog fetch completed with zero products'
+        : 'IKAS catalog fetch completed and raw queue published',
+      metadata: buildRunMetadata({
+        catalogSource,
+        outcome: zeroItems
+          ? 'complete_zero_items'
+          : 'complete',
+        queuedCount: payloadItems.length,
+        passiveProductCount,
+        traversal: traversalEvidence,
+      }),
+      itemsSeen: productTraversal.upstreamCount,
+      errorCount: 0,
+      contract: {
+        adapterMode: IKAS_ADAPTER_MODE,
         fetchSemantics: 'full_snapshot',
         completionState: 'complete',
         traversalComplete: productTraversal.traversalComplete,
@@ -966,55 +1098,17 @@ export async function POST(request: NextRequest) {
         authority: {
           basis: 'fetch_completed_at',
         },
-        adapterEvidence: {
-          evidence_contract_version:
-            'g3_c3_ikas_fetch_adapter_evidence_v1',
-          source_platform: IKAS_SOURCE_PLATFORM,
-          fetch_mode: IKAS_FETCH_MODE,
-          traversal_contract_version:
-            productTraversal.contractVersion,
-          pagination_sort: productTraversal.sort,
-          pagination_page_size: productTraversal.pageSize,
-          pages_fetched: productTraversal.pagesFetched,
-          upstream_product_count:
-            productTraversal.upstreamCount,
-          collected_product_count: payloadItems.length,
-          product_collection_complete: true,
-          variant_collection_complete: false,
-          variant_collection_completeness_reason:
-            'runtime_schema_proof_pending',
-        },
-      });
-
-      for (const item of payloadItems) {
-        await tx.$executeRaw`
-          insert into public.catalog_sync_raw_items (
-            tenant_id,
-            catalog_source_id,
-            catalog_sync_run_id,
-            created_by_sync_run_id,
-            external_product_id,
-            item_type,
-            processed_status,
-            payload_json
-          )
-          values (
-            CAST(${catalogSource.tenantId} AS uuid),
-            CAST(${catalogSource.catalogSourceId} AS uuid),
-            CAST(${runId} AS uuid),
-            CAST(${runId} AS uuid),
-            ${item.id},
-            'product',
-            'pending',
-            CAST(${JSON.stringify(item)} AS jsonb)
-          )
-        `;
-      }
-
-      return {
-        runId,
-        fetchContract,
-      };
+        adapterEvidence: buildAdapterEvidence({
+          completionState: 'complete',
+          traversal: traversalEvidence,
+          collectedProductCount: payloadItems.length,
+        }),
+      },
+      rawItems: payloadItems.map((item: Record<string, any>) => ({
+        externalProductId: String(item.id),
+        itemType: 'product' as const,
+        payload: item,
+      })),
     });
 
     const queuedExternalProductIds = payloadItems.map(
@@ -1022,7 +1116,7 @@ export async function POST(request: NextRequest) {
     );
 
     const importTrigger = await triggerCatalogImportProcess({
-      runId: transactionResult.runId,
+      runId: outcome.runId,
       tenantId: catalogSource.tenantId,
       catalogSourceId: catalogSource.catalogSourceId,
       sourceName: catalogSource.sourceName,
@@ -1032,64 +1126,24 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      fetchedAt: new Date().toISOString(),
-      runId: transactionResult.runId,
+      fetchedAt: fetchFinishedAt,
+      runId: outcome.runId,
       sourceName: catalogSource.sourceName,
       queuedCount: payloadItems.length,
       queuedExternalProductIds,
-      traversal: {
-        contractVersion: productTraversal.contractVersion,
-        sort: productTraversal.sort,
-        pageSize: productTraversal.pageSize,
-        pagesFetched: productTraversal.pagesFetched,
-        upstreamCount: productTraversal.upstreamCount,
-        traversalComplete: productTraversal.traversalComplete,
-      },
-      fetchContract: {
-        contractVersion:
-          transactionResult.fetchContract.contractVersion,
-        authorityContractVersion:
-          transactionResult.fetchContract.authorityContractVersion,
-        adapterMode:
-          transactionResult.fetchContract.adapterMode,
-        fetchSemantics:
-          transactionResult.fetchContract.fetchSemantics,
-        completionState:
-          transactionResult.fetchContract.completionState,
-        traversalComplete:
-          transactionResult.fetchContract.traversalComplete,
-        productCollectionComplete:
-          transactionResult.fetchContract.productCollectionComplete,
-        variantCollectionComplete:
-          transactionResult.fetchContract.variantCollectionComplete,
-        productReconciliationState:
-          transactionResult.fetchContract.productReconciliationState,
-        variantReconciliationState:
-          transactionResult.fetchContract.variantReconciliationState,
-        authorityBasis:
-          transactionResult.fetchContract.authorityBasis,
-        authorityOrder:
-          transactionResult.fetchContract.authorityOrder,
-      },
+      zeroItems,
+      traversal: traversalEvidence,
+      fetchContract: summarizeFetchContract(
+        outcome.fetchContract,
+      ),
       importTrigger,
       error: undefined,
     });
   } catch (error) {
-    if (error instanceof CatalogFetchRunContractError) {
-      const status =
-        error.code === 'FETCH_CONTRACT_ALREADY_EXISTS' ||
-        error.code === 'FETCH_CONTRACT_AUTHORITY_HISTORY_MIXED' ||
-        error.code === 'FETCH_CONTRACT_AUTHORITY_BASIS_CHANGE_NOT_ALLOWED'
-          ? 409
-          : error.code === 'FETCH_CONTRACT_INVALID_INPUT' ||
-              error.code === 'FETCH_CONTRACT_RUN_STATE_MISMATCH' ||
-              error.code === 'FETCH_CONTRACT_AUTHORITY_ORDER_INVALID' ||
-              error.code === 'FETCH_CONTRACT_SOURCE_OBSERVED_AT_INVALID' ||
-              error.code === 'FETCH_CONTRACT_COLLECTION_INCONSISTENT' ||
-              error.code === 'FETCH_CONTRACT_ADAPTER_EVIDENCE_INVALID'
-            ? 422
-            : 500;
-
+    if (
+      error instanceof CatalogFetchOutcomeError ||
+      error instanceof CatalogFetchRunContractError
+    ) {
       return NextResponse.json(
         {
           ok: false,
@@ -1101,7 +1155,7 @@ export async function POST(request: NextRequest) {
           error: error.code,
           message: error.message,
         },
-        { status },
+        { status: persistenceErrorStatus(error) },
       );
     }
 
