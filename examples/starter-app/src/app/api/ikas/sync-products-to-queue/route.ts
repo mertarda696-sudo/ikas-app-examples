@@ -53,9 +53,9 @@ type TraversalEvidence = {
 const IKAS_SOURCE_PLATFORM = 'ikas';
 const IKAS_FETCH_MODE = 'ikas_app_json';
 const IKAS_ADAPTER_MODE = 'ikas_admin_graphql';
-const IKAS_FETCH_RUN_CONTRACT_VERSION = 'g3_catalog_fetch_run_v1';
+const IKAS_FETCH_RUN_CONTRACT_VERSION = 'catalog_fetch_run_v1';
 const IKAS_ADAPTER_EVIDENCE_VERSION =
-  'g3_c4_ikas_fetch_adapter_evidence_v1';
+  'ikas_fetch_adapter_evidence_v1';
 
 function normalizeText(value: string | null | undefined) {
   return String(value || '')
@@ -489,7 +489,6 @@ function buildRunMetadata(input: {
     run_type: 'catalog_fetch',
     run_type_contract_version: IKAS_FETCH_RUN_CONTRACT_VERSION,
     source_adapter: 'ikas_sync_products_to_queue',
-    workflow_phase: 'p1_c10_e2_g3',
     source_platform: IKAS_SOURCE_PLATFORM,
     fetch_mode: IKAS_FETCH_MODE,
     trigger: 'ikas_app_catalog_fetch',
@@ -546,9 +545,10 @@ function buildAdapterEvidence(input: {
     traversal_complete:
       complete && input.traversal?.traversalComplete === true,
     product_collection_complete: complete,
-    variant_collection_complete: false,
-    variant_collection_completeness_reason:
-      'runtime_schema_proof_pending',
+    variant_collection_complete: complete,
+    variant_collection_completeness_reason: complete
+      ? 'ikas_product_variants_direct_list_schema_proven'
+      : 'fetch_not_complete',
     error_code: input.errorCode ?? null,
     error_status: input.errorStatus ?? null,
   };
@@ -671,10 +671,6 @@ export async function POST(request: NextRequest) {
           error: 'IKAS_TOKEN_REFRESH_FAILED',
           message:
             'ikas OAuth token süresi dolmuş ve refresh edilemedi. Bağlı ikas hesabının yeniden yetkilendirilmesi gerekiyor.',
-          tokenMerchantId: authToken.merchantId || null,
-          tokenAuthorizedAppId:
-            authToken.authorizedAppId || syncAuthorizedAppId,
-          tokenExpireDate: authToken.expireDate || null,
         },
         { status: 401 },
       );
@@ -778,7 +774,7 @@ export async function POST(request: NextRequest) {
           tenantId: catalogSource.tenantId,
           catalogSourceId: catalogSource.catalogSourceId,
           catalogSourceAccountBindingId: catalogSource.bindingId,
-          syncMode: 'manual',
+          syncMode: 'full',
           startedAt: fetchStartedAt,
           finishedAt: fetchFinishedAt,
           notes: 'IKAS catalog fetch failed during product traversal',
@@ -1071,7 +1067,7 @@ export async function POST(request: NextRequest) {
       tenantId: catalogSource.tenantId,
       catalogSourceId: catalogSource.catalogSourceId,
       catalogSourceAccountBindingId: catalogSource.bindingId,
-      syncMode: 'manual',
+      syncMode: 'full',
       startedAt: fetchStartedAt,
       finishedAt: fetchFinishedAt,
       notes: zeroItems
@@ -1094,7 +1090,7 @@ export async function POST(request: NextRequest) {
         completionState: 'complete',
         traversalComplete: productTraversal.traversalComplete,
         productCollectionComplete: true,
-        variantCollectionComplete: false,
+        variantCollectionComplete: true,
         authority: {
           basis: 'fetch_completed_at',
         },
