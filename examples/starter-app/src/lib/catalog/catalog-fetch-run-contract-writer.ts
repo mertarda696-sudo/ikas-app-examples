@@ -113,10 +113,6 @@ type AuthorityOrderRow = {
   next_authority_order: string;
 };
 
-type AdvisoryLockRow = {
-  lock_acquired: boolean;
-};
-
 type InsertedContractRow = {
   catalog_sync_run_id: string;
   tenant_id: string;
@@ -440,20 +436,14 @@ export async function writeCatalogFetchRunContract(
   const lockKey =
     `catalog_source_lifecycle_v2:${tenantId}:${catalogSourceId}`;
 
-  const lockRows = await tx.$queryRaw<AdvisoryLockRow[]>`
-    SELECT (
-      pg_advisory_xact_lock(
-        hashtextextended(${lockKey}, 0)
-      ) IS NULL
-    ) AS lock_acquired
+  // pg_advisory_xact_lock is a blocking function that returns void.
+  // Reaching the next statement means the transaction-level lock was acquired;
+  // database/query failures propagate naturally and roll the transaction back.
+  await tx.$queryRaw`
+    SELECT pg_advisory_xact_lock(
+      hashtextextended(${lockKey}, 0)
+    )
   `;
-
-  if (lockRows[0]?.lock_acquired !== true) {
-    throw new CatalogFetchRunContractError(
-      'FETCH_CONTRACT_WRITE_FAILED',
-      'Failed to enter the catalog source lifecycle transaction lock domain.',
-    );
-  }
 
   const existingBasisRows = await tx.$queryRaw<AuthorityBasisRow[]>`
     SELECT DISTINCT fc.authority_basis
