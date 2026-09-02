@@ -436,14 +436,24 @@ export async function writeCatalogFetchRunContract(
   const lockKey =
     `catalog_source_lifecycle_v2:${tenantId}:${catalogSourceId}`;
 
-  // pg_advisory_xact_lock is a blocking function that returns void.
-  // Reaching the next statement means the transaction-level lock was acquired;
-  // database/query failures propagate naturally and roll the transaction back.
-  await tx.$queryRaw`
-    SELECT pg_advisory_xact_lock(
-      hashtextextended(${lockKey}, 0)
+  // The blocking advisory lock returns PostgreSQL void. Keep that void value
+  // inside the materialized CTE so Prisma only decodes a supported boolean.
+  const lockRows = await tx.$queryRaw<Array<{ lock_acquired: boolean }>>`
+    WITH lock_call AS MATERIALIZED (
+      SELECT pg_advisory_xact_lock(
+        hashtextextended(${lockKey}, 0)
+      )
     )
+    SELECT TRUE AS lock_acquired
+    FROM lock_call
   `;
+
+  if (lockRows[0]?.lock_acquired !== true) {
+    throw new CatalogFetchRunContractError(
+      'FETCH_CONTRACT_WRITE_FAILED',
+      'Catalog source lifecycle advisory lock call returned no confirmation row.',
+    );
+  }
 
   const existingBasisRows = await tx.$queryRaw<AuthorityBasisRow[]>`
     SELECT DISTINCT fc.authority_basis
