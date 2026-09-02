@@ -257,11 +257,19 @@ export async function GET() {
           throw new Error('DIAGNOSTIC_BINDING_LOCK_NOT_AVAILABLE');
         }
 
-        await tx.$queryRaw`
-          SELECT pg_advisory_xact_lock(
-            hashtextextended(${lockKey}, 0)
+        const lockRows = await tx.$queryRaw<Array<{ lock_acquired: boolean }>>`
+          WITH lock_call AS MATERIALIZED (
+            SELECT pg_advisory_xact_lock(
+              hashtextextended(${lockKey}, 0)
+            )
           )
+          SELECT TRUE AS lock_acquired
+          FROM lock_call
         `;
+
+        if (lockRows[0]?.lock_acquired !== true) {
+          throw new Error('DIAGNOSTIC_ADVISORY_LOCK_NOT_CONFIRMED');
+        }
 
         const basisRows = await tx.$queryRaw<Array<{ authority_basis: string }>>`
           SELECT DISTINCT fc.authority_basis
