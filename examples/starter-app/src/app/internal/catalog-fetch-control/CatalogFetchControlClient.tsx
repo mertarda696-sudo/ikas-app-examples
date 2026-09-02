@@ -1,20 +1,126 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+
+type DiagnosticBody = Record<string, unknown> & {
+  ok?: boolean;
+  mutationPerformed?: boolean;
+  stage?: string;
+  error?: string | null;
+};
+
+function isPreflightPass(body: DiagnosticBody) {
+  return (
+    body.ok === true &&
+    body.mutationPerformed === false &&
+    body.stage === 'persistence_lock_preflight_pass'
+  );
+}
+
+async function readPersistencePreflight(): Promise<{
+  httpStatus: number;
+  body: DiagnosticBody;
+}> {
+  const response = await fetch('/api/internal/catalog-fetch-diagnostic', {
+    method: 'GET',
+    cache: 'no-store',
+  });
+
+  const rawText = await response.text();
+  let body: DiagnosticBody;
+
+  try {
+    body = rawText ? (JSON.parse(rawText) as DiagnosticBody) : {};
+  } catch {
+    body = {
+      ok: false,
+      mutationPerformed: false,
+      error: rawText || `HTTP ${response.status} ${response.statusText}`,
+    };
+  }
+
+  return {
+    httpStatus: response.status,
+    body,
+  };
+}
 
 export function CatalogFetchControlClient() {
   const [loading, setLoading] = useState(false);
   const [attempted, setAttempted] = useState(false);
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
+  const [preflightLoading, setPreflightLoading] = useState(true);
+  const [preflight, setPreflight] = useState<DiagnosticBody | null>(null);
+
+  const preflightReady = Boolean(preflight && isPreflightPass(preflight));
+
+  useEffect(() => {
+    let active = true;
+
+    const run = async () => {
+      setPreflightLoading(true);
+
+      try {
+        const diagnostic = await readPersistencePreflight();
+
+        if (!active) return;
+
+        setPreflight({
+          httpStatus: diagnostic.httpStatus,
+          ...diagnostic.body,
+        });
+      } catch (error) {
+        if (!active) return;
+
+        setPreflight({
+          ok: false,
+          mutationPerformed: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Unknown persistence preflight error',
+        });
+      } finally {
+        if (active) setPreflightLoading(false);
+      }
+    };
+
+    run();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const runControlledFetch = async () => {
-    if (loading || attempted) return;
+    if (loading || attempted || !preflightReady) return;
 
     setLoading(true);
-    setAttempted(true);
     setResult(null);
 
     try {
+      const diagnostic = await readPersistencePreflight();
+      const currentPreflight = {
+        httpStatus: diagnostic.httpStatus,
+        ...diagnostic.body,
+      };
+
+      setPreflight(currentPreflight);
+
+      if (!isPreflightPass(diagnostic.body)) {
+        setResult({
+          ok: false,
+          attempted: false,
+          error: 'CONTROL_PREFLIGHT_NOT_READY',
+          message:
+            'READ-ONLY persistence preflight no longer passes. Controlled mutation was not started.',
+          preflight: currentPreflight,
+        });
+        return;
+      }
+
+      setAttempted(true);
+
       const response = await fetch('/api/internal/catalog-fetch-control', {
         method: 'POST',
         cache: 'no-store',
@@ -48,6 +154,7 @@ export function CatalogFetchControlClient() {
     } catch (error) {
       setResult({
         ok: false,
+        attempted,
         error:
           error instanceof Error
             ? error.message
@@ -57,6 +164,9 @@ export function CatalogFetchControlClient() {
       setLoading(false);
     }
   };
+
+  const buttonDisabled =
+    preflightLoading || !preflightReady || loading || attempted;
 
   return (
     <main
@@ -113,6 +223,28 @@ export function CatalogFetchControlClient() {
 
         <div
           style={{
+            border: preflightReady
+              ? '1px solid #bbf7d0'
+              : '1px solid #fde68a',
+            background: preflightReady ? '#f0fdf4' : '#fffbeb',
+            borderRadius: 12,
+            padding: 14,
+            color: preflightReady ? '#166534' : '#92400e',
+            fontSize: 14,
+            lineHeight: 1.6,
+            marginBottom: 18,
+            fontWeight: 700,
+          }}
+        >
+          {preflightLoading
+            ? 'READ-ONLY persistence preflight çalışıyor...'
+            : preflightReady
+              ? 'READ-ONLY persistence preflight PASS — controlled fetch hazır.'
+              : 'READ-ONLY persistence preflight PASS değil — mutation butonu kilitli.'}
+        </div>
+
+        <div
+          style={{
             border: '1px solid #fde68a',
             background: '#fffbeb',
             borderRadius: 12,
@@ -123,31 +255,54 @@ export function CatalogFetchControlClient() {
             marginBottom: 18,
           }}
         >
-          Bu test otomatik başlamaz. Butona yalnız bir kez basın. Sonrasında sayfayı
-          yenileyip tekrar denemeyin; evidence kontrolü ayrı READ-ONLY endpointten
-          yapılacaktır.
+          Test otomatik başlamaz. Buton ancak READ-ONLY preflight PASS ise açılır.
+          Butona yalnız bir kez basın; POST öncesinde preflight server çağrısı tekrar
+          doğrulanır.
         </div>
 
         <button
           type="button"
           onClick={runControlledFetch}
-          disabled={loading || attempted}
+          disabled={buttonDisabled}
           style={{
             padding: '12px 18px',
             borderRadius: 12,
             border: 0,
-            background: loading || attempted ? '#d1d5db' : '#111827',
-            color: loading || attempted ? '#6b7280' : '#ffffff',
+            background: buttonDisabled ? '#d1d5db' : '#111827',
+            color: buttonDisabled ? '#6b7280' : '#ffffff',
             fontWeight: 800,
-            cursor: loading || attempted ? 'not-allowed' : 'pointer',
+            cursor: buttonDisabled ? 'not-allowed' : 'pointer',
           }}
         >
-          {loading
-            ? 'Controlled fetch çalışıyor...'
-            : attempted
-              ? 'Controlled fetch denendi — tekrar çalıştırılamaz'
-              : 'ONE Controlled Live Fetch’i Çalıştır'}
+          {preflightLoading
+            ? 'Preflight bekleniyor...'
+            : !preflightReady
+              ? 'Preflight PASS olmadan çalıştırılamaz'
+              : loading
+                ? 'Controlled fetch çalışıyor...'
+                : attempted
+                  ? 'Controlled fetch denendi — tekrar çalıştırılamaz'
+                  : 'ONE Controlled Live Fetch’i Çalıştır'}
         </button>
+
+        {preflight && !preflightReady ? (
+          <pre
+            style={{
+              marginTop: 18,
+              padding: 16,
+              borderRadius: 12,
+              background: '#7c2d12',
+              color: '#fff7ed',
+              overflowX: 'auto',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              fontSize: 12,
+              lineHeight: 1.6,
+            }}
+          >
+            {JSON.stringify(preflight, null, 2)}
+          </pre>
+        ) : null}
 
         {result ? (
           <pre
