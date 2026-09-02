@@ -9,6 +9,7 @@ import {
   IkasProductTraversalError,
 } from '@/lib/catalog/ikas-product-traversal';
 import { PaginatedTraversalError } from '@/lib/catalog/paginated-traversal';
+import { prisma } from '@/lib/prisma';
 import { AuthTokenManager } from '@/models/auth-token/manager';
 import { NextResponse } from 'next/server';
 
@@ -230,10 +231,88 @@ export async function GET() {
       normalizedItems.map((item) => String(item.id)),
     ).size;
 
+    let persistencePreflight;
+
+    try {
+      const lockKey =
+        `catalog_source_lifecycle_v2:${identity.tenantId}:${identity.catalogSourceId}`;
+
+      persistencePreflight = await prisma.$transaction(async (tx) => {
+        const bindingRows = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT b.id::text AS id
+          FROM public.catalog_source_account_bindings b
+          JOIN public.catalog_sources s
+            ON s.id = b.catalog_source_id
+           AND s.tenant_id = b.tenant_id
+          WHERE b.id = CAST(${identity.bindingId} AS uuid)
+            AND b.tenant_id = CAST(${identity.tenantId} AS uuid)
+            AND b.catalog_source_id = CAST(${identity.catalogSourceId} AS uuid)
+            AND b.is_active IS TRUE
+            AND b.retired_at IS NULL
+            AND s.is_active IS TRUE
+          FOR UPDATE OF b, s
+        `;
+
+        if (!bindingRows[0]) {
+          throw new Error('DIAGNOSTIC_BINDING_LOCK_NOT_AVAILABLE');
+        }
+
+        await tx.$queryRaw`
+          SELECT pg_advisory_xact_lock(
+            hashtextextended(${lockKey}, 0)
+          )
+        `;
+
+        const basisRows = await tx.$queryRaw<Array<{ authority_basis: string }>>`
+          SELECT DISTINCT fc.authority_basis
+          FROM public.catalog_fetch_run_contracts fc
+          WHERE fc.tenant_id = CAST(${identity.tenantId} AS uuid)
+            AND fc.catalog_source_id = CAST(${identity.catalogSourceId} AS uuid)
+            AND fc.adapter_mode <> 'qa_fixture'
+          ORDER BY fc.authority_basis
+        `;
+
+        return {
+          bindingRowLockAcquired: true,
+          advisoryTransactionLockReturned: true,
+          productionAuthorityBases: basisRows.map((row) => row.authority_basis),
+        };
+      });
+    } catch (error) {
+      return json(
+        {
+          ok: false,
+          ...base,
+          stage: 'persistence_lock_preflight',
+          idOnlyTraversal: {
+            upstreamCount: idOnlyTraversal.upstreamCount,
+            pagesFetched: idOnlyTraversal.pagesFetched,
+            traversalComplete: idOnlyTraversal.traversalComplete,
+          },
+          fullTraversal: {
+            upstreamCount: fullTraversal.upstreamCount,
+            pagesFetched: fullTraversal.pagesFetched,
+            traversalComplete: fullTraversal.traversalComplete,
+          },
+          normalization: {
+            productCount: normalizedItems.length,
+            uniqueProductIdCount,
+            variantCount,
+            stableProductIds,
+            jsonSerializable: true,
+            serializedByteLength,
+          },
+          persistencePreflightError: errorEvidence(error),
+          error: 'PERSISTENCE_LOCK_PREFLIGHT_FAILED',
+        },
+        200,
+      );
+    }
+
     return json({
       ok: true,
       ...base,
-      stage: 'normalization_pass',
+      stage: 'persistence_lock_preflight_pass',
       idOnlyTraversal: {
         upstreamCount: idOnlyTraversal.upstreamCount,
         pagesFetched: idOnlyTraversal.pagesFetched,
@@ -252,6 +331,7 @@ export async function GET() {
         jsonSerializable: true,
         serializedByteLength,
       },
+      persistencePreflight,
       error: null,
     });
   } catch (error) {
