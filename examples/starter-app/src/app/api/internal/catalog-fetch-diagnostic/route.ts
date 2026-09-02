@@ -3,6 +3,7 @@ import { isIkasTokenRefreshDue } from '@/helpers/api-helpers';
 import {
   listActiveIkasCatalogIdentities,
 } from '@/lib/catalog/ikas-catalog-fetch-service';
+import { normalizeIkasCatalogProducts } from '@/lib/catalog/ikas-catalog-payload-normalizer';
 import {
   fetchIkasProductTraversal,
   IkasProductTraversalError,
@@ -182,10 +183,57 @@ export async function GET() {
       );
     }
 
+    let normalizedItems;
+    let serializedByteLength = 0;
+
+    try {
+      normalizedItems = normalizeIkasCatalogProducts({
+        items: fullTraversal.items,
+        merchantId: identity.merchantId,
+        storeName: 'diagnostic',
+      });
+
+      const serialized = JSON.stringify(normalizedItems);
+      serializedByteLength = Buffer.byteLength(serialized, 'utf8');
+    } catch (error) {
+      return json(
+        {
+          ok: false,
+          ...base,
+          stage: 'normalization',
+          idOnlyTraversal: {
+            upstreamCount: idOnlyTraversal.upstreamCount,
+            pagesFetched: idOnlyTraversal.pagesFetched,
+            traversalComplete: idOnlyTraversal.traversalComplete,
+          },
+          fullTraversal: {
+            upstreamCount: fullTraversal.upstreamCount,
+            pagesFetched: fullTraversal.pagesFetched,
+            traversalComplete: fullTraversal.traversalComplete,
+          },
+          normalizationError: errorEvidence(error),
+          error: 'IKAS_NORMALIZATION_FAILED',
+        },
+        200,
+      );
+    }
+
+    const variantCount = normalizedItems.reduce(
+      (total, item) =>
+        total + (Array.isArray(item.variants) ? item.variants.length : 0),
+      0,
+    );
+    const stableProductIds = normalizedItems.every(
+      (item) => String(item.id ?? '').trim().length > 0,
+    );
+    const uniqueProductIdCount = new Set(
+      normalizedItems.map((item) => String(item.id)),
+    ).size;
+
     return json({
       ok: true,
       ...base,
-      stage: 'upstream_read_pass',
+      stage: 'normalization_pass',
       idOnlyTraversal: {
         upstreamCount: idOnlyTraversal.upstreamCount,
         pagesFetched: idOnlyTraversal.pagesFetched,
@@ -195,6 +243,14 @@ export async function GET() {
         upstreamCount: fullTraversal.upstreamCount,
         pagesFetched: fullTraversal.pagesFetched,
         traversalComplete: fullTraversal.traversalComplete,
+      },
+      normalization: {
+        productCount: normalizedItems.length,
+        uniqueProductIdCount,
+        variantCount,
+        stableProductIds,
+        jsonSerializable: true,
+        serializedByteLength,
       },
       error: null,
     });
