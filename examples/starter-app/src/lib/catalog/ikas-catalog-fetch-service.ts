@@ -28,6 +28,10 @@ import {
   IKAS_PRODUCT_TRAVERSAL_CONTRACT_VERSION,
 } from '@/lib/catalog/ikas-product-traversal';
 import { PaginatedTraversalError } from '@/lib/catalog/paginated-traversal';
+import {
+  classifyCatalogImportTrigger,
+  type CatalogImportTriggerErrorCode,
+} from '@/lib/catalog/catalog-import-trigger-contract.mjs';
 import { AuthTokenManager } from '@/models/auth-token/manager';
 
 export type IkasCatalogIdentity = {
@@ -50,12 +54,7 @@ type CatalogImportTriggerResult = {
   configured: boolean;
   ok: boolean;
   status: number | null;
-  errorCode:
-    | 'webhook_not_configured'
-    | 'webhook_http_error'
-    | 'webhook_network_error'
-    | 'trigger_skipped'
-    | null;
+  errorCode: CatalogImportTriggerErrorCode | null;
 };
 
 type TraversalEvidence = {
@@ -117,7 +116,11 @@ async function triggerCatalogImportProcess(input: {
       configured: false,
       ok: false,
       status: null,
-      errorCode: 'webhook_not_configured',
+      errorCode: classifyCatalogImportTrigger({
+        configured: false,
+        ok: false,
+        status: null,
+      }),
     };
   }
 
@@ -144,14 +147,22 @@ async function triggerCatalogImportProcess(input: {
       configured: true,
       ok: webhookResponse.ok,
       status: webhookResponse.status,
-      errorCode: webhookResponse.ok ? null : 'webhook_http_error',
+      errorCode: classifyCatalogImportTrigger({
+        configured: true,
+        ok: webhookResponse.ok,
+        status: webhookResponse.status,
+      }),
     };
   } catch {
     return {
       configured: true,
       ok: false,
       status: null,
-      errorCode: 'webhook_network_error',
+      errorCode: classifyCatalogImportTrigger({
+        configured: true,
+        ok: false,
+        status: null,
+      }),
     };
   }
 }
@@ -255,7 +266,12 @@ function skippedImportTrigger(): CatalogImportTriggerResult {
     configured: Boolean(process.env.N8N_CATALOG_IMPORT_WEBHOOK_URL),
     ok: false,
     status: null,
-    errorCode: 'trigger_skipped',
+    errorCode: classifyCatalogImportTrigger({
+      configured: Boolean(process.env.N8N_CATALOG_IMPORT_WEBHOOK_URL),
+      ok: false,
+      status: null,
+      skipped: true,
+    }),
   };
 }
 
