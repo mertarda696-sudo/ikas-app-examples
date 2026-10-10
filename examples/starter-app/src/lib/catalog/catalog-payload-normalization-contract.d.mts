@@ -17,8 +17,29 @@ export function resolveIkasSellPrice(
 ): {
   status: IkasSellPriceResolutionStatus;
   price: number | null;
+  currencyBasis?: 'price_row' | 'source_default_base_price';
 };
+
+export type IkasPriceResolutionFailureSample = {
+  external_product_id: string;
+  external_variant_id: string;
+  resolution_status: string;
+  price_row_count: number;
+  price_rows: Array<{
+    price_list_id: string | null;
+    price_list_id_present: boolean;
+    currency: string | null;
+    currency_code: string | null;
+    has_finite_sell_price: boolean;
+  }>;
+};
+
+export function describeIkasPriceResolutionFailures(
+  items: unknown,
+  products: unknown,
+): IkasPriceResolutionFailureSample[];
 
 export function summarizeIkasPriceResolutionFailures(
   products: unknown,
 ): Record<string, number>;
+

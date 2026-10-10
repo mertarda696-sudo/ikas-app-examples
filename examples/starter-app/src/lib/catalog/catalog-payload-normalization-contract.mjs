@@ -27,20 +27,37 @@ export function resolveIkasSellPrice(prices, currencyDefault) {
   }
 
   const expectedCurrency = normalizeCurrencyCode(currencyDefault);
-  if (!expectedCurrency) {
+  if (!/^[A-Z]{3}$/.test(expectedCurrency)) {
     return { status: 'currency_not_configured', price: null };
   }
 
-  const matchingPrices = prices.filter((price) => {
-    const sourceCurrency = normalizeCurrencyCode(price?.currencyCode || price?.currency);
-    return sourceCurrency === expectedCurrency;
+  const matchingPrices = prices.flatMap((price) => {
+    const sourceCurrency =
+      normalizeCurrencyCode(price?.currencyCode) || normalizeCurrencyCode(price?.currency);
+    // GraphQL explicitly returns priceListId=null for the base price. Its nullable
+    // currency fields may be omitted; only that row can use the source's configured
+    // base currency. A named list or an explicitly different currency cannot.
+    const isBasePrice = price?.priceListId === null;
+    const usesSourceDefault = isBasePrice && !sourceCurrency;
+    if ((sourceCurrency || (usesSourceDefault ? expectedCurrency : '')) !== expectedCurrency) {
+      return [];
+    }
+    return [{
+      row: price,
+      isBasePrice,
+      currencyBasis: usesSourceDefault ? 'source_default_base_price' : 'price_row',
+    }];
   });
 
   if (matchingPrices.length === 0) {
     return { status: 'currency_not_found', price: null };
   }
 
-  const values = matchingPrices.map((price) => price?.sellPrice);
+  // The configured source uses the base catalog price, rather than a customer
+  // price-list override in the same currency, when that base row is available.
+  const basePrices = matchingPrices.filter((price) => price.isBasePrice);
+  const selectedPrices = basePrices.length ? basePrices : matchingPrices;
+  const values = selectedPrices.map((price) => price.row?.sellPrice);
   const numericValues = values.filter((value) => typeof value === 'number' && Number.isFinite(value));
 
   if (numericValues.length === 0) {
@@ -56,7 +73,47 @@ export function resolveIkasSellPrice(prices, currencyDefault) {
     return { status: 'ambiguous_price', price: null };
   }
 
-  return { status: 'matched', price: numericValues[0] };
+  return {
+    status: 'matched',
+    price: numericValues[0],
+    currencyBasis: selectedPrices.some((price) => price.currencyBasis === 'source_default_base_price')
+      ? 'source_default_base_price'
+      : 'price_row',
+  };
+}
+
+export function describeIkasPriceResolutionFailures(items, products) {
+  const sourceProducts = new Map(
+    (Array.isArray(items) ? items : []).map((product) => [String(product?.id ?? ''), product]),
+  );
+  const samples = [];
+
+  for (const product of Array.isArray(products) ? products : []) {
+    const sourceProduct = sourceProducts.get(String(product?.id ?? ''));
+    for (const variant of Array.isArray(product?.variants) ? product.variants : []) {
+      if (!['currency_not_configured', 'currency_not_found', 'ambiguous_price'].includes(variant?.source_price_resolution)) {
+        continue;
+      }
+      const sourceVariant = (Array.isArray(sourceProduct?.variants) ? sourceProduct.variants : [])
+        .find((row) => String(row?.id ?? '') === String(variant?.id ?? ''));
+      const prices = Array.isArray(sourceVariant?.prices) ? sourceVariant.prices : [];
+      samples.push({
+        external_product_id: String(product?.id ?? ''),
+        external_variant_id: String(variant?.id ?? ''),
+        resolution_status: variant.source_price_resolution,
+        price_row_count: prices.length,
+        price_rows: prices.slice(0, 5).map((price) => ({
+          price_list_id: typeof price?.priceListId === 'string' ? price.priceListId : null,
+          price_list_id_present: price != null && Object.hasOwn(price, 'priceListId'),
+          currency: typeof price?.currency === 'string' ? price.currency : null,
+          currency_code: typeof price?.currencyCode === 'string' ? price.currencyCode : null,
+          has_finite_sell_price: typeof price?.sellPrice === 'number' && Number.isFinite(price.sellPrice),
+        })),
+      });
+      if (samples.length === 10) return samples;
+    }
+  }
+  return samples;
 }
 
 export function summarizeIkasPriceResolutionFailures(products) {
@@ -75,3 +132,4 @@ export function summarizeIkasPriceResolutionFailures(products) {
 
   return failures;
 }
+

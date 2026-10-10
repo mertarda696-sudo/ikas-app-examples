@@ -383,6 +383,7 @@ export function normalizeIkasCatalogProducts(input: {
             size: sizeMeta.size_value,
             price: sellPrice,
             source_price_resolution: priceResolution.status,
+            source_price_currency_basis: priceResolution.currencyBasis ?? null,
             stock_qty: productIsActive ? stockQty : 0,
             stock_status: stockStatus,
             is_active: productIsActive,
@@ -452,7 +453,7 @@ export function normalizeIkasCatalogProducts(input: {
           source_has_numeric_apparel_option:
             sourceSizeSystems.includes('numeric_apparel'),
           source_currency_default: input.currencyDefault,
-          source_variant_price_mode: 'sell_price_matching_currency_default',
+          source_variant_price_mode: 'base_sell_price_matching_source_currency_v2',
           source_variant_stock_mode: 'stocks_sum',
         },
         base_price: null,
@@ -473,3 +474,4 @@ export function normalizeIkasCatalogProducts(input: {
     })
     .filter((item: NormalizedIkasCatalogProduct) => !!item.id);
 }
+

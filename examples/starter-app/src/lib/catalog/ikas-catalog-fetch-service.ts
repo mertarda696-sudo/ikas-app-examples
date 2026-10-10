@@ -1,5 +1,9 @@
 import { config } from '@/globals/config';
-import { summarizeIkasPriceResolutionFailures } from './catalog-payload-normalization-contract.mjs';
+import {
+  describeIkasPriceResolutionFailures,
+  summarizeIkasPriceResolutionFailures,
+  type IkasPriceResolutionFailureSample,
+} from './catalog-payload-normalization-contract.mjs';
 import {
   isIkasTokenRefreshDue,
   onCheckToken,
@@ -194,6 +198,12 @@ function buildRunMetadata(input: {
   traversal?: TraversalEvidence | null;
   errorCode?: string | null;
   errorStatus?: number | null;
+  priceResolution?: {
+    contract_version: string;
+    configured_currency: string;
+    failures: Record<string, number>;
+    samples: IkasPriceResolutionFailureSample[];
+  };
 }) {
   return {
     run_type: 'catalog_fetch',
@@ -225,6 +235,7 @@ function buildRunMetadata(input: {
       input.traversal?.traversalComplete ?? false,
     error_code: input.errorCode ?? null,
     error_status: input.errorStatus ?? null,
+    ...(input.priceResolution ? { price_resolution: input.priceResolution } : {}),
   };
 }
 
@@ -596,6 +607,12 @@ export async function executeIkasCatalogFetch(
 
     if (priceResolutionFailureCount > 0) {
       const errorCode = 'IKAS_CATALOG_PRICE_CURRENCY_UNRESOLVED';
+      const priceResolution = {
+        contract_version: 'ikas_source_price_currency_v2',
+        configured_currency: currencyDefault,
+        failures: priceResolutionFailures,
+        samples: describeIkasPriceResolutionFailures(productTraversal.items, payloadItems),
+      };
       const failedOutcome = await persistCatalogFetchOutcome({
         tenantId: catalogSource.tenantId,
         catalogSourceId: catalogSource.catalogSourceId,
@@ -611,6 +628,7 @@ export async function executeIkasCatalogFetch(
           traversal: traversalEvidence,
           errorCode,
           errorStatus: 422,
+          priceResolution,
         }),
         itemsSeen: productTraversal.upstreamCount,
         errorCount: 1,
@@ -648,8 +666,9 @@ export async function executeIkasCatalogFetch(
         fetchContract: summarizeFetchContract(failedOutcome.fetchContract),
         importTrigger: skippedImportTrigger(),
         error: errorCode,
-        message: 'No catalog items were queued because one or more variant prices did not resolve to the configured source currency.',
+        message: 'Varyant fiyatları kaynak para birimiyle (' + currencyDefault + ') eşleştirilemedi. Katalog kuyruğuna kayıt yazılmadı. Run ID: ' + failedOutcome.runId,
         priceResolutionFailures,
+        priceResolution,
       });
     }
 
@@ -747,3 +766,4 @@ export async function executeIkasCatalogFetch(
     );
   }
 }
+
