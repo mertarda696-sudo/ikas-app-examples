@@ -1,23 +1,4 @@
-export type CommerceCandidateIdentity = {
-  identifierType: string;
-  identifierValue: string;
-};
-
-export type CommerceCandidateRow = {
-  tenant_id: string;
-  external_commerce_account_id: string;
-  binding_id: string;
-  catalog_source_id: string;
-  identifier_type: string;
-  identifier_value: string;
-};
-
-export function selectExactCommerceSourceCandidate(
-  rows: CommerceCandidateRow[],
-  identities: CommerceCandidateIdentity[],
-):
-  | { status: 'matched'; row: CommerceCandidateRow; matchedIdentifierTypes: string[] }
-  | { status: 'not_found' | 'ambiguous' } {
+export function selectExactCommerceSourceCandidate(rows, identities) {
   const expectedIdentityKeys = new Set(
     identities
       .map((identity) => {
@@ -30,10 +11,7 @@ export function selectExactCommerceSourceCandidate(
 
   if (!expectedIdentityKeys.size) return { status: 'not_found' };
 
-  const candidates = new Map<
-    string,
-    { row: CommerceCandidateRow; matchedIdentityKeys: Set<string> }
-  >();
+  const candidates = new Map();
 
   for (const row of rows) {
     const candidateKey = [
@@ -44,7 +22,7 @@ export function selectExactCommerceSourceCandidate(
     ].join(':');
     const candidate = candidates.get(candidateKey) ?? {
       row,
-      matchedIdentityKeys: new Set<string>(),
+      matchedIdentityKeys: new Set(),
     };
 
     candidate.matchedIdentityKeys.add(
