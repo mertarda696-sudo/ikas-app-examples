@@ -58,3 +58,20 @@ export function resolveIkasSellPrice(prices, currencyDefault) {
 
   return { status: 'matched', price: numericValues[0] };
 }
+
+export function summarizeIkasPriceResolutionFailures(products) {
+  const failures = {};
+
+  for (const product of Array.isArray(products) ? products : []) {
+    for (const variant of Array.isArray(product?.variants) ? product.variants : []) {
+      const status = variant?.source_price_resolution;
+      if (!['currency_not_configured', 'currency_not_found', 'ambiguous_price'].includes(status)) {
+        continue;
+      }
+
+      failures[status] = (failures[status] || 0) + 1;
+    }
+  }
+
+  return failures;
+}
