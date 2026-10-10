@@ -4,10 +4,14 @@ import { useState } from 'react';
 import { TokenHelpers } from '@/helpers/token-helpers';
 
 type SyncState = {
-  status: 'idle' | 'loading' | 'success' | 'error';
+  status: 'idle' | 'loading' | 'success' | 'warning' | 'error';
   message: string;
   detail?: string;
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
 
 export default function CatalogSyncButton() {
   const [state, setState] = useState<SyncState>({
@@ -42,33 +46,84 @@ export default function CatalogSyncButton() {
       });
 
       const rawText = await response.text();
-      let payload: any = {};
+      let payload: Record<string, unknown> = {};
 
       try {
-        payload = rawText ? JSON.parse(rawText) : {};
+        const parsed: unknown = rawText ? JSON.parse(rawText) : {};
+        payload = isRecord(parsed) ? parsed : {};
       } catch {
         payload = {
           ok: false,
-          error: rawText || `HTTP ${response.status} ${response.statusText}`,
+          error: rawText || 'HTTP ' + response.status + ' ' + response.statusText,
         };
       }
 
-      if (!response.ok || !payload?.ok) {
+      if (!response.ok || payload.ok !== true) {
+        const detail =
+          typeof payload.message === 'string'
+            ? payload.message
+            : typeof payload.error === 'string'
+              ? payload.error
+              : 'HTTP ' + response.status + ' ' + response.statusText;
+
         setState({
           status: 'error',
           message: 'Katalog sync başlatılamadı.',
+          detail,
+        });
+        return;
+      }
+
+      const importTrigger = isRecord(payload.importTrigger)
+        ? payload.importTrigger
+        : null;
+      const runId = typeof payload.runId === 'string' ? payload.runId : 'bilinmiyor';
+      const queuedCount =
+        typeof payload.queuedCount === 'number' ? payload.queuedCount : 0;
+
+      if (importTrigger?.ok !== true) {
+        const errorCode =
+          typeof importTrigger?.errorCode === 'string'
+            ? importTrigger.errorCode
+            : 'trigger_status_missing';
+        const triggerStatus =
+          errorCode === 'webhook_not_configured'
+            ? 'n8n webhook yapılandırılmamış'
+            : errorCode === 'webhook_http_error'
+              ? 'n8n webhook HTTP hatası' +
+                (typeof importTrigger?.status === 'number'
+                  ? ' (' + importTrigger.status + ')'
+                  : '')
+              : errorCode === 'webhook_network_error'
+                ? 'n8n webhook bağlantı hatası'
+                : errorCode === 'trigger_skipped'
+                  ? 'Import tetiklemesi atlandı'
+                  : 'Tetikleme sonucu eksik';
+
+        setState({
+          status: 'warning',
+          message: 'Fetch tamamlandı; importer tetiklenmesi doğrulanmadı.',
           detail:
-            payload?.message ||
-            payload?.error ||
-            `HTTP ${response.status} ${response.statusText}`,
+            'Run ID: ' +
+            runId +
+            ' · Kuyruğa alınan kayıt: ' +
+            queuedCount +
+            ' · ' +
+            triggerStatus +
+            ' · Aynı refresh’i tekrarlamayın; bu run ID için importer çalışmasını doğrulayın.',
         });
         return;
       }
 
       setState({
         status: 'success',
-        message: 'ikas katalog sync kuyruğu başlatıldı.',
-        detail: `Kuyruğa alınan/güncellenen kayıt: ${payload?.queuedCount ?? 0}`,
+        message: 'Katalog verisi kuyruğa alındı ve importer tetiklendi.',
+        detail:
+          'Run ID: ' +
+          runId +
+          ' · Kuyruğa alınan kayıt: ' +
+          queuedCount +
+          ' · Bu bildirim importer’ın tamamlandığı anlamına gelmez.',
       });
     } catch (error) {
       setState({
@@ -80,6 +135,8 @@ export default function CatalogSyncButton() {
   }
 
   const isLoading = state.status === 'loading';
+  const isBlocked = state.status === 'warning';
+  const isDisabled = isLoading || isBlocked;
 
   return (
     <section
@@ -108,19 +165,23 @@ export default function CatalogSyncButton() {
       <button
         type="button"
         onClick={handleSync}
-        disabled={isLoading}
+        disabled={isDisabled}
         style={{
           width: 'fit-content',
           border: 'none',
           borderRadius: 999,
           padding: '10px 14px',
-          background: isLoading ? '#9ca3af' : '#111827',
+          background: isDisabled ? '#9ca3af' : '#111827',
           color: '#fff',
           fontWeight: 800,
-          cursor: isLoading ? 'not-allowed' : 'pointer',
+          cursor: isDisabled ? 'not-allowed' : 'pointer',
         }}
       >
-        {isLoading ? 'Sync başlatılıyor...' : 'ikas Kataloğunu Yenile'}
+        {isLoading
+          ? 'Sync başlatılıyor...'
+          : isBlocked
+            ? 'Importer durumu kontrol edilmeli'
+            : 'ikas Kataloğunu Yenile'}
       </button>
 
       {state.message ? (
@@ -131,21 +192,27 @@ export default function CatalogSyncButton() {
             background:
               state.status === 'success'
                 ? '#ecfdf5'
-                : state.status === 'error'
-                  ? '#fef2f2'
-                  : '#f9fafb',
+                : state.status === 'warning'
+                  ? '#fffbeb'
+                  : state.status === 'error'
+                    ? '#fef2f2'
+                    : '#f9fafb',
             border:
               state.status === 'success'
                 ? '1px solid #a7f3d0'
-                : state.status === 'error'
-                  ? '1px solid #fecaca'
-                  : '1px solid #e5e7eb',
+                : state.status === 'warning'
+                  ? '1px solid #fde68a'
+                  : state.status === 'error'
+                    ? '1px solid #fecaca'
+                    : '1px solid #e5e7eb',
             color:
               state.status === 'success'
                 ? '#065f46'
-                : state.status === 'error'
-                  ? '#991b1b'
-                  : '#374151',
+                : state.status === 'warning'
+                  ? '#92400e'
+                  : state.status === 'error'
+                    ? '#991b1b'
+                    : '#374151',
             fontSize: 13,
             lineHeight: 1.5,
           }}

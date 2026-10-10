@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "pnpm test && next build",
     "start": "next start",
     "lint": "next lint",
     "codegen": "graphql-codegen --config src/lib/ikas-client/codegen.ts",
@@ -13,7 +13,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "apply:ai-rules": "npx @intellectronica/ruler apply"
+    "apply:ai-rules": "npx @intellectronica/ruler apply",
+    "test": "node --test tests/catalog-import-trigger-contract.test.mjs tests/catalog-payload-normalization-contract.test.mjs tests/paginated-traversal.test.mjs tests/commerce-source-candidate-contract.test.mjs"
   },
   "packageManager": "pnpm@10.4.1",
   "dependencies": {
