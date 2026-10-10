@@ -14,7 +14,8 @@ export type CommerceCandidateRow = {
 
 export type CommerceCandidateSelection<T extends CommerceCandidateRow = CommerceCandidateRow> =
   | { status: 'matched'; row: T; matchedIdentifierTypes: string[] }
-  | { status: 'not_found' | 'ambiguous' };
+  | { status: 'not_found' }
+  | { status: 'ambiguous' };
 
 export function selectExactCommerceSourceCandidate<T extends CommerceCandidateRow>(
   rows: T[],
