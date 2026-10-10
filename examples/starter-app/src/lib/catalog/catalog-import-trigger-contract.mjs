@@ -1,19 +1,4 @@
-export type CatalogImportTriggerErrorCode =
-  | 'webhook_not_configured'
-  | 'webhook_http_error'
-  | 'webhook_network_error'
-  | 'trigger_skipped';
-
-export type CatalogImportTriggerClassificationInput = {
-  configured: boolean;
-  ok: boolean;
-  status: number | null;
-  skipped?: boolean;
-};
-
-export function classifyCatalogImportTrigger(
-  input: CatalogImportTriggerClassificationInput,
-): CatalogImportTriggerErrorCode | null {
+export function classifyCatalogImportTrigger(input) {
   if (input.skipped === true) {
     return 'trigger_skipped';
   }
