@@ -18,3 +18,7 @@ export function resolveIkasSellPrice(
   status: IkasSellPriceResolutionStatus;
   price: number | null;
 };
+
+export function summarizeIkasPriceResolutionFailures(
+  products: unknown,
+): Record<string, number>;
