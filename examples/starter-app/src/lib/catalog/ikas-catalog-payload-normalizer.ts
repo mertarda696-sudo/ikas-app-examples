@@ -1,3 +1,8 @@
+import {
+  isIkasCatalogProductActive,
+  resolveIkasSellPrice,
+} from './catalog-payload-normalization-contract.mjs';
+
 export type NormalizedIkasCatalogProduct = Record<string, any> & {
   id: string;
   is_active: boolean;
@@ -16,16 +21,6 @@ function slugify(value: string | null | undefined) {
   return normalizeText(value)
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
-}
-
-function normalizeSourceStatus(value: string | null | undefined) {
-  return normalizeText(value).toUpperCase();
-}
-
-function isPassiveSalesChannelStatus(value: string | null | undefined) {
-  return ['PASSIVE', 'INACTIVE', 'DISABLED', 'HIDDEN'].includes(
-    normalizeSourceStatus(value),
-  );
 }
 
 const APPAREL_COLOR_ALIASES: Array<[string, string]> = [
@@ -304,6 +299,7 @@ export function normalizeIkasCatalogProducts(input: {
   items: any[];
   merchantId: string;
   storeName: string;
+  currencyDefault: string;
 }): NormalizedIkasCatalogProduct[] {
   return input.items
     .map((item: any) => {
@@ -321,11 +317,17 @@ export function normalizeIkasCatalogProducts(input: {
       const sourceSalesChannelStatuses = sourceSalesChannels
         .map((channel: any) => channel?.status ?? null)
         .filter(Boolean);
-      const sourceSalesChannelIsPassive = sourceSalesChannelStatuses.some(
-        (status: string) => isPassiveSalesChannelStatus(status),
+      const sourceSalesChannelIsPassive =
+        sourceSalesChannelStatuses.length > 0 &&
+        sourceSalesChannelStatuses.every((status: string) =>
+          ['PASSIVE', 'INACTIVE', 'DISABLED', 'HIDDEN'].includes(
+            String(status).trim().toUpperCase(),
+          ),
+        );
+      const productIsActive = isIkasCatalogProductActive(
+        item?.deleted,
+        sourceSalesChannels,
       );
-      const productIsActive =
-        item?.deleted !== true && !sourceSalesChannelIsPassive;
 
       const variantsRaw = Array.isArray(item?.variants) ? item.variants : [];
       const normalizedVariants = variantsRaw
@@ -353,11 +355,11 @@ export function normalizeIkasCatalogProducts(input: {
             extractColorFromText(item?.name, optionSummary, variant?.sku);
 
           const prices = Array.isArray(variant?.prices) ? variant.prices : [];
-          const firstPrice = prices[0] || null;
-          const sellPrice =
-            typeof firstPrice?.sellPrice === 'number'
-              ? firstPrice.sellPrice
-              : null;
+          const priceResolution = resolveIkasSellPrice(
+            prices,
+            input.currencyDefault,
+          );
+          const sellPrice = priceResolution.price;
           const stocks = Array.isArray(variant?.stocks) ? variant.stocks : [];
           const stockQty = stocks.reduce((sum: number, stock: any) => {
             const count =
@@ -380,6 +382,7 @@ export function normalizeIkasCatalogProducts(input: {
             color: colorValue,
             size: sizeMeta.size_value,
             price: sellPrice,
+            source_price_resolution: priceResolution.status,
             stock_qty: productIsActive ? stockQty : 0,
             stock_status: stockStatus,
             is_active: productIsActive,
@@ -421,7 +424,7 @@ export function normalizeIkasCatalogProducts(input: {
         title: item?.name ?? '-',
         handle: slugify(item?.name) || item?.id || '',
         category: normalizedCategory,
-        currency: 'TRY',
+        currency: input.currencyDefault,
         variants: normalizedVariants,
         is_active: productIsActive,
         attributes: {
@@ -448,7 +451,8 @@ export function normalizeIkasCatalogProducts(input: {
             sourceSizeSystems.includes('eyewear_frame'),
           source_has_numeric_apparel_option:
             sourceSizeSystems.includes('numeric_apparel'),
-          source_variant_price_mode: 'sell_price_only',
+          source_currency_default: input.currencyDefault,
+          source_variant_price_mode: 'sell_price_matching_currency_default',
           source_variant_stock_mode: 'stocks_sum',
         },
         base_price: null,
