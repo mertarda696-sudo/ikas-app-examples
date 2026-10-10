@@ -476,6 +476,20 @@ export async function executeIkasCatalogFetch(
           : typeof sourceConfig.domain === 'string'
             ? sourceConfig.domain
             : catalogSource.sourceName;
+    const currencyDefault =
+      typeof sourceConfig.currency_default === 'string'
+        ? sourceConfig.currency_default.trim().toUpperCase()
+        : '';
+
+    if (!/^[A-Z]{3}$/.test(currencyDefault)) {
+      return response(
+        422,
+        emptyFailureBody({
+          error: 'IKAS_SOURCE_CURRENCY_NOT_CONFIGURED',
+          message: 'The active catalog source must configure a three-letter default currency.',
+        }),
+      );
+    }
 
     const fetchStartedAt = new Date().toISOString();
     let productTraversal;
@@ -560,6 +574,7 @@ export async function executeIkasCatalogFetch(
       items: productTraversal.items,
       merchantId,
       storeName: sourceStoreName,
+      currencyDefault,
     });
     const passiveProductCount = payloadItems.filter(
       (item: NormalizedIkasCatalogProduct) => item.is_active === false,
