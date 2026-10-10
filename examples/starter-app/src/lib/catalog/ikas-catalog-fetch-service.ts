@@ -50,8 +50,12 @@ type CatalogImportTriggerResult = {
   configured: boolean;
   ok: boolean;
   status: number | null;
-  response: unknown;
-  error: string | null;
+  errorCode:
+    | 'webhook_not_configured'
+    | 'webhook_http_error'
+    | 'webhook_network_error'
+    | 'trigger_skipped'
+    | null;
 };
 
 type TraversalEvidence = {
@@ -113,8 +117,7 @@ async function triggerCatalogImportProcess(input: {
       configured: false,
       ok: false,
       status: null,
-      response: null,
-      error: 'N8N_CATALOG_IMPORT_WEBHOOK_URL is not configured',
+      errorCode: 'webhook_not_configured',
     };
   }
 
@@ -137,38 +140,21 @@ async function triggerCatalogImportProcess(input: {
       cache: 'no-store',
     });
 
-    const responseText = await webhookResponse.text();
-    let responseBody: unknown = null;
-
-    try {
-      responseBody = responseText ? JSON.parse(responseText) : null;
-    } catch {
-      responseBody = responseText;
-    }
-
     return {
       configured: true,
       ok: webhookResponse.ok,
       status: webhookResponse.status,
-      response: responseBody,
-      error: webhookResponse.ok
-        ? null
-        : `Catalog import webhook returned HTTP ${webhookResponse.status}`,
+      errorCode: webhookResponse.ok ? null : 'webhook_http_error',
     };
-  } catch (error) {
+  } catch {
     return {
       configured: true,
       ok: false,
       status: null,
-      response: null,
-      error:
-        error instanceof Error
-          ? error.message
-          : 'Unknown import trigger error',
+      errorCode: 'webhook_network_error',
     };
   }
 }
-
 function summarizeFetchContract(
   contract: CatalogFetchRunContractWriteResult,
 ) {
@@ -264,15 +250,12 @@ function buildAdapterEvidence(input: {
   };
 }
 
-function skippedImportTrigger(
-  error: string,
-): CatalogImportTriggerResult {
+function skippedImportTrigger(): CatalogImportTriggerResult {
   return {
     configured: Boolean(process.env.N8N_CATALOG_IMPORT_WEBHOOK_URL),
     ok: false,
     status: null,
-    response: null,
-    error,
+    errorCode: 'trigger_skipped',
   };
 }
 
@@ -541,13 +524,13 @@ export async function executeIkasCatalogFetch(
           sourceName: catalogSource.sourceName,
           queuedCount: 0,
           queuedExternalProductIds: [],
+          fetchStatus: 'failed',
+          importStatus: 'skipped',
           traversalComplete: false,
           fetchContract: summarizeFetchContract(
             failedOutcome.fetchContract,
           ),
-          importTrigger: skippedImportTrigger(
-            'Fetch traversal failed, import trigger skipped',
-          ),
+          importTrigger: skippedImportTrigger(),
           error: error.code,
           message: error.message,
         });
@@ -629,6 +612,8 @@ export async function executeIkasCatalogFetch(
 
     return response(200, {
       ok: true,
+      fetchStatus: 'completed',
+      importStatus: importTrigger.ok ? 'triggered' : 'trigger_failed',
       fetchedAt: fetchFinishedAt,
       runId: outcome.runId,
       sourceName: catalogSource.sourceName,
