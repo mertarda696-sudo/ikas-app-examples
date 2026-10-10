@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   isIkasCatalogProductActive,
   resolveIkasSellPrice,
+  summarizeIkasPriceResolutionFailures,
 } from '../src/lib/catalog/catalog-payload-normalization-contract.mjs';
 
 test('does not deactivate a product when one sales channel is passive and another is active', () => {
@@ -80,5 +81,22 @@ test('reports missing and unusable prices without inventing a value', () => {
   assert.deepEqual(
     resolveIkasSellPrice([{ currencyCode: 'TRY', sellPrice: 10 }], ''),
     { status: 'currency_not_configured', price: null },
+  );
+});
+
+test('summarizes unresolved currency prices so the importer can fail closed', () => {
+  assert.deepEqual(
+    summarizeIkasPriceResolutionFailures([
+      {
+        variants: [
+          { source_price_resolution: 'currency_not_found' },
+          { source_price_resolution: 'ambiguous_price' },
+          { source_price_resolution: 'matched' },
+          { source_price_resolution: 'price_missing' },
+        ],
+      },
+      { variants: [{ source_price_resolution: 'currency_not_found' }] },
+    ]),
+    { currency_not_found: 2, ambiguous_price: 1 },
   );
 });
