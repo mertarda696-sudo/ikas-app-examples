@@ -12,11 +12,11 @@ export type CommerceCandidateRow = {
   identifier_value: string;
 };
 
-export type CommerceCandidateSelection =
-  | { status: 'matched'; row: CommerceCandidateRow; matchedIdentifierTypes: string[] }
+export type CommerceCandidateSelection<T extends CommerceCandidateRow = CommerceCandidateRow> =
+  | { status: 'matched'; row: T; matchedIdentifierTypes: string[] }
   | { status: 'not_found' | 'ambiguous' };
 
-export function selectExactCommerceSourceCandidate(
-  rows: CommerceCandidateRow[],
+export function selectExactCommerceSourceCandidate<T extends CommerceCandidateRow>(
+  rows: T[],
   identities: CommerceCandidateIdentity[],
-): CommerceCandidateSelection;
+): CommerceCandidateSelection<T>;
