@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 
 import { prisma } from '@/lib/prisma';
+import { selectExactCommerceSourceCandidate } from './commerce-source-candidate-contract.mjs';
 
 export type CommerceIdentityInput = {
   identifierType: string;
@@ -204,68 +205,23 @@ export async function resolveCatalogSourceByCommerceIdentity(input: {
    *
    * This prevents split-identity fallback and cross-tenant ambiguity.
    */
-  const expectedIdentityKeys = new Set(
-    identities.map((identity) => identity.identityKey),
-  );
+  const selection = selectExactCommerceSourceCandidate(rows, identities);
 
-  const candidates = new Map<
-    string,
-    {
-      row: ResolverRow;
-      matchedIdentityKeys: Set<string>;
-    }
-  >();
-
-  for (const row of rows) {
-    const candidateKey = [
-      row.tenant_id,
-      row.external_commerce_account_id,
-      row.binding_id,
-      row.catalog_source_id,
-    ].join(':');
-
-    const existing = candidates.get(candidateKey);
-
-    const candidate =
-      existing ?? {
-        row,
-        matchedIdentityKeys: new Set<string>(),
-      };
-
-    candidate.matchedIdentityKeys.add(
-      `${row.identifier_type}\u0000${row.identifier_value}`,
-    );
-
-    candidates.set(candidateKey, candidate);
-  }
-
-  const exactCandidates = Array.from(
-    candidates.values(),
-  ).filter((candidate) => {
-    for (const identityKey of expectedIdentityKeys) {
-      if (!candidate.matchedIdentityKeys.has(identityKey)) {
-        return false;
-      }
-    }
-
-    return true;
-  });
-
-  if (exactCandidates.length === 0) {
+  if (selection.status === 'not_found') {
     throw new CommerceSourceResolutionError(
       'COMMERCE_SOURCE_NOT_FOUND',
       'No active catalog source matches the supplied external commerce identity contract.',
     );
   }
 
-  if (exactCandidates.length > 1) {
+  if (selection.status === 'ambiguous') {
     throw new CommerceSourceResolutionError(
       'COMMERCE_SOURCE_AMBIGUOUS',
       'Multiple active catalog sources match the same external commerce identity contract.',
     );
   }
 
-  const candidate = exactCandidates[0];
+  const candidate = selection;
   const row = candidate.row;
 
   return {
@@ -284,12 +240,6 @@ export async function resolveCatalogSourceByCommerceIdentity(input: {
     bindingId: row.binding_id,
     bindingRole: row.binding_role,
 
-    matchedIdentifierTypes: Array.from(
-      new Set(
-        identities.map(
-          (identity) => identity.identifierType,
-        ),
-      ),
-    ).sort(),
+    matchedIdentifierTypes: candidate.matchedIdentifierTypes,
   };
 }
