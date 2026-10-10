@@ -1,4 +1,5 @@
 import { config } from '@/globals/config';
+import { summarizeIkasPriceResolutionFailures } from './catalog-payload-normalization-contract.mjs';
 import {
   isIkasTokenRefreshDue,
   onCheckToken,
@@ -587,6 +588,71 @@ export async function executeIkasCatalogFetch(
       upstreamCount: productTraversal.upstreamCount,
       traversalComplete: productTraversal.traversalComplete,
     };
+    const priceResolutionFailures =
+      summarizeIkasPriceResolutionFailures(payloadItems);
+    const priceResolutionFailureCount = Object.values(
+      priceResolutionFailures,
+    ).reduce((sum, count) => sum + count, 0);
+
+    if (priceResolutionFailureCount > 0) {
+      const errorCode = 'IKAS_CATALOG_PRICE_CURRENCY_UNRESOLVED';
+      const failedOutcome = await persistCatalogFetchOutcome({
+        tenantId: catalogSource.tenantId,
+        catalogSourceId: catalogSource.catalogSourceId,
+        catalogSourceAccountBindingId: catalogSource.bindingId,
+        syncMode: 'full',
+        startedAt: fetchStartedAt,
+        finishedAt: fetchFinishedAt,
+        notes: 'IKAS catalog normalization stopped because variant prices did not resolve to the source currency',
+        metadata: buildRunMetadata({
+          catalogSource,
+          outcome: 'failed',
+          queuedCount: 0,
+          traversal: traversalEvidence,
+          errorCode,
+          errorStatus: 422,
+        }),
+        itemsSeen: productTraversal.upstreamCount,
+        errorCount: 1,
+        contract: {
+          adapterMode: IKAS_ADAPTER_MODE,
+          fetchSemantics: 'full_snapshot',
+          completionState: 'failed',
+          traversalComplete: false,
+          productCollectionComplete: false,
+          variantCollectionComplete: false,
+          authority: {
+            basis: 'fetch_completed_at',
+          },
+          adapterEvidence: buildAdapterEvidence({
+            completionState: 'failed',
+            traversal: traversalEvidence,
+            collectedProductCount: payloadItems.length,
+            errorCode,
+            errorStatus: 422,
+          }),
+        },
+        rawItems: [],
+      });
+
+      return response(422, {
+        ok: false,
+        fetchedAt: fetchFinishedAt,
+        runId: failedOutcome.runId,
+        sourceName: catalogSource.sourceName,
+        queuedCount: 0,
+        queuedExternalProductIds: [],
+        fetchStatus: 'failed',
+        importStatus: 'skipped',
+        traversalComplete: true,
+        fetchContract: summarizeFetchContract(failedOutcome.fetchContract),
+        importTrigger: skippedImportTrigger(),
+        error: errorCode,
+        message: 'No catalog items were queued because one or more variant prices did not resolve to the configured source currency.',
+        priceResolutionFailures,
+      });
+    }
+
     const zeroItems = payloadItems.length === 0;
 
     const outcome = await persistCatalogFetchOutcome({
