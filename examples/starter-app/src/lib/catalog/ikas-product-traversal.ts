@@ -150,6 +150,7 @@ export async function fetchIkasProductTraversal(input: {
   accessToken: string;
   mode?: IkasProductTraversalMode;
   pageSize?: number;
+  signal?: AbortSignal;
 }) {
   const graphApiUrl = String(input.graphApiUrl ?? '').trim();
   const accessToken = String(input.accessToken ?? '').trim();
@@ -194,6 +195,7 @@ export async function fetchIkasProductTraversal(input: {
             },
           }),
           cache: 'no-store',
+          signal: input.signal,
         });
 
         const responseText = await response.text();

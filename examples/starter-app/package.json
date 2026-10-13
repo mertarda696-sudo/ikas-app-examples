@@ -14,7 +14,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "apply:ai-rules": "npx @intellectronica/ruler apply",
-    "test": "node --test tests/catalog-import-trigger-contract.test.mjs tests/catalog-payload-normalization-contract.test.mjs tests/paginated-traversal.test.mjs tests/commerce-source-candidate-contract.test.mjs"
+    "test": "node --test tests/catalog-import-trigger-contract.test.mjs tests/catalog-payload-normalization-contract.test.mjs tests/paginated-traversal.test.mjs tests/commerce-source-candidate-contract.test.mjs tests/catalog-source-acquisition.test.mjs"
   },
   "packageManager": "pnpm@10.4.1",
   "dependencies": {
