@@ -454,7 +454,8 @@ export async function executeIkasCatalogFetch(
       );
     }
 
-    if (!config.graphApiUrl) {
+    const graphApiUrl = config.graphApiUrl;
+    if (!graphApiUrl) {
       return response(
         500,
         emptyFailureBody({
@@ -522,7 +523,7 @@ export async function executeIkasCatalogFetch(
 
       try {
         productTraversal = await fetchIkasProductTraversal({
-          graphApiUrl: config.graphApiUrl,
+          graphApiUrl,
           accessToken: ikasAccessToken,
           mode: 'full',
           signal: acquisition.signal,
