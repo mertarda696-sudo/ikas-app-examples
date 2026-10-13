@@ -2,6 +2,8 @@ import { getUserFromRequest } from '@/lib/auth-helpers';
 import { executeIkasCatalogFetch } from '@/lib/catalog/ikas-catalog-fetch-service';
 import { NextRequest, NextResponse } from 'next/server';
 
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
   const user = getUserFromRequest(request);
 

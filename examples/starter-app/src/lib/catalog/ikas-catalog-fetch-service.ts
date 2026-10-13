@@ -10,7 +10,7 @@ import {
 } from '@/helpers/api-helpers';
 import {
   CatalogFetchOutcomeError,
-  persistCatalogFetchOutcome,
+  withCatalogSourceAcquisition,
 } from '@/lib/catalog/catalog-fetch-outcome-writer';
 import {
   CatalogFetchRunContractError,
@@ -53,6 +53,20 @@ export type ActiveIkasCatalogIdentity = IkasCatalogIdentity & {
 export type IkasCatalogFetchExecution = {
   status: number;
   body: Record<string, unknown>;
+};
+
+type CatalogImportTriggerInput = {
+  runId: string;
+  tenantId: string;
+  catalogSourceId: string;
+  sourceName: string;
+  queuedCount: number;
+  queuedExternalProductIds: string[];
+};
+
+type AcquiredIkasFetchResult = {
+  execution: IkasCatalogFetchExecution;
+  trigger: CatalogImportTriggerInput | null;
 };
 
 type CatalogImportTriggerResult = {
@@ -106,14 +120,7 @@ function emptyFailureBody(input: {
   };
 }
 
-async function triggerCatalogImportProcess(input: {
-  runId: string;
-  tenantId: string;
-  catalogSourceId: string;
-  sourceName: string;
-  queuedCount: number;
-  queuedExternalProductIds: string[];
-}): Promise<CatalogImportTriggerResult> {
+async function triggerCatalogImportProcess(input: CatalogImportTriggerInput): Promise<CatalogImportTriggerResult> {
   const webhookUrl = process.env.N8N_CATALOG_IMPORT_WEBHOOK_URL;
 
   if (!webhookUrl) {
@@ -291,8 +298,10 @@ function persistenceErrorStatus(
   error: CatalogFetchOutcomeError | CatalogFetchRunContractError,
 ) {
   if (error instanceof CatalogFetchOutcomeError) {
-    return error.code === 'FETCH_OUTCOME_RUN_CREATE_FAILED'
-      ? 500
+    return error.code === 'FETCH_OUTCOME_SOURCE_BUSY'
+      ? 409
+      : error.code === 'FETCH_OUTCOME_RUN_CREATE_FAILED'
+        ? 500
       : 422;
   }
 
@@ -445,7 +454,8 @@ export async function executeIkasCatalogFetch(
       );
     }
 
-    if (!config.graphApiUrl) {
+    const graphApiUrl = config.graphApiUrl;
+    if (!graphApiUrl) {
       return response(
         500,
         emptyFailureBody({
@@ -503,41 +513,140 @@ export async function executeIkasCatalogFetch(
       );
     }
 
-    const fetchStartedAt = new Date().toISOString();
-    let productTraversal;
+    const acquired = await withCatalogSourceAcquisition<AcquiredIkasFetchResult>({
+      tenantId: catalogSource.tenantId,
+      catalogSourceId: catalogSource.catalogSourceId,
+      catalogSourceAccountBindingId: catalogSource.bindingId,
+    }, async (acquisition) => {
+      const fetchStartedAt = acquisition.startedAt;
+      let productTraversal;
 
-    try {
-      productTraversal = await fetchIkasProductTraversal({
-        graphApiUrl: config.graphApiUrl,
-        accessToken: ikasAccessToken,
-        mode: 'full',
+      try {
+        productTraversal = await fetchIkasProductTraversal({
+          graphApiUrl,
+          accessToken: ikasAccessToken,
+          mode: 'full',
+          signal: acquisition.signal,
+        });
+      } catch (error) {
+        if (
+          error instanceof IkasProductTraversalError ||
+          error instanceof PaginatedTraversalError
+        ) {
+          const fetchFinishedAt = new Date().toISOString();
+          const errorStatus =
+            error instanceof IkasProductTraversalError
+              ? error.status
+              : 502;
+          const failedOutcome = await acquisition.persistOutcome({
+            tenantId: catalogSource.tenantId,
+            catalogSourceId: catalogSource.catalogSourceId,
+            catalogSourceAccountBindingId: catalogSource.bindingId,
+            syncMode: 'full',
+            startedAt: fetchStartedAt,
+            finishedAt: fetchFinishedAt,
+            notes: 'IKAS catalog fetch failed during product traversal',
+            metadata: buildRunMetadata({
+              catalogSource,
+              outcome: 'failed',
+              queuedCount: 0,
+              errorCode: error.code,
+              errorStatus,
+            }),
+            itemsSeen: 0,
+            errorCount: 1,
+            contract: {
+              adapterMode: IKAS_ADAPTER_MODE,
+              fetchSemantics: 'full_snapshot',
+              completionState: 'failed',
+              traversalComplete: false,
+              productCollectionComplete: false,
+              variantCollectionComplete: false,
+              authority: {
+                basis: 'fetch_completed_at',
+              },
+              adapterEvidence: buildAdapterEvidence({
+                completionState: 'failed',
+                collectedProductCount: 0,
+                errorCode: error.code,
+                errorStatus,
+              }),
+            },
+            rawItems: [],
+          });
+
+          return { trigger: null, execution: response(errorStatus, {
+            ok: false,
+            fetchedAt: fetchFinishedAt,
+            runId: failedOutcome.runId,
+            sourceName: catalogSource.sourceName,
+            queuedCount: 0,
+            queuedExternalProductIds: [],
+            fetchStatus: 'failed',
+            importStatus: 'skipped',
+            traversalComplete: false,
+            fetchContract: summarizeFetchContract(
+              failedOutcome.fetchContract,
+            ),
+            importTrigger: skippedImportTrigger(),
+            error: error.code,
+            message: error.message,
+          }) };
+        }
+
+        throw error;
+      }
+
+      const fetchFinishedAt = new Date().toISOString();
+      const payloadItems = normalizeIkasCatalogProducts({
+        items: productTraversal.items,
+        merchantId,
+        storeName: sourceStoreName,
+        currencyDefault,
       });
-    } catch (error) {
-      if (
-        error instanceof IkasProductTraversalError ||
-        error instanceof PaginatedTraversalError
-      ) {
-        const fetchFinishedAt = new Date().toISOString();
-        const errorStatus =
-          error instanceof IkasProductTraversalError
-            ? error.status
-            : 502;
-        const failedOutcome = await persistCatalogFetchOutcome({
+      const passiveProductCount = payloadItems.filter(
+        (item: NormalizedIkasCatalogProduct) => item.is_active === false,
+      ).length;
+      const traversalEvidence: TraversalEvidence = {
+        contractVersion: productTraversal.contractVersion,
+        sort: productTraversal.sort,
+        pageSize: productTraversal.pageSize,
+        pagesFetched: productTraversal.pagesFetched,
+        upstreamCount: productTraversal.upstreamCount,
+        traversalComplete: productTraversal.traversalComplete,
+      };
+      const priceResolutionFailures =
+        summarizeIkasPriceResolutionFailures(payloadItems);
+      const priceResolutionFailureCount = Object.values(
+        priceResolutionFailures,
+      ).reduce((sum, count) => sum + count, 0);
+
+      if (priceResolutionFailureCount > 0) {
+        const errorCode = 'IKAS_CATALOG_PRICE_CURRENCY_UNRESOLVED';
+        const priceResolution = {
+          contract_version: 'ikas_source_price_currency_v2',
+          configured_currency: currencyDefault,
+          failures: priceResolutionFailures,
+          samples: describeIkasPriceResolutionFailures(productTraversal.items, payloadItems),
+        };
+        const failedOutcome = await acquisition.persistOutcome({
           tenantId: catalogSource.tenantId,
           catalogSourceId: catalogSource.catalogSourceId,
           catalogSourceAccountBindingId: catalogSource.bindingId,
           syncMode: 'full',
           startedAt: fetchStartedAt,
           finishedAt: fetchFinishedAt,
-          notes: 'IKAS catalog fetch failed during product traversal',
+          notes: 'IKAS catalog normalization stopped because variant prices did not resolve to the source currency',
           metadata: buildRunMetadata({
             catalogSource,
             outcome: 'failed',
             queuedCount: 0,
-            errorCode: error.code,
-            errorStatus,
+            traversal: traversalEvidence,
+            errorCode,
+            errorStatus: 422,
+            priceResolution,
           }),
-          itemsSeen: 0,
+          itemsSeen: productTraversal.upstreamCount,
           errorCount: 1,
           contract: {
             adapterMode: IKAS_ADAPTER_MODE,
@@ -551,15 +660,16 @@ export async function executeIkasCatalogFetch(
             },
             adapterEvidence: buildAdapterEvidence({
               completionState: 'failed',
-              collectedProductCount: 0,
-              errorCode: error.code,
-              errorStatus,
+              traversal: traversalEvidence,
+              collectedProductCount: payloadItems.length,
+              errorCode,
+              errorStatus: 422,
             }),
           },
           rawItems: [],
         });
 
-        return response(errorStatus, {
+        return { trigger: null, execution: response(422, {
           ok: false,
           fetchedAt: fetchFinishedAt,
           runId: failedOutcome.runId,
@@ -568,178 +678,92 @@ export async function executeIkasCatalogFetch(
           queuedExternalProductIds: [],
           fetchStatus: 'failed',
           importStatus: 'skipped',
-          traversalComplete: false,
-          fetchContract: summarizeFetchContract(
-            failedOutcome.fetchContract,
-          ),
+          traversalComplete: true,
+          fetchContract: summarizeFetchContract(failedOutcome.fetchContract),
           importTrigger: skippedImportTrigger(),
-          error: error.code,
-          message: error.message,
-        });
+          error: errorCode,
+          message: 'Varyant fiyatları kaynak para birimiyle (' + currencyDefault + ') eşleştirilemedi. Katalog kuyruğuna kayıt yazılmadı. Run ID: ' + failedOutcome.runId,
+          priceResolutionFailures,
+          priceResolution,
+        }) };
       }
 
-      throw error;
-    }
+      const zeroItems = payloadItems.length === 0;
 
-    const fetchFinishedAt = new Date().toISOString();
-    const payloadItems = normalizeIkasCatalogProducts({
-      items: productTraversal.items,
-      merchantId,
-      storeName: sourceStoreName,
-      currencyDefault,
-    });
-    const passiveProductCount = payloadItems.filter(
-      (item: NormalizedIkasCatalogProduct) => item.is_active === false,
-    ).length;
-    const traversalEvidence: TraversalEvidence = {
-      contractVersion: productTraversal.contractVersion,
-      sort: productTraversal.sort,
-      pageSize: productTraversal.pageSize,
-      pagesFetched: productTraversal.pagesFetched,
-      upstreamCount: productTraversal.upstreamCount,
-      traversalComplete: productTraversal.traversalComplete,
-    };
-    const priceResolutionFailures =
-      summarizeIkasPriceResolutionFailures(payloadItems);
-    const priceResolutionFailureCount = Object.values(
-      priceResolutionFailures,
-    ).reduce((sum, count) => sum + count, 0);
-
-    if (priceResolutionFailureCount > 0) {
-      const errorCode = 'IKAS_CATALOG_PRICE_CURRENCY_UNRESOLVED';
-      const priceResolution = {
-        contract_version: 'ikas_source_price_currency_v2',
-        configured_currency: currencyDefault,
-        failures: priceResolutionFailures,
-        samples: describeIkasPriceResolutionFailures(productTraversal.items, payloadItems),
-      };
-      const failedOutcome = await persistCatalogFetchOutcome({
+      const outcome = await acquisition.persistOutcome({
         tenantId: catalogSource.tenantId,
         catalogSourceId: catalogSource.catalogSourceId,
         catalogSourceAccountBindingId: catalogSource.bindingId,
         syncMode: 'full',
         startedAt: fetchStartedAt,
         finishedAt: fetchFinishedAt,
-        notes: 'IKAS catalog normalization stopped because variant prices did not resolve to the source currency',
+        notes: zeroItems
+          ? 'IKAS catalog fetch completed with zero products'
+          : 'IKAS catalog fetch completed and raw queue published',
         metadata: buildRunMetadata({
           catalogSource,
-          outcome: 'failed',
-          queuedCount: 0,
+          outcome: zeroItems ? 'complete_zero_items' : 'complete',
+          queuedCount: payloadItems.length,
+          passiveProductCount,
           traversal: traversalEvidence,
-          errorCode,
-          errorStatus: 422,
-          priceResolution,
         }),
         itemsSeen: productTraversal.upstreamCount,
-        errorCount: 1,
+        errorCount: 0,
         contract: {
           adapterMode: IKAS_ADAPTER_MODE,
           fetchSemantics: 'full_snapshot',
-          completionState: 'failed',
-          traversalComplete: false,
-          productCollectionComplete: false,
-          variantCollectionComplete: false,
+          completionState: 'complete',
+          traversalComplete: productTraversal.traversalComplete,
+          productCollectionComplete: true,
+          variantCollectionComplete: true,
           authority: {
             basis: 'fetch_completed_at',
           },
           adapterEvidence: buildAdapterEvidence({
-            completionState: 'failed',
+            completionState: 'complete',
             traversal: traversalEvidence,
             collectedProductCount: payloadItems.length,
-            errorCode,
-            errorStatus: 422,
           }),
         },
-        rawItems: [],
+        rawItems: payloadItems.map((item) => ({
+          externalProductId: String(item.id),
+          itemType: 'product' as const,
+          payload: item,
+        })),
       });
 
-      return response(422, {
-        ok: false,
-        fetchedAt: fetchFinishedAt,
-        runId: failedOutcome.runId,
+      const queuedExternalProductIds = payloadItems.map((item) => item.id);
+      const trigger: CatalogImportTriggerInput = {
+        runId: outcome.runId,
+        tenantId: catalogSource.tenantId,
+        catalogSourceId: catalogSource.catalogSourceId,
         sourceName: catalogSource.sourceName,
-        queuedCount: 0,
-        queuedExternalProductIds: [],
-        fetchStatus: 'failed',
-        importStatus: 'skipped',
-        traversalComplete: true,
-        fetchContract: summarizeFetchContract(failedOutcome.fetchContract),
-        importTrigger: skippedImportTrigger(),
-        error: errorCode,
-        message: 'Varyant fiyatları kaynak para birimiyle (' + currencyDefault + ') eşleştirilemedi. Katalog kuyruğuna kayıt yazılmadı. Run ID: ' + failedOutcome.runId,
-        priceResolutionFailures,
-        priceResolution,
-      });
-    }
-
-    const zeroItems = payloadItems.length === 0;
-
-    const outcome = await persistCatalogFetchOutcome({
-      tenantId: catalogSource.tenantId,
-      catalogSourceId: catalogSource.catalogSourceId,
-      catalogSourceAccountBindingId: catalogSource.bindingId,
-      syncMode: 'full',
-      startedAt: fetchStartedAt,
-      finishedAt: fetchFinishedAt,
-      notes: zeroItems
-        ? 'IKAS catalog fetch completed with zero products'
-        : 'IKAS catalog fetch completed and raw queue published',
-      metadata: buildRunMetadata({
-        catalogSource,
-        outcome: zeroItems ? 'complete_zero_items' : 'complete',
         queuedCount: payloadItems.length,
-        passiveProductCount,
+        queuedExternalProductIds,
+      };
+
+      return { trigger, execution: response(200, {
+        ok: true,
+        fetchStatus: 'completed',
+        fetchedAt: fetchFinishedAt,
+        runId: outcome.runId,
+        sourceName: catalogSource.sourceName,
+        queuedCount: payloadItems.length,
+        queuedExternalProductIds,
+        zeroItems,
         traversal: traversalEvidence,
-      }),
-      itemsSeen: productTraversal.upstreamCount,
-      errorCount: 0,
-      contract: {
-        adapterMode: IKAS_ADAPTER_MODE,
-        fetchSemantics: 'full_snapshot',
-        completionState: 'complete',
-        traversalComplete: productTraversal.traversalComplete,
-        productCollectionComplete: true,
-        variantCollectionComplete: true,
-        authority: {
-          basis: 'fetch_completed_at',
-        },
-        adapterEvidence: buildAdapterEvidence({
-          completionState: 'complete',
-          traversal: traversalEvidence,
-          collectedProductCount: payloadItems.length,
-        }),
-      },
-      rawItems: payloadItems.map((item) => ({
-        externalProductId: String(item.id),
-        itemType: 'product' as const,
-        payload: item,
-      })),
+        fetchContract: summarizeFetchContract(outcome.fetchContract),
+        error: undefined,
+      }) };
     });
 
-    const queuedExternalProductIds = payloadItems.map((item) => item.id);
-    const importTrigger = await triggerCatalogImportProcess({
-      runId: outcome.runId,
-      tenantId: catalogSource.tenantId,
-      catalogSourceId: catalogSource.catalogSourceId,
-      sourceName: catalogSource.sourceName,
-      queuedCount: payloadItems.length,
-      queuedExternalProductIds,
-    });
-
-    return response(200, {
-      ok: true,
-      fetchStatus: 'completed',
+    if (!acquired.trigger) return acquired.execution;
+    // Dispatch only after the transaction committed and released its lock.
+    const importTrigger = await triggerCatalogImportProcess(acquired.trigger);
+    return response(acquired.execution.status, {
+      ...acquired.execution.body,
       importStatus: importTrigger.ok ? 'triggered' : 'trigger_failed',
-      fetchedAt: fetchFinishedAt,
-      runId: outcome.runId,
-      sourceName: catalogSource.sourceName,
-      queuedCount: payloadItems.length,
-      queuedExternalProductIds,
-      zeroItems,
-      traversal: traversalEvidence,
-      fetchContract: summarizeFetchContract(outcome.fetchContract),
       importTrigger,
-      error: undefined,
     });
   } catch (error) {
     if (
