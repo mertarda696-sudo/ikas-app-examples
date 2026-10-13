@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import React from 'react';
+import React, { useEffect } from 'react';
+import { AppBridgeHelper } from '@ikas/app-helpers';
 import { DashboardOperationsHub } from '@/components/apparel-panel/DashboardOperationsHub';
 import { CatalogProductLinksEnhancer } from '@/components/apparel-panel/CatalogProductLinksEnhancer';
 
@@ -78,6 +79,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const showDashboardOperationsHub = pathname === '/dashboard';
   const showCatalogProductLinksEnhancer = pathname === '/catalog';
+
+  // Panel routes can be opened directly by ikas without mounting the home page.
+  // Release the platform loader as soon as the panel mounts, before data loads.
+  useEffect(() => {
+    AppBridgeHelper.closeLoader();
+  }, []);
 
   return (
     <div
