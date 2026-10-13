@@ -15,65 +15,93 @@ const TOKEN_KEY = 'token';
  * - Token validation and session management
  */
 export class TokenHelpers {
+  private static pendingIframeToken: Promise<string | null> | null = null;
+
+  private static readIframeTokenIdentity(token: string): string | null {
+    try {
+      const parts = token.split('.');
+      if (parts.length !== 3 || parts.some((part) => !part)) return null;
+
+      const encoded = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const padded = encoded.padEnd(Math.ceil(encoded.length / 4) * 4, '=');
+      const bytes = Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
+      const claims: unknown = JSON.parse(new TextDecoder().decode(bytes));
+      if (!claims || typeof claims !== 'object' || Array.isArray(claims)) return null;
+
+      const payload = claims as Record<string, unknown>;
+      if (
+        typeof payload.aud !== 'string' || !payload.aud.trim() ||
+        typeof payload.sub !== 'string' || !payload.sub.trim() ||
+        typeof payload.exp !== 'number' || !Number.isFinite(payload.exp) ||
+        payload.exp * 1000 <= Date.now()
+      ) return null;
+
+      // These are client-side shape checks only. Backend routes verify the signature.
+      return payload.aud;
+    } catch {
+      return null;
+    }
+  }
+
+  private static requestIframeToken = async (): Promise<string | null> => {
+    try {
+      const token = await AppBridgeHelper.getNewToken();
+      if (!token) return null;
+
+      const authorizedAppId = TokenHelpers.readIframeTokenIdentity(token);
+      if (!authorizedAppId) {
+        console.error('AppBridge returned an invalid or expired iframe token.');
+        return null;
+      }
+
+      // Establish identity from the current bridge response, never another stored session.
+      // Storage is an optional cache and must not prevent valid iframe authentication.
+      try {
+        sessionStorage.setItem(`${TOKEN_KEY}-${authorizedAppId}`, token);
+        sessionStorage.setItem('authorizedAppId', authorizedAppId);
+      } catch {
+        // Browser storage may be unavailable in an embedded context.
+      }
+
+      return token;
+    } catch (error) {
+      console.error(
+        'Error retrieving token from AppBridge:',
+        error === 'Timed out getNewToken' ? 'Timed out getNewToken' : 'Token request failed',
+      );
+      return null;
+    }
+  };
+
   /**
    * Retrieves an authentication token for applications running within ikas dashboard iFrame.
    * 
    * This method handles token retrieval through the ikas AppBridge when the application
-   * is embedded within the ikas dashboard. It implements a caching mechanism using
-   * sessionStorage to avoid unnecessary API calls and provides automatic token refresh
-   * when cached tokens expire.
+   * is embedded within the ikas dashboard. Concurrent consumers share one request.
+   * The current token's audience identifies its installation for scoped storage;
+   * authentication does not depend on a separate authorized-app-ID bridge response.
    * 
    * @returns {Promise<string | null>} A promise that resolves to:
    *   - A valid JWT token string if successfully retrieved
    *   - null if the app is not in an iFrame context or token retrieval fails
    * 
-   * @throws Will log errors to console if AppBridge token retrieval fails
-   * 
    * @remarks
-   * - Only works when app is displayed in iFrame within ikas dashboard
-   * - Will throw a timeout error if used outside iFrame context
-   * - Automatically handles token caching and expiration validation
-   * - Uses JWT payload decoding to check token expiration
+   * - Outside an iframe, returns null without sending a bridge request.
+   * - Never uses a stored token to infer the current merchant's identity.
+   * - Decoding checks shape/expiration; backend signature verification is unchanged.
    */
-  static getTokenForIframeApp = async (): Promise<string | null> => {
-    // Only proceed if running inside an iFrame (within ikas dashboard)
-    if (window.self !== window.top) {
-      try {
-        // Get the authorized app ID to create a unique storage key
-        const authorizedAppId = (await AppBridgeHelper.getAuthorizedAppId()) || null;
-        
-        // Attempt to retrieve cached token from session storage
-        let token = sessionStorage.getItem(`${TOKEN_KEY}-${authorizedAppId}`);
-        
-        if (token) {
-          // Decode JWT payload to check expiration (JWT structure: header.payload.signature)
-          const tokenData = JSON.parse(atob(token.split('.')[1]));
-          
-          // Return cached token if it hasn't expired yet
-          if (new Date().getTime() < tokenData.exp * 1000) {
-            return token;
-          }
-          
-          // Token has expired, remove from cache
-          sessionStorage.removeItem(`${TOKEN_KEY}-${authorizedAppId}`);
-        }
-        
-        // No valid cached token found, request new token from AppBridge
-        token = (await AppBridgeHelper.getNewToken()) || null;
-        
-        if (token) {
-          // Cache the new token for future use
-          sessionStorage.setItem(`${TOKEN_KEY}-${authorizedAppId}`, token);
-          return token;
-        }
-        
-      } catch (error) {
-        console.error('Error retrieving token from AppBridge:', error);
-      }
+  static getTokenForIframeApp = (): Promise<string | null> => {
+    if (typeof window === 'undefined' || window.self === window.top) {
+      return Promise.resolve(null);
     }
-    
-    // Return null if not in iFrame context or token retrieval failed
-    return null;
+
+    if (!TokenHelpers.pendingIframeToken) {
+      TokenHelpers.pendingIframeToken = TokenHelpers.requestIframeToken().finally(() => {
+        TokenHelpers.pendingIframeToken = null;
+      });
+    }
+
+    return TokenHelpers.pendingIframeToken;
   };
 
   /**
