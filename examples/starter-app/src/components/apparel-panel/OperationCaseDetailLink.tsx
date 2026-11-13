@@ -9,13 +9,13 @@ export function OperationCaseDetailLink({
   caseNo?: string | null;
   compact?: boolean;
 }) {
-  const target = String(caseNo || caseId || '').trim();
+  const target = caseId?.trim() || caseNo?.trim();
 
   if (!target) return null;
 
   return (
     <Link
-      href={`/operations/${target}`}
+      href={`/operations/${encodeURIComponent(target)}`}
       style={{
         textDecoration: 'none',
         color: '#2563eb',
