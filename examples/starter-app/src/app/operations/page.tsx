@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { CustomerProfileLink } from '@/components/apparel-panel/CustomerProfileLink';
+import { OperationCaseDetailLink } from '@/components/apparel-panel/OperationCaseDetailLink';
 import { AppShell } from '@/components/apparel-panel/AppShell';
 import { TokenHelpers } from '@/helpers/token-helpers';
 
@@ -905,32 +906,17 @@ export default function OperationsPage() {
             row.crmInternalNote)
       );
 
-      const detailHref = row.caseNo
-  ? `/operations/${encodeURIComponent(row.caseNo)}`
-  : `/operations/${encodeURIComponent(row.id)}`;
-
       return (
         <tr key={row.id}>
-         <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
-  <div style={{ display: 'grid', gap: 6, minWidth: 150 }}>
-    <Link
-      href={detailHref}
-      style={{
-        color: '#2563eb',
-        fontWeight: 900,
-        textDecoration: 'none',
-        fontSize: 13,
-        display: 'inline-block',
-      }}
-    >
-      {row.caseNo || row.id}
-    </Link>
-
-    {row.isTestRecord ? (
-      <Pill label={`Test: ${row.testLabel || row.recordOrigin || 'qa'}`} tone="warning" />
-    ) : null}
-  </div>
-</td>
+          <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
+            <div style={{ display: 'grid', gap: 6, minWidth: 150 }}>
+              <span style={{ fontWeight: 700 }}>{row.caseNo || row.id}</span>
+              <OperationCaseDetailLink caseId={row.id} compact />
+              {row.isTestRecord ? (
+                <Pill label={`Test: ${row.testLabel || row.recordOrigin || 'qa'}`} tone="warning" />
+              ) : null}
+            </div>
+          </td>
 
           <td style={{ padding: 14, borderBottom: '1px solid #f3f4f6' }}>
             <Pill label={mapTypeLabel(row.caseType)} tone="info" />
